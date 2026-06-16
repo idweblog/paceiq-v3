@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
-interface Athlete {
+export interface Athlete {
   id: string
   name: string
   email: string
-  created_at: string
+  auth_id: string | null
+  created_at: string | null
 }
 
 export function useAthlete() {
@@ -20,7 +21,6 @@ export function useAthlete() {
       setLoading(false)
       return
     }
-
     const fetchAthlete = async () => {
       setLoading(true)
       const { data, error } = await supabase
@@ -28,7 +28,6 @@ export function useAthlete() {
         .select('*')
         .eq('auth_id', user.id)
         .single()
-
       if (error) {
         console.error('useAthlete error:', error.message)
         setAthlete(null)
@@ -37,7 +36,6 @@ export function useAthlete() {
       }
       setLoading(false)
     }
-
     fetchAthlete()
   }, [user?.id])
 

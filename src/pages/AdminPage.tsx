@@ -5,21 +5,21 @@ interface Athlete {
   id: string
   name: string
   email: string
-  created_at: string
+  created_at: string | null
   roles: string[]
 }
 
 interface Invite {
   id: string
   code: string
-  used: boolean
-  used_count: number
-  max_uses: number
-  is_active: boolean
+  used: boolean | null
+  used_count: number | null
+  max_uses: number | null
+  is_active: boolean | null
   allowed_email: string[] | null
-  expires_at: string
-  created_at: string
-  role_id: number
+  expires_at: string | null
+  created_at: string | null
+  role_id: number | null
 }
 
 export default function AdminPage() {
@@ -70,12 +70,10 @@ export default function AdminPage() {
   const generateInvite = async () => {
     setGeneratingInvite(true)
     setNewCode('')
-
     const emailList = inviteEmails
       .split(',')
       .map(e => e.trim().toLowerCase())
       .filter(e => e.length > 0)
-
     const { data, error } = await supabase.rpc('generate_invite_code', {
       p_role_id: inviteRole,
       p_max_uses: inviteMaxUses,
@@ -100,7 +98,9 @@ export default function AdminPage() {
     fetchInvites()
   }
 
-  const roleLabel = (id: number) => id === 1 ? 'Admin' : id === 2 ? 'Coach' : 'Athlete'
+  const roleLabel = (id: number | null) =>
+    id === 1 ? 'Admin' : id === 2 ? 'Coach' : 'Athlete'
+
   const roleBadge = (name: string) => {
     const colors: Record<string, string> = {
       admin: 'bg-red-100 text-red-700',
@@ -112,8 +112,10 @@ export default function AdminPage() {
 
   const inviteStatus = (inv: Invite) => {
     if (!inv.is_active) return { label: 'Disabled', cls: 'bg-gray-100 text-gray-500' }
-    if (new Date(inv.expires_at) < new Date()) return { label: 'Expired', cls: 'bg-yellow-100 text-yellow-700' }
-    if (inv.max_uses > 0 && inv.used_count >= inv.max_uses) return { label: 'Full', cls: 'bg-orange-100 text-orange-700' }
+    if (inv.expires_at && new Date(inv.expires_at) < new Date())
+      return { label: 'Expired', cls: 'bg-yellow-100 text-yellow-700' }
+    if ((inv.max_uses ?? 0) > 0 && (inv.used_count ?? 0) >= (inv.max_uses ?? 0))
+      return { label: 'Full', cls: 'bg-orange-100 text-orange-700' }
     return { label: 'Active', cls: 'bg-green-100 text-green-700' }
   }
 
@@ -199,7 +201,7 @@ export default function AdminPage() {
               <textarea
                 value={inviteEmails}
                 onChange={e => setInviteEmails(e.target.value)}
-                placeholder="user1@email.com, user2@email.com, user3@email.com"
+                placeholder="user1@email.com, user2@email.com"
                 rows={2}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
               />
@@ -246,7 +248,7 @@ export default function AdminPage() {
                         <td className="px-4 py-3 font-mono font-medium text-gray-800 tracking-widest">{inv.code}</td>
                         <td className="px-4 py-3 text-gray-500">{roleLabel(inv.role_id)}</td>
                         <td className="px-4 py-3 text-gray-500">
-                          {inv.used_count}/{inv.max_uses === 0 ? '∞' : inv.max_uses}
+                          {inv.used_count ?? 0}/{inv.max_uses === 0 ? '∞' : (inv.max_uses ?? '∞')}
                         </td>
                         <td className="px-4 py-3 text-gray-400 text-xs max-w-[180px]">
                           {emails.length === 0 ? '—' : (
@@ -261,7 +263,7 @@ export default function AdminPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-gray-400 text-xs">
-                          {new Date(inv.expires_at).toLocaleDateString('id-ID')}
+                          {inv.expires_at ? new Date(inv.expires_at).toLocaleDateString('id-ID') : '—'}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2 justify-end">

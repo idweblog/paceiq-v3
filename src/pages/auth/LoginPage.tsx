@@ -37,17 +37,17 @@ export default function LoginPage() {
           setLoading(false)
           return
         }
-        if (new Date(invite.expires_at) < new Date()) {
+        if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
           setError('Kode invite sudah kadaluarsa.')
           setLoading(false)
           return
         }
-        if (invite.max_uses > 0 && invite.used_count >= invite.max_uses) {
+        if ((invite.max_uses ?? 0) > 0 && (invite.used_count ?? 0) >= (invite.max_uses ?? 0)) {
           setError('Kode invite sudah mencapai batas penggunaan.')
           setLoading(false)
           return
         }
-        if (invite.allowed_email && invite.allowed_email.toLowerCase() !== email.toLowerCase()) {
+        if (invite.allowed_email && !invite.allowed_email.map((e: string) => e.toLowerCase()).includes(email.toLowerCase())) {
           setError('Email tidak sesuai dengan kode invite.')
           setLoading(false)
           return
