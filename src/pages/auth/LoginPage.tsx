@@ -8,6 +8,7 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [inviteCode, setInviteCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
@@ -19,6 +20,31 @@ export default function LoginPage() {
     setLoading(true)
 
     if (mode === 'register') {
+      // Validasi invite code jika diisi
+      if (inviteCode.trim()) {
+        const { data: invite } = await supabase
+          .from('coach_invitations')
+          .select('id, used, expires_at')
+          .eq('code', inviteCode.trim().toUpperCase())
+          .single()
+
+        if (!invite) {
+          setError('Kode invite tidak ditemukan.')
+          setLoading(false)
+          return
+        }
+        if (invite.used) {
+          setError('Kode invite sudah digunakan.')
+          setLoading(false)
+          return
+        }
+        if (new Date(invite.expires_at) < new Date()) {
+          setError('Kode invite sudah kadaluarsa.')
+          setLoading(false)
+          return
+        }
+      }
+
       const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
       if (signUpError) { setError(signUpError.message); setLoading(false); return }
 
@@ -30,11 +56,30 @@ export default function LoginPage() {
         p_name:    name,
         p_email:   email,
       })
-
       if (rpcError) { setError(rpcError.message); setLoading(false); return }
+
+      // Claim invite jika ada
+      if (inviteCode.trim()) {
+        const { data: athleteData } = await supabase
+          .from('athletes')
+          .select('id')
+          .eq('auth_id', userId)
+          .single()
+
+        if (athleteData) {
+          await supabase.rpc('claim_invite', {
+            p_code:       inviteCode.trim().toUpperCase(),
+            p_athlete_id: athleteData.id,
+          })
+        }
+      }
 
       setInfo('Registrasi berhasil! Silakan login.')
       setMode('login')
+      setName('')
+      setEmail('')
+      setPassword('')
+      setInviteCode('')
 
     } else {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
@@ -63,17 +108,32 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {mode === 'register' && (
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Nama lengkap</label>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                required
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Nama lengkap"
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">Nama lengkap</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  required
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Nama lengkap"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Kode invite <span className="text-gray-400">(opsional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={e => setInviteCode(e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 uppercase tracking-widest"
+                  placeholder="XXXXXXXX"
+                  maxLength={8}
+                />
+              </div>
+            </>
           )}
           <div>
             <label className="block text-sm text-gray-600 mb-1">Email</label>
