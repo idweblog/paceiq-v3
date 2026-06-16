@@ -20,11 +20,10 @@ export default function LoginPage() {
     setLoading(true)
 
     if (mode === 'register') {
-      // Validasi invite code jika diisi
       if (inviteCode.trim()) {
         const { data: invite } = await supabase
           .from('coach_invitations')
-          .select('id, used, expires_at')
+          .select('id, used_count, max_uses, is_active, expires_at, allowed_email')
           .eq('code', inviteCode.trim().toUpperCase())
           .single()
 
@@ -33,13 +32,23 @@ export default function LoginPage() {
           setLoading(false)
           return
         }
-        if (invite.used) {
-          setError('Kode invite sudah digunakan.')
+        if (!invite.is_active) {
+          setError('Kode invite telah dinonaktifkan.')
           setLoading(false)
           return
         }
         if (new Date(invite.expires_at) < new Date()) {
           setError('Kode invite sudah kadaluarsa.')
+          setLoading(false)
+          return
+        }
+        if (invite.max_uses > 0 && invite.used_count >= invite.max_uses) {
+          setError('Kode invite sudah mencapai batas penggunaan.')
+          setLoading(false)
+          return
+        }
+        if (invite.allowed_email && invite.allowed_email.toLowerCase() !== email.toLowerCase()) {
+          setError('Email tidak sesuai dengan kode invite.')
           setLoading(false)
           return
         }
@@ -53,12 +62,11 @@ export default function LoginPage() {
 
       const { error: rpcError } = await supabase.rpc('register_athlete', {
         p_auth_id: userId,
-        p_name:    name,
-        p_email:   email,
+        p_name: name,
+        p_email: email,
       })
       if (rpcError) { setError(rpcError.message); setLoading(false); return }
 
-      // Claim invite jika ada
       if (inviteCode.trim()) {
         const { data: athleteData } = await supabase
           .from('athletes')
@@ -67,10 +75,21 @@ export default function LoginPage() {
           .single()
 
         if (athleteData) {
-          await supabase.rpc('claim_invite', {
-            p_code:       inviteCode.trim().toUpperCase(),
+          const { data: claimResult } = await supabase.rpc('claim_invite', {
+            p_code: inviteCode.trim().toUpperCase(),
             p_athlete_id: athleteData.id,
+            p_email: email,
           })
+          if (claimResult === 0) {
+            setError('Kode invite tidak valid.')
+            setLoading(false)
+            return
+          }
+          if (claimResult === 2) {
+            setError('Email tidak sesuai dengan kode invite.')
+            setLoading(false)
+            return
+          }
         }
       }
 
