@@ -69,16 +69,18 @@ export default function BodyMetricsPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadAll()
+    let cancelled = false
+    loadAll(cancelled)
+    return () => { cancelled = true }
   }, [athleteId])
 
-  async function loadAll() {
+  async function loadAll(cancelled = false) {
     setLoading(true)
-    await Promise.all([loadBodyMetrics(), loadHrHistory()])
-    setLoading(false)
+    await Promise.all([loadBodyMetrics(cancelled), loadHrHistory(cancelled)])
+    if (!cancelled) setLoading(false)
   }
 
-  async function loadBodyMetrics() {
+  async function loadBodyMetrics(cancelled = false) {
     if (!athleteId) return
     const { data } = await supabase
       .from('body_metrics')
@@ -86,10 +88,10 @@ export default function BodyMetricsPage() {
       .eq('athlete_id', athleteId)
       .order('recorded_date', { ascending: false })
       .limit(60)
-    if (data) setBodyLogs(data)
+    if (!cancelled && data) setBodyLogs(data)
   }
 
-  async function loadHrHistory() {
+  async function loadHrHistory(cancelled = false) {
     if (!athleteId) return
     const { data } = await supabase
       .from('hr_history')
@@ -97,7 +99,7 @@ export default function BodyMetricsPage() {
       .eq('athlete_id', athleteId)
       .order('recorded_date', { ascending: false })
       .limit(60)
-    if (data) setHrLogs(data)
+    if (!cancelled && data) setHrLogs(data)
   }
 
   async function saveBody() {

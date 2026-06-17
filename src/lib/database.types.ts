@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_config: {
+        Row: {
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
       athlete_roles: {
         Row: {
           athlete_id: string
@@ -104,6 +122,7 @@ export type Database = {
           email: string
           id: string
           name: string
+          status: string
         }
         Insert: {
           auth_id?: string | null
@@ -111,6 +130,7 @@ export type Database = {
           email: string
           id?: string
           name: string
+          status?: string
         }
         Update: {
           auth_id?: string | null
@@ -118,6 +138,7 @@ export type Database = {
           email?: string
           id?: string
           name?: string
+          status?: string
         }
         Relationships: []
       }
@@ -1197,9 +1218,14 @@ export type Database = {
           tsb: number
         }[]
       }
+      get_registration_policy: { Args: never; Returns: string }
       has_role: { Args: { role_name: string }; Returns: boolean }
       register_athlete: {
         Args: { p_auth_id: string; p_email: string; p_name: string }
+        Returns: undefined
+      }
+      set_registration_policy: {
+        Args: { p_policy: string }
         Returns: undefined
       }
     }

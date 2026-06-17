@@ -22,11 +22,11 @@ export default function AdminPage() {
   const [newCode, setNewCode] = useState('')
   const [tab, setTab] = useState<'users' | 'invites'>('users')
 
-  const fetchAthletes = async () => {
+  const fetchAthletes = async (cancelled = false) => {
     setLoadingAthletes(true)
     const { data: athleteData } = await supabase
       .from('athletes')
-      .select('id, name, email, created_at, auth_id')
+      .select('id, name, email, created_at, auth_id, status')
       .order('created_at', { ascending: false })
     const { data: roleData } = await supabase
       .from('athlete_roles')
@@ -41,21 +41,24 @@ export default function AdminPage() {
       if (ids.includes(3)) roleNames.push('athlete')
       return { ...a, roles: roleNames }
     })
-    setAthletes(mapped)
-    setLoadingAthletes(false)
+    if (!cancelled) { setAthletes(mapped); setLoadingAthletes(false) }
   }
 
-  const fetchInvites = async () => {
+  const fetchInvites = async (cancelled = false) => {
     setLoadingInvites(true)
     const { data } = await supabase
       .from('coach_invitations')
       .select('*')
       .order('created_at', { ascending: false })
-    setInvites(data ?? [])
-    setLoadingInvites(false)
+    if (!cancelled) { setInvites(data ?? []); setLoadingInvites(false) }
   }
 
-  useEffect(() => { fetchAthletes(); fetchInvites() }, [])
+  useEffect(() => {
+    let cancelled = false
+    fetchAthletes(cancelled)
+    fetchInvites(cancelled)
+    return () => { cancelled = true }
+  }, [])
 
   const generateInvite = async () => {
     setGeneratingInvite(true)
