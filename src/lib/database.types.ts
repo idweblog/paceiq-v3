@@ -1131,7 +1131,25 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      athlete_fitness: {
+        Row: {
+          acwr: number | null
+          athlete_id: string | null
+          atl: number | null
+          ctl: number | null
+          day: string | null
+          tsb: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_sessions_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       claim_invite: {
@@ -1156,7 +1174,29 @@ export type Database = {
             }
             Returns: string
           }
+      get_group_fitness: {
+        Args: { p_group_id: string }
+        Returns: {
+          acwr: number
+          athlete_id: string
+          atl: number
+          ctl: number
+          full_name: string
+          last_session_date: string
+          tsb: number
+        }[]
+      }
       get_my_athlete_id: { Args: never; Returns: string }
+      get_my_fitness: {
+        Args: never
+        Returns: {
+          acwr: number
+          atl: number
+          ctl: number
+          day: string
+          tsb: number
+        }[]
+      }
       has_role: { Args: { role_name: string }; Returns: boolean }
       register_athlete: {
         Args: { p_auth_id: string; p_email: string; p_name: string }
