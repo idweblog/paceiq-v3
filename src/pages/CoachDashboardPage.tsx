@@ -57,6 +57,7 @@ export default function CoachDashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const cancelledRef = useRef(false)
   const realtimeRef = useRef<any>(null)
+  const selectedGroupIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     cancelledRef.current = false
@@ -84,9 +85,9 @@ export default function CoachDashboardPage() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'training_sessions' },
         () => {
-          if (!cancelledRef.current && selectedGroupId) {
-            loadGroupFitness(selectedGroupId)
-            loadRecentSessions(selectedGroupId)
+          if (!cancelledRef.current && selectedGroupIdRef.current) {
+            loadGroupFitness(selectedGroupIdRef.current)
+            loadRecentSessions(selectedGroupIdRef.current)
           }
         }
       )
@@ -104,6 +105,7 @@ export default function CoachDashboardPage() {
   }
 
   useEffect(() => {
+    selectedGroupIdRef.current = selectedGroupId
     if (selectedGroupId) {
       loadGroupFitness(selectedGroupId)
       loadRecentSessions(selectedGroupId)
@@ -116,7 +118,7 @@ export default function CoachDashboardPage() {
       .from('group_programs').select('id, name, is_active')
       .eq('coach_athlete_id', athleteId!).order('created_at', { ascending: false })
 
-    if (err) { if (!cancelledRef.current) setError('Gagal memuat grup.'); setLoading(false); return }
+    if (err) { if (!cancelledRef.current) { setError('Gagal memuat grup.'); setLoading(false) }; return }
     if (cancelledRef.current) return
 
     const summaries: GroupSummary[] = []
@@ -215,6 +217,7 @@ export default function CoachDashboardPage() {
 
     let successCount = 0
     for (const m of members) {
+      if (cancelledRef.current) break
       // Buat program baru untuk tiap atlet
       const { data: newProg, error: errProg } = await supabase
         .from('programs').insert({

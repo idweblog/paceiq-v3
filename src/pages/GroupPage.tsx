@@ -104,7 +104,7 @@ export default function GroupPage() {
     const { data, error: err } = await supabase.from('group_members')
       .select('id, group_id, athlete_id, joined_at, status, athletes ( name )')
       .eq('group_id', groupId).order('joined_at', { ascending: true })
-    if (err) { setError('Gagal memuat anggota.'); return }
+    if (err) { if (!cancelledRef.current) setError('Gagal memuat anggota.'); return }
     if (!cancelledRef.current) setMembers((data as unknown as GroupMember[]) ?? [])
   }
 
