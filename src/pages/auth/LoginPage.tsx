@@ -37,17 +37,21 @@ export default function LoginPage() {
           setLoading(false)
           return
         }
-        if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
+        if (new Date(invite.expires_at as string) < new Date()) {
           setError('Kode invite sudah kadaluarsa.')
           setLoading(false)
           return
         }
-        if ((invite.max_uses ?? 0) > 0 && (invite.used_count ?? 0) >= (invite.max_uses ?? 0)) {
+        const maxUses = (invite.max_uses as number) ?? 1
+        const usedCount = (invite.used_count as number) ?? 0
+        if (maxUses > 0 && usedCount >= maxUses) {
           setError('Kode invite sudah mencapai batas penggunaan.')
           setLoading(false)
           return
         }
-        if (invite.allowed_email && !invite.allowed_email.map((e: string) => e.toLowerCase()).includes(email.toLowerCase())) {
+        const allowedEmails = (invite.allowed_email as string[]) ?? []
+        if (allowedEmails.length > 0 &&
+            !allowedEmails.map((e: string) => e.toLowerCase()).includes(email.toLowerCase())) {
           setError('Email tidak sesuai dengan kode invite.')
           setLoading(false)
           return
@@ -65,7 +69,13 @@ export default function LoginPage() {
         p_name: name,
         p_email: email,
       })
-      if (rpcError) { setError(rpcError.message); setLoading(false); return }
+
+      if (rpcError) {
+        await supabase.auth.signOut()
+        setError('Gagal membuat profil. Silakan coba lagi atau hubungi admin.')
+        setLoading(false)
+        return
+      }
 
       if (inviteCode.trim()) {
         const { data: athleteData } = await supabase

@@ -1,14 +1,9 @@
 import { useEffect, useState } from 'react'
+import type { Database } from '../lib/database.types'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
-export interface Athlete {
-  id: string
-  name: string
-  email: string
-  auth_id: string | null
-  created_at: string | null
-}
+export type Athlete = Database['public']['Tables']['athletes']['Row']
 
 export function useAthlete() {
   const { user } = useAuth()
@@ -21,6 +16,9 @@ export function useAthlete() {
       setLoading(false)
       return
     }
+
+    let cancelled = false
+
     const fetchAthlete = async () => {
       setLoading(true)
       const { data, error } = await supabase
@@ -28,6 +26,9 @@ export function useAthlete() {
         .select('*')
         .eq('auth_id', user.id)
         .single()
+
+      if (cancelled) return
+
       if (error) {
         console.error('useAthlete error:', error.message)
         setAthlete(null)
@@ -36,7 +37,10 @@ export function useAthlete() {
       }
       setLoading(false)
     }
+
     fetchAthlete()
+
+    return () => { cancelled = true }
   }, [user?.id])
 
   return { athlete, loading }

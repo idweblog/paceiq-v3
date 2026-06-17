@@ -1,30 +1,18 @@
 import { useState, useEffect } from 'react'
+import type { Database } from '../lib/database.types'
 import { supabase } from '../lib/supabase'
 
-interface Athlete {
-  id: string
-  name: string
-  email: string
-  created_at: string | null
+type AthleteRow = Database['public']['Tables']['athletes']['Row']
+type RoleRow = Database['public']['Tables']['athlete_roles']['Row']
+type InviteRow = Database['public']['Tables']['coach_invitations']['Row']
+
+interface AthleteWithRoles extends AthleteRow {
   roles: string[]
 }
 
-interface Invite {
-  id: string
-  code: string
-  used: boolean | null
-  used_count: number | null
-  max_uses: number | null
-  is_active: boolean | null
-  allowed_email: string[] | null
-  expires_at: string | null
-  created_at: string | null
-  role_id: number | null
-}
-
 export default function AdminPage() {
-  const [athletes, setAthletes] = useState<Athlete[]>([])
-  const [invites, setInvites] = useState<Invite[]>([])
+  const [athletes, setAthletes] = useState<AthleteWithRoles[]>([])
+  const [invites, setInvites] = useState<InviteRow[]>([])
   const [loadingAthletes, setLoadingAthletes] = useState(true)
   const [loadingInvites, setLoadingInvites] = useState(true)
   const [generatingInvite, setGeneratingInvite] = useState(false)
@@ -38,13 +26,15 @@ export default function AdminPage() {
     setLoadingAthletes(true)
     const { data: athleteData } = await supabase
       .from('athletes')
-      .select('id, name, email, created_at')
+      .select('id, name, email, created_at, auth_id')
       .order('created_at', { ascending: false })
     const { data: roleData } = await supabase
       .from('athlete_roles')
       .select('athlete_id, role_id')
-    const mapped = (athleteData ?? []).map((a: any) => {
-      const ids = (roleData ?? []).filter((r: any) => r.athlete_id === a.id).map((r: any) => r.role_id)
+    const mapped = (athleteData ?? []).map((a: AthleteRow) => {
+      const ids = (roleData ?? [] as RoleRow[])
+        .filter((r: RoleRow) => r.athlete_id === a.id)
+        .map((r: RoleRow) => r.role_id)
       const roleNames: string[] = []
       if (ids.includes(1)) roleNames.push('admin')
       if (ids.includes(2)) roleNames.push('coach')
@@ -84,7 +74,7 @@ export default function AdminPage() {
     setGeneratingInvite(false)
   }
 
-  const toggleActive = async (inv: Invite) => {
+  const toggleActive = async (inv: InviteRow) => {
     await supabase
       .from('coach_invitations')
       .update({ is_active: !inv.is_active })
@@ -110,7 +100,7 @@ export default function AdminPage() {
     return colors[name] ?? 'bg-gray-100 text-gray-600'
   }
 
-  const inviteStatus = (inv: Invite) => {
+  const inviteStatus = (inv: InviteRow) => {
     if (!inv.is_active) return { label: 'Disabled', cls: 'bg-gray-100 text-gray-500' }
     if (inv.expires_at && new Date(inv.expires_at) < new Date())
       return { label: 'Expired', cls: 'bg-yellow-100 text-yellow-700' }
