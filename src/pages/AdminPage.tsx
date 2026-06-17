@@ -21,6 +21,7 @@ export default function AdminPage() {
   const [loadingInvites, setLoadingInvites] = useState(true)
   const [loadingPolicy, setLoadingPolicy] = useState(true)
   const [loadingPending, setLoadingPending] = useState(false)
+  const [assigningRole, setAssigningRole] = useState<string | null>(null)
   const [generatingInvite, setGeneratingInvite] = useState(false)
   const [inviteRole, setInviteRole] = useState(3)
   const [inviteMaxUses, setInviteMaxUses] = useState(1)
@@ -123,6 +124,26 @@ export default function AdminPage() {
     fetchAthletes()
   }
 
+  const deleteAthlete = async (a: AthleteWithRoles) => {
+    if (!confirm(`Hapus user "${a.name}" (${a.email})? Semua data akan dihapus permanen.`)) return
+    const { error } = await supabase.rpc('admin_delete_athlete', { p_athlete_id: a.id } as never)
+    if (error) alert('Gagal menghapus: ' + error.message)
+    else fetchAthletes()
+  }
+
+  const toggleRole = async (a: AthleteWithRoles, roleName: string, roleId: number) => {
+    setAssigningRole(a.id + roleName)
+    const hasRole = a.roles.includes(roleName)
+    if (hasRole) {
+      await supabase.from('athlete_roles').delete()
+        .eq('athlete_id', a.id).eq('role_id', roleId)
+    } else {
+      await supabase.from('athlete_roles').insert({ athlete_id: a.id, role_id: roleId })
+    }
+    setAssigningRole(null)
+    fetchAthletes()
+  }
+
   const generateInvite = async () => {
     setGeneratingInvite(true)
     setNewCode('')
@@ -216,6 +237,8 @@ export default function AdminPage() {
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">Email</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">Roles</th>
+                  <th className="text-left px-4 py-3 text-gray-500 font-medium">Assign Role</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -236,6 +259,32 @@ export default function AdminPage() {
                           <span key={r} className={`px-2 py-0.5 rounded-full text-xs font-medium ${roleBadge(r)}`}>{r}</span>
                         ))}
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1 flex-wrap">
+                        {[{ name: 'admin', id: 1 }, { name: 'coach', id: 2 }, { name: 'athlete', id: 3 }].map(role => (
+                          <button
+                            key={role.name}
+                            onClick={() => toggleRole(a, role.name, role.id)}
+                            disabled={assigningRole === a.id + role.name}
+                            className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                              a.roles.includes(role.name)
+                                ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-red-50 hover:border-red-300 hover:text-red-600'
+                                : 'border-gray-200 text-gray-400 hover:bg-indigo-50 hover:border-indigo-300 hover:text-indigo-600'
+                            } disabled:opacity-50`}
+                          >
+                            {a.roles.includes(role.name) ? '✓' : '+'} {role.name}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => deleteAthlete(a)}
+                        className="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        Hapus
+                      </button>
                     </td>
                   </tr>
                 ))}

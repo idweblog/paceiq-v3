@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 type Mode = 'login' | 'register'
 type Policy = 'invitation_only' | 'open_email_verification' | 'open_admin_approval' | null
 
-export default function LoginPage({ onPending }: { onPending?: () => void }) {
+export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -37,6 +37,19 @@ export default function LoginPage({ onPending }: { onPending?: () => void }) {
         return
       }
 
+      // Validasi invite code SEBELUM signUp agar auth user tidak terbuat jika invite invalid
+      if (policy === 'invitation_only') {
+        const { data: validResult, error: validError } = await supabase.rpc('validate_invite_code', {
+          p_code: inviteCode.trim().toUpperCase(),
+          p_email: email,
+        } as never)
+        if (validError || validResult !== 'ok') {
+          setError('Kode invite tidak valid, sudah habis, atau tidak sesuai email. Hubungi admin.')
+          setLoading(false)
+          return
+        }
+      }
+
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password })
       if (signUpError) { setError(signUpError.message); setLoading(false); return }
 
@@ -61,14 +74,17 @@ export default function LoginPage({ onPending }: { onPending?: () => void }) {
 
       const result = rpcData as unknown as { status: string; policy: string } | null
 
+      await supabase.auth.signOut()
+
       if (result?.status === 'pending') {
+        setInfo('Registrasi berhasil! Akun Anda sedang menunggu persetujuan Admin sebelum bisa digunakan.')
+        setMode('login')
+        setName(''); setEmail(''); setPassword(''); setInviteCode('')
         setLoading(false)
-        if (onPending) onPending()
         return
       }
 
       if (policy === 'open_email_verification') {
-        await supabase.auth.signOut()
         setInfo('Registrasi berhasil! Silakan cek email Anda untuk verifikasi sebelum login.')
         setMode('login')
         setName(''); setEmail(''); setPassword(''); setInviteCode('')

@@ -1173,6 +1173,10 @@ export type Database = {
       }
     }
     Functions: {
+      admin_delete_athlete: {
+        Args: { p_athlete_id: string }
+        Returns: undefined
+      }
       claim_invite: {
         Args: { p_athlete_id: string; p_code: string; p_email?: string }
         Returns: number
@@ -1220,13 +1224,22 @@ export type Database = {
       }
       get_registration_policy: { Args: never; Returns: string }
       has_role: { Args: { role_name: string }; Returns: boolean }
-      register_athlete: {
-        Args: { p_auth_id: string; p_email: string; p_name: string }
-        Returns: undefined
-      }
+      register_athlete:
+        | {
+            Args: { p_auth_id: string; p_email: string; p_name: string }
+            Returns: undefined
+          }
+        | {
+            Args: { p_email: string; p_invite_code?: string; p_name: string }
+            Returns: Json
+          }
       set_registration_policy: {
         Args: { p_policy: string }
         Returns: undefined
+      }
+      validate_invite_code: {
+        Args: { p_code: string; p_email: string }
+        Returns: string
       }
     }
     Enums: {
