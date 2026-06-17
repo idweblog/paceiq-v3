@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 
 type Mode = 'login' | 'register'
 type Policy = 'invitation_only' | 'open_email_verification' | 'open_admin_approval' | null
 
 export default function LoginPage() {
+  const { user } = useAuth()
+  const navigate = useNavigate()
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -14,6 +18,10 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
   const [policy, setPolicy] = useState<Policy>(null)
+
+  useEffect(() => {
+    if (user) navigate('/dashboard', { replace: true })
+  }, [user, navigate])
 
   useEffect(() => {
     let cancelled = false
@@ -101,10 +109,11 @@ export default function LoginPage() {
       if (signInError) { setError(signInError.message); setLoading(false); return }
 
       // Cek status athlete setelah login
+      const { data: { user: loggedInUser } } = await supabase.auth.getUser()
       const { data: athleteData } = await supabase
         .from('athletes')
         .select('status')
-        .eq('auth_id', (await supabase.auth.getUser()).data.user?.id ?? '')
+        .eq('auth_id', loggedInUser?.id ?? '')
         .single()
 
       if (athleteData?.status === 'pending') {

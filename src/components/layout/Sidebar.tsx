@@ -31,7 +31,7 @@ const adminItems = [
 
 export function Sidebar() {
   const { signOut, user } = useAuth()
-  const { isCoach } = useRole()
+  const { isCoach, isAdmin } = useRole()
   const navigate = useNavigate()
 
   async function handleSignOut() {
@@ -96,7 +96,7 @@ export function Sidebar() {
         )}
 
         {/* Admin section */}
-        <div className="mt-4 pt-4 border-t border-indigo-800">
+        {isAdmin && <div className="mt-4 pt-4 border-t border-indigo-800">
           <p className="px-3 mb-1 text-xs font-semibold uppercase text-indigo-400 tracking-wider">Admin</p>
           <ul className="space-y-0.5">
             {adminItems.map((item) => (
@@ -117,7 +117,7 @@ export function Sidebar() {
               </li>
             ))}
           </ul>
-        </div>
+        </div>}
       </nav>
 
       {/* User footer */}
