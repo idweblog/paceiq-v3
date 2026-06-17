@@ -67,20 +67,37 @@ export default function TreatmentPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadLogs()
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      const { data, error: err } = await supabase
+        .from('treatment_log')
+        .select('id, log_date, treatment_type, duration_min, body_part, notes')
+        .eq('athlete_id', athleteId!)
+        .order('log_date', { ascending: false })
+        .limit(50)
+      if (!cancelled) {
+        if (err) console.error('[PaceIQ] treatment_log:', err.message)
+        if (data) setLogs(data)
+        setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [athleteId])
 
-  async function loadLogs() {
+  async function reloadLogs() {
     if (!athleteId) return
-    setLoading(true)
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from('treatment_log')
       .select('id, log_date, treatment_type, duration_min, body_part, notes')
-      .eq('athlete_id', athleteId)
+      .eq('athlete_id', athleteId!)
       .order('log_date', { ascending: false })
       .limit(50)
+    if (err) console.error('[PaceIQ] treatment_log:', err.message)
     if (data) setLogs(data)
-    setLoading(false)
   }
 
   async function handleSubmit() {
@@ -99,20 +116,17 @@ export default function TreatmentPage() {
     if (err) { setError(err.message); return }
     setForm(emptyForm)
     setShowForm(false)
-    await loadLogs()
+    await reloadLogs()
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Hapus entri ini?')) return
-    await supabase.from('treatment_log').delete().eq('id', id)
-    await loadLogs()
+    const { error: err } = await supabase.from('treatment_log').delete().eq('id', id)
+    if (err) { console.error('[PaceIQ] delete treatment:', err.message); return }
+    await reloadLogs()
   }
 
-  const filteredLogs = filterType === 'all'
-    ? logs
-    : logs.filter(l => l.treatment_type === filterType)
-
-  // Summary stats
+  const filteredLogs = filterType === 'all' ? logs : logs.filter(l => l.treatment_type === filterType)
   const totalSessions = logs.length
   const totalMinutes = logs.reduce((sum, l) => sum + (l.duration_min ?? 0), 0)
   const typeCount = TREATMENT_TYPES.reduce((acc, t) => {
@@ -145,7 +159,6 @@ export default function TreatmentPage() {
         }
       />
 
-      {/* Summary */}
       {logs.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
           <div className="bg-white rounded-xl shadow-sm p-3 text-center">
@@ -156,19 +169,15 @@ export default function TreatmentPage() {
             <p className="text-2xl font-bold text-green-600">{totalMinutes}</p>
             <p className="text-xs text-gray-400">Total Menit</p>
           </div>
-          {Object.entries(typeCount)
-            .filter(([, count]) => count > 0)
-            .slice(0, 2)
-            .map(([type, count]) => (
-              <div key={type} className="bg-white rounded-xl shadow-sm p-3 text-center">
-                <p className="text-2xl font-bold text-gray-700">{count}x</p>
-                <p className="text-xs text-gray-400">{TREATMENT_TYPES.find(t => t.value === type)?.label.split(' ').slice(1).join(' ')}</p>
-              </div>
-            ))}
+          {Object.entries(typeCount).filter(([, count]) => count > 0).slice(0, 2).map(([type, count]) => (
+            <div key={type} className="bg-white rounded-xl shadow-sm p-3 text-center">
+              <p className="text-2xl font-bold text-gray-700">{count}x</p>
+              <p className="text-xs text-gray-400">{TREATMENT_TYPES.find(t => t.value === type)?.label.split(' ').slice(1).join(' ')}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Form */}
       {showForm && (
         <div className="bg-white rounded-xl shadow-sm p-5 mb-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Treatment Baru</h3>
@@ -183,9 +192,7 @@ export default function TreatmentPage() {
               <label className={labelCls}>Tipe Treatment</label>
               <select value={form.treatment_type} className={inputCls}
                 onChange={e => setForm(p => ({ ...p, treatment_type: e.target.value }))}>
-                {TREATMENT_TYPES.map(t => (
-                  <option key={t.value} value={t.value}>{t.label}</option>
-                ))}
+                {TREATMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
             <div>
@@ -221,7 +228,6 @@ export default function TreatmentPage() {
         </div>
       )}
 
-      {/* Filter */}
       <div className="flex gap-2 flex-wrap mb-4">
         <button onClick={() => setFilterType('all')}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
@@ -239,7 +245,6 @@ export default function TreatmentPage() {
         ))}
       </div>
 
-      {/* Log list */}
       {filteredLogs.length === 0 ? (
         <EmptyState title="Belum ada treatment tercatat" description="Log treatment untuk tracking recovery." />
       ) : (
@@ -250,21 +255,13 @@ export default function TreatmentPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
                     <span className="text-xs text-gray-400">
-                      {new Date(log.log_date).toLocaleDateString('id-ID', {
-                        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
-                      })}
+                      {new Date(log.log_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
                     </span>
                     <span className="text-sm font-semibold">{typeLabel(log.treatment_type)}</span>
-                    {log.duration_min && (
-                      <span className="text-xs opacity-70">⏱ {log.duration_min} menit</span>
-                    )}
+                    {log.duration_min && <span className="text-xs opacity-70">⏱ {log.duration_min} menit</span>}
                   </div>
-                  {log.body_part && (
-                    <p className="text-xs opacity-80 mb-0.5">📍 {log.body_part}</p>
-                  )}
-                  {log.notes && (
-                    <p className="text-xs opacity-70 italic">{log.notes}</p>
-                  )}
+                  {log.body_part && <p className="text-xs opacity-80 mb-0.5">📍 {log.body_part}</p>}
+                  {log.notes && <p className="text-xs opacity-70 italic">{log.notes}</p>}
                 </div>
                 <button onClick={() => handleDelete(log.id)}
                   className="text-xs text-red-400 hover:text-red-600 ml-4 shrink-0 transition-colors">

@@ -3,14 +3,12 @@ import { supabase } from '../lib/supabase'
 import { useAthlete } from '../hooks/useAthlete'
 import { PageHeader } from '../components/ui/PageHeader'
 
-// ─── Types ───────────────────────────────────────────────────
 interface Settings {
   lthr: number | null
   resting_hr: number | null
   max_hr: number | null
 }
 
-// ─── HR Zone Calculation (Joe Friel LTHR) ────────────────────
 interface HrZone {
   zone: string
   name: string
@@ -21,17 +19,16 @@ interface HrZone {
 
 function calcHrZones(lthr: number): HrZone[] {
   return [
-    { zone: 'Z1', name: 'Recovery',      min: 0,              max: Math.round(lthr * 0.81),  color: 'bg-blue-100 text-blue-700' },
-    { zone: 'Z2', name: 'Aerobic',       min: Math.round(lthr * 0.81) + 1, max: Math.round(lthr * 0.89),  color: 'bg-green-100 text-green-700' },
-    { zone: 'Z3', name: 'Tempo',         min: Math.round(lthr * 0.89) + 1, max: Math.round(lthr * 0.93),  color: 'bg-yellow-100 text-yellow-700' },
-    { zone: 'Z4', name: 'SubThreshold',  min: Math.round(lthr * 0.93) + 1, max: Math.round(lthr * 0.99),  color: 'bg-orange-100 text-orange-700' },
+    { zone: 'Z1', name: 'Recovery', min: 0, max: Math.round(lthr * 0.81), color: 'bg-blue-100 text-blue-700' },
+    { zone: 'Z2', name: 'Aerobic', min: Math.round(lthr * 0.81) + 1, max: Math.round(lthr * 0.89), color: 'bg-green-100 text-green-700' },
+    { zone: 'Z3', name: 'Tempo', min: Math.round(lthr * 0.89) + 1, max: Math.round(lthr * 0.93), color: 'bg-yellow-100 text-yellow-700' },
+    { zone: 'Z4', name: 'SubThreshold', min: Math.round(lthr * 0.93) + 1, max: Math.round(lthr * 0.99), color: 'bg-orange-100 text-orange-700' },
     { zone: 'Z5a', name: 'SuperThreshold', min: Math.round(lthr * 0.99) + 1, max: Math.round(lthr * 1.02), color: 'bg-red-100 text-red-700' },
     { zone: 'Z5b', name: 'Aerobic Capacity', min: Math.round(lthr * 1.02) + 1, max: Math.round(lthr * 1.06), color: 'bg-red-200 text-red-800' },
-    { zone: 'Z5c', name: 'Anaerobic',    min: Math.round(lthr * 1.06) + 1, max: 999,          color: 'bg-red-300 text-red-900' },
+    { zone: 'Z5c', name: 'Anaerobic', min: Math.round(lthr * 1.06) + 1, max: 999, color: 'bg-red-300 text-red-900' },
   ]
 }
 
-// ─── Pace Zone Calculation (Jack Daniels VDOT) ───────────────
 interface PaceZone {
   zone: string
   name: string
@@ -40,12 +37,10 @@ interface PaceZone {
   color: string
 }
 
-// VO2 at velocity v (m/min)
 function vo2AtV(v: number): number {
   return -4.60 + 0.182258 * v + 0.000104 * v * v
 }
 
-// Find velocity (m/min) at given % of VDOT
 function velocityAtPct(vdot: number, pct: number): number {
   const target = vdot * pct
   let lo = 50, hi = 700
@@ -68,7 +63,6 @@ function paceStr(vPerMin: number): string {
 
 function calcPaceZones(vdot: number, heatAdj: number = 0): PaceZone[] {
   const adj = (base: number) => base + heatAdj
-
   const easyLo  = velocityAtPct(vdot, 0.59)
   const easyHi  = velocityAtPct(vdot, 0.74)
   const mLo     = velocityAtPct(vdot, 0.75)
@@ -76,57 +70,23 @@ function calcPaceZones(vdot: number, heatAdj: number = 0): PaceZone[] {
   const tV      = velocityAtPct(vdot, 0.88)
   const iV      = velocityAtPct(vdot, 0.98)
   const rV      = velocityAtPct(vdot, 1.05)
-
   return [
-    {
-      zone: 'E',
-      name: 'Easy / Long Run',
-      paceRange: `${secPerKmToStr(adj(1000 / easyHi * 60))} – ${secPerKmToStr(adj(1000 / easyLo * 60))}`,
-      effort: '59–74% VDOT · Z1–Z2 HR',
-      color: 'bg-blue-50 border-blue-200 text-blue-800',
-    },
-    {
-      zone: 'M',
-      name: 'Marathon Pace',
-      paceRange: `${secPerKmToStr(adj(1000 / mHi * 60))} – ${secPerKmToStr(adj(1000 / mLo * 60))}`,
-      effort: '75–84% VDOT · Z3 HR',
-      color: 'bg-green-50 border-green-200 text-green-800',
-    },
-    {
-      zone: 'T',
-      name: 'Threshold / Tempo',
-      paceRange: paceStr(tV),
-      effort: '88% VDOT · Z4 HR',
-      color: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-    },
-    {
-      zone: 'I',
-      name: 'Interval',
-      paceRange: paceStr(iV),
-      effort: '98% VDOT · Z5a HR',
-      color: 'bg-orange-50 border-orange-200 text-orange-800',
-    },
-    {
-      zone: 'R',
-      name: 'Repetition',
-      paceRange: paceStr(rV),
-      effort: '105% VDOT · Z5b–Z5c HR',
-      color: 'bg-red-50 border-red-200 text-red-800',
-    },
+    { zone: 'E', name: 'Easy / Long Run', paceRange: `${secPerKmToStr(adj(1000 / easyHi * 60))} – ${secPerKmToStr(adj(1000 / easyLo * 60))}`, effort: '59–74% VDOT · Z1–Z2 HR', color: 'bg-blue-50 border-blue-200 text-blue-800' },
+    { zone: 'M', name: 'Marathon Pace', paceRange: `${secPerKmToStr(adj(1000 / mHi * 60))} – ${secPerKmToStr(adj(1000 / mLo * 60))}`, effort: '75–84% VDOT · Z3 HR', color: 'bg-green-50 border-green-200 text-green-800' },
+    { zone: 'T', name: 'Threshold / Tempo', paceRange: paceStr(tV), effort: '88% VDOT · Z4 HR', color: 'bg-yellow-50 border-yellow-200 text-yellow-800' },
+    { zone: 'I', name: 'Interval', paceRange: paceStr(iV), effort: '98% VDOT · Z5a HR', color: 'bg-orange-50 border-orange-200 text-orange-800' },
+    { zone: 'R', name: 'Repetition', paceRange: paceStr(rV), effort: '105% VDOT · Z5b–Z5c HR', color: 'bg-red-50 border-red-200 text-red-800' },
   ]
 }
 
-// ─── Heat Adjustment (simple WBGT-based) ─────────────────────
-// +sec per km adjustment per heat level
 const HEAT_LEVELS = [
-  { label: 'Tidak ada (< 22°C)',  adj: 0 },
-  { label: 'Ringan (22–25°C)',    adj: 15 },
-  { label: 'Sedang (25–28°C)',    adj: 30 },
-  { label: 'Berat (28–32°C)',     adj: 45 },
-  { label: 'Ekstrem (> 32°C)',    adj: 60 },
+  { label: 'Tidak ada (< 22°C)', adj: 0 },
+  { label: 'Ringan (22–25°C)', adj: 15 },
+  { label: 'Sedang (25–28°C)', adj: 30 },
+  { label: 'Berat (28–32°C)', adj: 45 },
+  { label: 'Ekstrem (> 32°C)', adj: 60 },
 ]
 
-// ─── Component ────────────────────────────────────────────────
 export default function PaceZonesPage() {
   const { athlete } = useAthlete()
   const athleteId = athlete?.id
@@ -138,37 +98,37 @@ export default function PaceZonesPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadData()
-  }, [athleteId])
+    let cancelled = false
 
-  async function loadData() {
-    setLoading(true)
-    await Promise.all([loadSettings(), loadLatestTt()])
-    setLoading(false)
-  }
-
-  async function loadSettings() {
-    if (!athleteId) return
-    const { data } = await supabase
-      .from('athlete_settings')
-      .select('lthr, resting_hr, max_hr')
-      .eq('athlete_id', athleteId)
-      .maybeSingle()
-    if (data) setSettings(data)
-  }
-
-  async function loadLatestTt() {
-    if (!athleteId) return
-    const { data } = await supabase
-      .from('tt_history')
-      .select('distance_km, finish_time_sec, vdot')
-      .eq('athlete_id', athleteId)
-      .order('tt_date', { ascending: false })
-      .limit(1)
-    if (data && data.length > 0 && data[0].vdot) {
-      setLatestVdot(data[0].vdot)
+    async function load() {
+      setLoading(true)
+      const [settingsResult, ttResult] = await Promise.all([
+        supabase
+          .from('athlete_settings')
+          .select('lthr, resting_hr, max_hr')
+          .eq('athlete_id', athleteId!)
+          .maybeSingle(),
+        supabase
+          .from('tt_history')
+          .select('distance_km, finish_time_sec, vdot')
+          .eq('athlete_id', athleteId!)
+          .order('tt_date', { ascending: false })
+          .limit(1)
+      ])
+      if (!cancelled) {
+        if (settingsResult.error) console.error('[PaceIQ] athlete_settings:', settingsResult.error.message)
+        if (ttResult.error) console.error('[PaceIQ] tt_history:', ttResult.error.message)
+        if (settingsResult.data) setSettings(settingsResult.data)
+        if (ttResult.data && ttResult.data.length > 0 && ttResult.data[0].vdot) {
+          setLatestVdot(ttResult.data[0].vdot)
+        }
+        setLoading(false)
+      }
     }
-  }
+
+    load()
+    return () => { cancelled = true }
+  }, [athleteId])
 
   const heatAdj = HEAT_LEVELS[heatLevel].adj
   const hrZones = settings.lthr ? calcHrZones(settings.lthr) : null
@@ -187,7 +147,6 @@ export default function PaceZonesPage() {
     <div className="p-6 max-w-4xl">
       <PageHeader title="Pace & HR Zones" subtitle="Zone latihan berdasarkan LTHR dan VDOT" />
 
-      {/* Heat Mode Toggle */}
       <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
         <div className="flex items-center gap-3 mb-3">
           <span className="text-sm font-semibold text-gray-700">🌡️ Heat Mode</span>
@@ -195,27 +154,19 @@ export default function PaceZonesPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {HEAT_LEVELS.map((h, i) => (
-            <button
-              key={i}
-              onClick={() => setHeatLevel(i)}
+            <button key={i} onClick={() => setHeatLevel(i)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                heatLevel === i
-                  ? 'bg-amber-500 text-white border-amber-500'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'
-              }`}
-            >
+                heatLevel === i ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'
+              }`}>
               {h.label}
             </button>
           ))}
         </div>
         {heatAdj > 0 && (
-          <p className="text-xs text-amber-600 mt-2">
-            ⚠️ Pace disesuaikan +{heatAdj} detik/km dari zone normal
-          </p>
+          <p className="text-xs text-amber-600 mt-2">⚠️ Pace disesuaikan +{heatAdj} detik/km dari zone normal</p>
         )}
       </div>
 
-      {/* Pace Zones */}
       <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
         <h3 className="text-sm font-semibold text-gray-700 mb-1">Pace Zones (Jack Daniels)</h3>
         {latestVdot ? (
@@ -250,7 +201,6 @@ export default function PaceZonesPage() {
         )}
       </div>
 
-      {/* HR Zones */}
       <div className="bg-white rounded-xl shadow-sm p-5">
         <h3 className="text-sm font-semibold text-gray-700 mb-1">HR Zones (Joe Friel)</h3>
         {settings.lthr ? (

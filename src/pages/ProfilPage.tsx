@@ -5,7 +5,6 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { StatCard } from '../components/ui/StatCard'
 import { EmptyState } from '../components/ui/EmptyState'
 
-// ─── Types ───────────────────────────────────────────────────
 interface AthleteSettings {
   lthr: number | null
   easy_pace_min: number | null
@@ -28,21 +27,17 @@ interface TtEntry {
   notes: string | null
 }
 
-// ─── VDOT Formula (Jack Daniels) ─────────────────────────────
 function calcVdot(distanceM: number, finishTimeSec: number): number {
-  const v = distanceM / finishTimeSec * 60 // m/min
+  const v = distanceM / finishTimeSec * 60
   const vo2 = -4.60 + 0.182258 * v + 0.000104 * v * v
   const pctVo2 = 0.8 + 0.1894393 * Math.exp(-0.012778 * finishTimeSec / 60)
                + 0.2989558 * Math.exp(-0.1932605 * finishTimeSec / 60)
   return parseFloat((vo2 / pctVo2).toFixed(1))
 }
 
-// Easy pace from VDOT (65% VO2max zone)
 function easyPaceFromVdot(vdot: number): string {
-  // Solve for pace at 65% VO2max using Jack Daniels inverse
   const targetPct = 0.65
-  // Binary search for velocity at targetPct * vdot
-  let lo = 100, hi = 600 // m/min
+  let lo = 100, hi = 600
   for (let i = 0; i < 50; i++) {
     const mid = (lo + hi) / 2
     const vo2atV = -4.60 + 0.182258 * mid + 0.000104 * mid * mid
@@ -54,7 +49,6 @@ function easyPaceFromVdot(vdot: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// Riegel race prediction
 function predictTime(knownDist: number, knownTimeSec: number, targetDist: number): string {
   const sec = knownTimeSec * Math.pow(targetDist / knownDist, 1.06)
   const h = Math.floor(sec / 3600)
@@ -101,7 +95,6 @@ const emptyTtForm = {
   notes: '',
 }
 
-// ─── Component ────────────────────────────────────────────────
 export default function ProfilPage() {
   const { athlete } = useAthlete()
   const athleteId = athlete?.id
@@ -119,32 +112,54 @@ export default function ProfilPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadAll()
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      const [settingsResult, ttResult] = await Promise.all([
+        supabase
+          .from('athlete_settings')
+          .select('lthr, easy_pace_min, easy_pace_sec, resting_hr, max_hr, weight_kg, height_cm, training_age_years, domisili')
+          .eq('athlete_id', athleteId!)
+          .maybeSingle(),
+        supabase
+          .from('tt_history')
+          .select('id, tt_date, distance_km, finish_time_sec, vdot, hr_avg, notes')
+          .eq('athlete_id', athleteId!)
+          .order('tt_date', { ascending: false })
+      ])
+      if (!cancelled) {
+        if (settingsResult.error) console.error('[PaceIQ] athlete_settings:', settingsResult.error.message)
+        if (ttResult.error) console.error('[PaceIQ] tt_history:', ttResult.error.message)
+        if (settingsResult.data) setSettings(settingsResult.data)
+        if (ttResult.data) setTtList(ttResult.data)
+        setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [athleteId])
 
-  async function loadAll() {
-    setLoading(true)
-    await Promise.all([loadSettings(), loadTt()])
-    setLoading(false)
-  }
-
-  async function loadSettings() {
+  async function reloadSettings() {
     if (!athleteId) return
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from('athlete_settings')
       .select('lthr, easy_pace_min, easy_pace_sec, resting_hr, max_hr, weight_kg, height_cm, training_age_years, domisili')
-      .eq('athlete_id', athleteId)
+      .eq('athlete_id', athleteId!)
       .maybeSingle()
+    if (err) console.error('[PaceIQ] athlete_settings:', err.message)
     if (data) setSettings(data)
   }
 
-  async function loadTt() {
+  async function reloadTt() {
     if (!athleteId) return
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from('tt_history')
       .select('id, tt_date, distance_km, finish_time_sec, vdot, hr_avg, notes')
-      .eq('athlete_id', athleteId)
+      .eq('athlete_id', athleteId!)
       .order('tt_date', { ascending: false })
+    if (err) console.error('[PaceIQ] tt_history:', err.message)
     if (data) setTtList(data)
   }
 
@@ -167,7 +182,6 @@ export default function ProfilPage() {
     if (!athleteId) return
     setSaving(true)
     setError(null)
-
     const payload = {
       athlete_id: athleteId,
       lthr: settingsForm.lthr ? parseInt(settingsForm.lthr) : null,
@@ -181,15 +195,13 @@ export default function ProfilPage() {
       domisili: settingsForm.domisili || null,
       updated_at: new Date().toISOString(),
     }
-
     const { error: err } = await supabase
       .from('athlete_settings')
       .upsert(payload, { onConflict: 'athlete_id' })
-
     setSaving(false)
     if (err) { setError(err.message); return }
     setEditMode(false)
-    await loadSettings()
+    await reloadSettings()
   }
 
   async function saveTt() {
@@ -197,10 +209,8 @@ export default function ProfilPage() {
     setError(null)
     const finishSec = parseTimeToSec(ttForm.finish_time)
     if (!finishSec) { setError('Format waktu tidak valid. Gunakan MM:SS atau HH:MM:SS.'); return }
-
     const distM = parseFloat(ttForm.distance_km) * 1000
     const vdot = calcVdot(distM, finishSec)
-
     setTtSaving(true)
     const { error: err } = await supabase.from('tt_history').insert({
       athlete_id: athleteId,
@@ -215,25 +225,21 @@ export default function ProfilPage() {
     if (err) { setError(err.message); return }
     setTtForm(emptyTtForm)
     setShowTtForm(false)
-    await loadTt()
+    await reloadTt()
   }
 
   async function deleteTt(id: string) {
     if (!confirm('Hapus entri TT ini?')) return
-    await supabase.from('tt_history').delete().eq('id', id)
-    await loadTt()
+    const { error: err } = await supabase.from('tt_history').delete().eq('id', id)
+    if (err) { console.error('[PaceIQ] delete tt:', err.message); return }
+    await reloadTt()
   }
 
-  // Derived values dari TT terbaru
   const latestTt = ttList[0] ?? null
   const vdot = latestTt?.vdot ?? null
   const easyPace = vdot ? easyPaceFromVdot(vdot) : null
-  const predictedHm = latestTt
-    ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 21097.5)
-    : null
-  const predicted10k = latestTt
-    ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 10000)
-    : null
+  const predictedHm = latestTt ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 21097.5) : null
+  const predicted10k = latestTt ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 10000) : null
 
   if (loading) {
     return (
@@ -251,7 +257,8 @@ export default function ProfilPage() {
         subtitle={athlete?.name ?? ''}
         action={
           !editMode ? (
-            <button onClick={openEdit} className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+            <button onClick={openEdit}
+              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
               Edit Profil
             </button>
           ) : undefined
@@ -262,7 +269,6 @@ export default function ProfilPage() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{error}</div>
       )}
 
-      {/* ── Data Performa Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="VDOT" value={vdot?.toFixed(1) ?? '—'} accent="indigo" />
         <StatCard label="Easy Pace" value={easyPace ?? '—'} sub="/km" accent="green" />
@@ -274,7 +280,6 @@ export default function ProfilPage() {
         <StatCard label="Berat" value={settings.weight_kg ? `${settings.weight_kg} kg` : '—'} />
       </div>
 
-      {/* ── Edit Form ── */}
       {editMode && (
         <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Edit Settings</h3>
@@ -291,38 +296,35 @@ export default function ProfilPage() {
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
-                <input
-                  type="number"
+                <input type="number"
                   value={settingsForm[f.key] ?? ''}
                   onChange={e => setSettingsForm(prev => ({ ...prev, [f.key]: e.target.value }))}
                   placeholder={f.placeholder}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
             ))}
             <div className="col-span-2 md:col-span-3">
               <label className="block text-xs text-gray-500 mb-1">Domisili</label>
-              <input
-                type="text"
+              <input type="text"
                 value={settingsForm.domisili ?? ''}
                 onChange={e => setSettingsForm(prev => ({ ...prev, domisili: e.target.value }))}
                 placeholder="Makassar, Sulawesi Selatan"
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-              />
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
             </div>
           </div>
           <div className="mt-4 flex gap-3">
-            <button onClick={saveSettings} disabled={saving} className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+            <button onClick={saveSettings} disabled={saving}
+              className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
               {saving ? 'Menyimpan...' : 'Simpan'}
             </button>
-            <button onClick={() => setEditMode(false)} className="px-5 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
+            <button onClick={() => setEditMode(false)}
+              className="px-5 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
               Batal
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Settings Display ── */}
       {!editMode && (
         <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Settings</h3>
@@ -334,7 +336,7 @@ export default function ProfilPage() {
               <span className="text-gray-400">Easy Pace:</span>{' '}
               <span className="text-gray-700">
                 {settings.easy_pace_min != null && settings.easy_pace_sec != null
-                  ? `${settings.easy_pace_min}:${String(settings.easy_pace_sec).padStart(2,'0')} /km`
+                  ? `${settings.easy_pace_min}:${String(settings.easy_pace_sec).padStart(2, '0')} /km`
                   : '—'}
               </span>
             </div>
@@ -342,14 +344,11 @@ export default function ProfilPage() {
         </div>
       )}
 
-      {/* ── Time Trial History ── */}
       <div className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-semibold text-gray-700">Time Trial History</h3>
-          <button
-            onClick={() => { setShowTtForm(v => !v); setError(null) }}
-            className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
+          <button onClick={() => { setShowTtForm(v => !v); setError(null) }}
+            className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
             {showTtForm ? 'Batal' : '+ Input TT'}
           </button>
         </div>
@@ -417,7 +416,8 @@ export default function ProfilPage() {
                   </div>
                   {tt.notes && <p className="text-xs text-gray-400 mt-0.5 italic">{tt.notes}</p>}
                 </div>
-                <button onClick={() => deleteTt(tt.id)} className="text-xs text-red-400 hover:text-red-600 ml-4 shrink-0">
+                <button onClick={() => deleteTt(tt.id)}
+                  className="text-xs text-red-400 hover:text-red-600 ml-4 shrink-0">
                   Hapus
                 </button>
               </div>

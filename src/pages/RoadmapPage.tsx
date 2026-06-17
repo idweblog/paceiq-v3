@@ -88,59 +88,72 @@ export default function RoadmapPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadAll()
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      const [programsResult, racesResult] = await Promise.all([
+        supabase
+          .from('programs')
+          .select('id, name, phase, date_start, date_end, status, notes, race_id')
+          .eq('athlete_id', athleteId!)
+          .order('date_start', { ascending: true }),
+        supabase
+          .from('races')
+          .select('id, name, event_date, status')
+          .eq('athlete_id', athleteId!)
+          .order('event_date', { ascending: true })
+      ])
+      if (!cancelled) {
+        if (programsResult.error) console.error('[PaceIQ] programs:', programsResult.error.message)
+        if (racesResult.error) console.error('[PaceIQ] races:', racesResult.error.message)
+        if (programsResult.data) {
+          setPrograms(programsResult.data)
+          if (programsResult.data.length > 0) setSelectedProgramId(programsResult.data[0].id)
+        }
+        if (racesResult.data) setRaces(racesResult.data)
+        setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [athleteId])
 
   useEffect(() => {
-    if (!selectedProgramId) return
-    loadWeeks(selectedProgramId)
-  }, [selectedProgramId])
+    if (!selectedProgramId || !athleteId) return
+    let cancelled = false
 
-  async function loadAll() {
-    setLoading(true)
-    await Promise.all([loadPrograms(), loadRaces()])
-    setLoading(false)
-  }
+    async function load() {
+      const { data, error: err } = await supabase
+        .from('program_weeks')
+        .select('id, program_id, week_number, phase, date_start, date_end, target_distance_km, actual_distance_km, focus, notes')
+        .eq('program_id', selectedProgramId!)
+        .eq('athlete_id', athleteId!)
+        .order('week_number', { ascending: true })
+      if (!cancelled) {
+        if (err) console.error('[PaceIQ] program_weeks:', err.message)
+        if (data) setWeeks(data)
+      }
+    }
 
-  async function loadPrograms() {
+    load()
+    return () => { cancelled = true }
+  }, [selectedProgramId, athleteId])
+
+  async function reloadPrograms() {
     if (!athleteId) return
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from('programs')
       .select('id, name, phase, date_start, date_end, status, notes, race_id')
-      .eq('athlete_id', athleteId)
+      .eq('athlete_id', athleteId!)
       .order('date_start', { ascending: true })
-    if (data) {
-      setPrograms(data)
-      if (data.length > 0 && !selectedProgramId) setSelectedProgramId(data[0].id)
-    }
-  }
-
-  async function loadRaces() {
-    if (!athleteId) return
-    const { data } = await supabase
-      .from('races')
-      .select('id, name, event_date, status')
-      .eq('athlete_id', athleteId)
-      .order('event_date', { ascending: true })
-    if (data) setRaces(data)
-  }
-
-  async function loadWeeks(programId: string) {
-    if (!athleteId) return
-    const { data } = await supabase
-      .from('program_weeks')
-      .select('id, program_id, week_number, phase, date_start, date_end, target_distance_km, actual_distance_km, focus, notes')
-      .eq('program_id', programId)
-      .eq('athlete_id', athleteId)
-      .order('week_number', { ascending: true })
-    if (data) setWeeks(data)
+    if (err) console.error('[PaceIQ] programs:', err.message)
+    if (data) setPrograms(data)
   }
 
   async function saveProgram() {
-    if (!athleteId || !programForm.name.trim()) {
-      setError('Nama program wajib diisi.')
-      return
-    }
+    if (!athleteId || !programForm.name.trim()) { setError('Nama program wajib diisi.'); return }
     setSaving(true)
     setError(null)
     const { data, error: err } = await supabase
@@ -160,16 +173,17 @@ export default function RoadmapPage() {
     if (err) { setError(err.message); return }
     setShowProgramForm(false)
     setProgramForm(emptyProgramForm)
-    await loadPrograms()
+    await reloadPrograms()
     if (data && data[0]) setSelectedProgramId(data[0].id)
   }
 
   async function deleteProgram(id: string) {
     if (!confirm('Hapus program ini beserta semua minggunya?')) return
-    await supabase.from('programs').delete().eq('id', id)
+    const { error: err } = await supabase.from('programs').delete().eq('id', id)
+    if (err) { console.error('[PaceIQ] delete program:', err.message); return }
     setSelectedProgramId(null)
     setWeeks([])
-    await loadPrograms()
+    await reloadPrograms()
   }
 
   const selectedProgram = programs.find(p => p.id === selectedProgramId)
@@ -200,7 +214,6 @@ export default function RoadmapPage() {
         }
       />
 
-      {/* Program Form */}
       {showProgramForm && (
         <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Program Baru</h3>
@@ -263,13 +276,11 @@ export default function RoadmapPage() {
         <EmptyState title="Belum ada program" description="Buat program training pertama untuk mulai tracking roadmap." />
       ) : (
         <div className="flex gap-6">
-          {/* Program list sidebar */}
           <div className="w-56 shrink-0">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Program</h3>
             <div className="space-y-1">
               {programs.map(p => (
-                <div key={p.id}
-                  onClick={() => setSelectedProgramId(p.id)}
+                <div key={p.id} onClick={() => setSelectedProgramId(p.id)}
                   className={`px-3 py-2.5 rounded-lg cursor-pointer text-sm transition-colors ${
                     selectedProgramId === p.id
                       ? 'bg-indigo-600 text-white'
@@ -286,18 +297,14 @@ export default function RoadmapPage() {
             </div>
           </div>
 
-          {/* Main content */}
           <div className="flex-1 min-w-0">
             {selectedProgram && (
               <>
-                {/* Program header */}
                 <div className="bg-white rounded-xl shadow-sm p-5 mb-4">
                   <div className="flex items-start justify-between">
                     <div>
                       <h2 className="text-base font-bold text-gray-900">{selectedProgram.name}</h2>
-                      {linkedRace && (
-                        <p className="text-xs text-indigo-500 mt-0.5">🏁 {linkedRace.name}</p>
-                      )}
+                      {linkedRace && <p className="text-xs text-indigo-500 mt-0.5">🏁 {linkedRace.name}</p>}
                       <div className="flex flex-wrap gap-3 mt-2 text-xs text-gray-500">
                         {selectedProgram.date_start && (
                           <span>📅 {formatDate(selectedProgram.date_start)} – {formatDate(selectedProgram.date_end)}</span>
@@ -306,9 +313,7 @@ export default function RoadmapPage() {
                         <span>🎯 Target: {totalTargetKm.toFixed(0)} km</span>
                         <span>✅ Actual: {totalActualKm.toFixed(0)} km</span>
                       </div>
-                      {selectedProgram.notes && (
-                        <p className="text-xs text-gray-400 mt-2 italic">{selectedProgram.notes}</p>
-                      )}
+                      {selectedProgram.notes && <p className="text-xs text-gray-400 mt-2 italic">{selectedProgram.notes}</p>}
                     </div>
                     <button onClick={() => deleteProgram(selectedProgram.id)}
                       className="text-xs text-red-400 hover:text-red-600 transition-colors ml-4">
@@ -317,7 +322,6 @@ export default function RoadmapPage() {
                   </div>
                 </div>
 
-                {/* Current week highlight */}
                 {currentWeek && (
                   <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4">
                     <p className="text-xs font-semibold text-indigo-600 mb-1">📍 MINGGU SAAT INI</p>
@@ -332,7 +336,6 @@ export default function RoadmapPage() {
                   </div>
                 )}
 
-                {/* Timeline */}
                 {weeks.length === 0 ? (
                   <div className="bg-white rounded-xl shadow-sm p-5 text-center text-gray-400 text-sm">
                     Belum ada minggu di program ini. Tambahkan via Program Detail.
@@ -345,18 +348,14 @@ export default function RoadmapPage() {
                       const progress = w.target_distance_km && w.actual_distance_km
                         ? Math.min(100, Math.round((w.actual_distance_km / w.target_distance_km) * 100))
                         : null
-
                       return (
                         <div key={w.id} className={`bg-white rounded-xl border shadow-sm p-4 ${isCurrent ? 'border-indigo-300' : 'border-gray-100'}`}>
                           <div className="flex items-start gap-4">
-                            {/* Week number */}
                             <div className={`shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold ${
-                              isCurrent ? 'bg-indigo-600 text-white' :
-                              isPast ? 'bg-gray-200 text-gray-500' : 'bg-gray-100 text-gray-400'
+                              isCurrent ? 'bg-indigo-600 text-white' : isPast ? 'bg-gray-200 text-gray-500' : 'bg-gray-100 text-gray-400'
                             }`}>
                               {w.week_number}
                             </div>
-
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 {w.phase && (

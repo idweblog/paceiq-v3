@@ -25,7 +25,6 @@ const emptyForm = {
   notes: '',
 }
 
-// Static fueling guides per tab
 const RACE_DAY_GUIDE = [
   { time: 'H-2 & H-1', tip: 'Karbohidrat loading: nasi, pasta, roti. Hindari makanan baru atau tinggi serat.' },
   { time: '3–4 jam sebelum start', tip: 'Sarapan ringan: nasi + telur, roti + selai kacang. 500–750ml air.' },
@@ -62,20 +61,37 @@ export default function NutritionPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadLogs()
+    let cancelled = false
+
+    async function load() {
+      setLoading(true)
+      const { data, error: err } = await supabase
+        .from('nutrition_log')
+        .select('id, log_date, pre_run_meal, during_run_fuel, post_run_meal, hydration_ml, electrolytes, notes')
+        .eq('athlete_id', athleteId!)
+        .order('log_date', { ascending: false })
+        .limit(30)
+      if (!cancelled) {
+        if (err) console.error('[PaceIQ] nutrition_log:', err.message)
+        if (data) setLogs(data)
+        setLoading(false)
+      }
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [athleteId])
 
-  async function loadLogs() {
+  async function reloadLogs() {
     if (!athleteId) return
-    setLoading(true)
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from('nutrition_log')
       .select('id, log_date, pre_run_meal, during_run_fuel, post_run_meal, hydration_ml, electrolytes, notes')
-      .eq('athlete_id', athleteId)
+      .eq('athlete_id', athleteId!)
       .order('log_date', { ascending: false })
       .limit(30)
+    if (err) console.error('[PaceIQ] nutrition_log:', err.message)
     if (data) setLogs(data)
-    setLoading(false)
   }
 
   async function handleSubmit() {
@@ -96,13 +112,14 @@ export default function NutritionPage() {
     if (err) { setError(err.message); return }
     setForm(emptyForm)
     setShowForm(false)
-    await loadLogs()
+    await reloadLogs()
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Hapus log ini?')) return
-    await supabase.from('nutrition_log').delete().eq('id', id)
-    await loadLogs()
+    const { error: err } = await supabase.from('nutrition_log').delete().eq('id', id)
+    if (err) { console.error('[PaceIQ] delete nutrition:', err.message); return }
+    await reloadLogs()
   }
 
   const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
@@ -139,21 +156,17 @@ export default function NutritionPage() {
         }
       />
 
-      {/* Tabs */}
       <div className="flex gap-2 mb-6 flex-wrap">
         {tabs.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key as typeof activeTab)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === t.key
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-500 border border-gray-200 hover:border-indigo-300'
+              activeTab === t.key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-indigo-300'
             }`}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* ── Log Tab ── */}
       {activeTab === 'log' && (
         <>
           {showForm && (
@@ -220,12 +233,8 @@ export default function NutritionPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-gray-700 mb-2">
-                        {new Date(log.log_date).toLocaleDateString('id-ID', {
-                          weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
-                        })}
-                        {log.hydration_ml && (
-                          <span className="ml-3 text-xs text-blue-500 font-normal">💧 {log.hydration_ml} ml</span>
-                        )}
+                        {new Date(log.log_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                        {log.hydration_ml && <span className="ml-3 text-xs text-blue-500 font-normal">💧 {log.hydration_ml} ml</span>}
                       </p>
                       <div className="space-y-1 text-xs text-gray-500">
                         {log.pre_run_meal && <p><span className="font-medium text-gray-600">Pre:</span> {log.pre_run_meal}</p>}
@@ -247,13 +256,9 @@ export default function NutritionPage() {
         </>
       )}
 
-      {/* ── Guide Tabs ── */}
       {(activeTab === 'raceday' || activeTab === 'training' || activeTab === 'recovery') && (
         <div className="space-y-3">
-          {(activeTab === 'raceday' ? RACE_DAY_GUIDE
-            : activeTab === 'training' ? TRAINING_GUIDE
-            : RECOVERY_GUIDE
-          ).map((item, i) => (
+          {(activeTab === 'raceday' ? RACE_DAY_GUIDE : activeTab === 'training' ? TRAINING_GUIDE : RECOVERY_GUIDE).map((item, i) => (
             <div key={i} className="bg-white rounded-xl shadow-sm p-4">
               <p className="text-xs font-semibold text-indigo-600 mb-1">{item.time}</p>
               <p className="text-sm text-gray-600">{item.tip}</p>
