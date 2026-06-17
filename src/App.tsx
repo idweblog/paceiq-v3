@@ -19,6 +19,7 @@ import BodyMetricsPage from './pages/BodyMetricsPage'
 import ExportPage from './pages/ExportPage'
 import ReferensiPage from './pages/ReferensiPage'
 import { useAuth } from './contexts/AuthContext'
+import { useRole } from './hooks/useRole'
 import GroupPage from './pages/GroupPage'
 import CoachDashboardPage from './pages/CoachDashboardPage'
 
@@ -26,6 +27,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
   if (loading) return <div className="flex items-center justify-center h-screen text-gray-400">Loading...</div>
   if (!user) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAdmin, loading } = useRole()
+  if (loading) return <div className="flex items-center justify-center h-screen text-gray-400">Loading...</div>
+  if (!isAdmin) return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -57,7 +65,7 @@ function AppRoutes() {
         <Route path="body-metrics" element={<BodyMetricsPage />} />
         <Route path="export" element={<ExportPage />} />
         <Route path="referensi" element={<ReferensiPage />} />
-        <Route path="admin" element={<AdminPage />} />
+        <Route path="admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
         <Route path="group" element={<GroupPage />} />
         <Route path="coach" element={<CoachDashboardPage />} />
       </Route>
