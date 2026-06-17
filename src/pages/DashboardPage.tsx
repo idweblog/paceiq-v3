@@ -94,49 +94,52 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadDashboard()
-  }, [athleteId])
+    let cancelled = false
 
-  async function loadDashboard() {
-    setLoading(true)
-    await Promise.all([loadRaces(), loadSessions()])
-    setLoading(false)
-  }
+    async function loadDashboard() {
+      if (!athleteId) return
+      setLoading(true)
 
-  async function loadRaces() {
-    if (!athleteId) return
-    const { data } = await supabase
-      .from('races')
-      .select('id, name, event_date, distance_km, event_type, target_finish, status')
-      .eq('athlete_id', athleteId)
-      .in('status', ['A', 'B'])
-      .order('event_date', { ascending: true })
-    if (data) setRaces(data)
-  }
+      // Load races
+      const { data: racesData, error: racesErr } = await supabase
+        .from('races')
+        .select('id, name, event_date, distance_km, event_type, target_finish, status')
+        .eq('athlete_id', athleteId)
+        .in('status', ['A', 'B'])
+        .order('event_date', { ascending: true })
+      if (racesErr) console.error('[PaceIQ] races:', racesErr.message)
+      if (!cancelled && racesData) setRaces(racesData)
 
-  async function loadSessions() {
-    if (!athleteId) return
+      // Load last session
+      const { data: lastData, error: lastErr } = await supabase
+        .from('training_sessions')
+        .select('id, session_date, distance_km, duration_sec, hr_avg, pace_avg_min, pace_avg_sec, session_type, trimp')
+        .eq('athlete_id', athleteId)
+        .order('session_date', { ascending: false })
+        .limit(1)
+      if (lastErr) console.error('[PaceIQ] last session:', lastErr.message)
+      if (!cancelled && lastData && lastData.length > 0) setLastSession(lastData[0])
 
-    const { data: last } = await supabase
-      .from('training_sessions')
-      .select('id, session_date, distance_km, duration_sec, hr_avg, pace_avg_min, pace_avg_sec, session_type, trimp')
-      .eq('athlete_id', athleteId)
-      .order('session_date', { ascending: false })
-      .limit(1)
-    if (last && last.length > 0) setLastSession(last[0])
+      // Load weekly stats
+      const weekAgo = new Date()
+      weekAgo.setDate(weekAgo.getDate() - 7)
+      const { data: weeklyData, error: weeklyErr } = await supabase
+        .from('training_sessions')
+        .select('distance_km')
+        .eq('athlete_id', athleteId)
+        .gte('session_date', weekAgo.toISOString().split('T')[0])
+      if (weeklyErr) console.error('[PaceIQ] weekly:', weeklyErr.message)
+      if (!cancelled && weeklyData) {
+        setWeeklySessions(weeklyData.length)
+        setWeeklyKm(weeklyData.reduce((sum, s) => sum + (s.distance_km || 0), 0))
+      }
 
-    const weekAgo = new Date()
-    weekAgo.setDate(weekAgo.getDate() - 7)
-    const { data: weekly } = await supabase
-      .from('training_sessions')
-      .select('distance_km')
-      .eq('athlete_id', athleteId)
-      .gte('session_date', weekAgo.toISOString().split('T')[0])
-    if (weekly) {
-      setWeeklySessions(weekly.length)
-      setWeeklyKm(weekly.reduce((sum, s) => sum + (s.distance_km || 0), 0))
+      if (!cancelled) setLoading(false)
     }
-  }
+
+    loadDashboard()
+    return () => { cancelled = true }
+  }, [athleteId])
 
   if (loading) {
     return (

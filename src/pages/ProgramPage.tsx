@@ -67,13 +67,28 @@ function isCurrentWeek(dateStart: string | null, dateEnd: string | null): boolea
   return today >= new Date(dateStart) && today <= new Date(dateEnd)
 }
 
-// Simple markdown renderer (bold, italic, code)
+// Sanitize HTML to prevent XSS
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/<iframe[\s\S]*?>/gi, '&lt;iframe&gt;')
+    .replace(/<object[\s\S]*?>/gi, '&lt;object&gt;')
+    .replace(/<embed[\s\S]*?>/gi, '&lt;embed&gt;')
+}
+
+// Simple markdown renderer (bold, italic, inline code)
 function renderMarkdown(text: string): string {
-  return text
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+  const rendered = escaped
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded text-xs">$1</code>')
+    .replace(/`(.*?)`/g, '<code class="bg-gray-100 px-1 rounded text-xs font-mono">$1</code>')
     .replace(/\n/g, '<br/>')
+  return sanitizeHtml(rendered)
 }
 
 export default function ProgramPage() {
@@ -91,64 +106,75 @@ export default function ProgramPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadPrograms()
+    let cancelled = false
+
+    async function load() {
+      if (!athleteId) return
+      setLoading(true)
+      const { data, error } = await supabase
+        .from('programs')
+        .select('id, name, date_start, date_end, status')
+        .eq('athlete_id', athleteId)
+        .order('date_start', { ascending: true })
+      if (error) console.error('[PaceIQ] programs:', error.message)
+      if (!cancelled && data) {
+        setPrograms(data)
+        if (data.length > 0) setSelectedProgramId(data[0].id)
+      }
+      if (!cancelled) setLoading(false)
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [athleteId])
 
   useEffect(() => {
-    if (!selectedProgramId) return
-    loadWeeks(selectedProgramId)
-  }, [selectedProgramId])
+    if (!selectedProgramId || !athleteId) return
+    let cancelled = false
+
+    async function load() {
+      if (!athleteId || !selectedProgramId) return
+      setLoadingWeeks(true)
+      const { data, error } = await supabase
+        .from('program_weeks')
+        .select('id, week_number, phase, date_start, date_end, target_distance_km, focus, notes')
+        .eq('program_id', selectedProgramId!)
+        .eq('athlete_id', athleteId!)
+        .order('week_number', { ascending: true })
+      if (error) console.error('[PaceIQ] program_weeks:', error.message)
+      if (!cancelled && data) {
+        setWeeks(data)
+        const current = data.find(w => isCurrentWeek(w.date_start, w.date_end))
+        setSelectedWeekId(current?.id ?? (data.length > 0 ? data[0].id : null))
+      }
+      if (!cancelled) setLoadingWeeks(false)
+    }
+
+    load()
+    return () => { cancelled = true }
+  }, [selectedProgramId, athleteId])
 
   useEffect(() => {
-    if (!selectedWeekId) return
-    loadSessions(selectedWeekId)
-  }, [selectedWeekId])
+    if (!selectedWeekId || !athleteId) return
+    let cancelled = false
 
-  async function loadPrograms() {
-    if (!athleteId) return
-    setLoading(true)
-    const { data } = await supabase
-      .from('programs')
-      .select('id, name, date_start, date_end, status')
-      .eq('athlete_id', athleteId)
-      .order('date_start', { ascending: true })
-    if (data) {
-      setPrograms(data)
-      if (data.length > 0) setSelectedProgramId(data[0].id)
+    async function load() {
+      if (!athleteId || !selectedWeekId) return
+      setLoadingSessions(true)
+      const { data, error } = await supabase
+        .from('program_sessions')
+        .select('id, session_date, day_of_week, session_type, distance_km, duration_min, target_pace_min, target_pace_sec, hr_zone, rwr_run_sec, rwr_walk_sec, coach_notes, sort_order')
+        .eq('program_week_id', selectedWeekId!)
+        .eq('athlete_id', athleteId!)
+        .order('sort_order', { ascending: true })
+      if (error) console.error('[PaceIQ] program_sessions:', error.message)
+      if (!cancelled && data) setSessions(data)
+      if (!cancelled) setLoadingSessions(false)
     }
-    setLoading(false)
-  }
 
-  async function loadWeeks(programId: string) {
-    if (!athleteId) return
-    setLoadingWeeks(true)
-    const { data } = await supabase
-      .from('program_weeks')
-      .select('id, week_number, phase, date_start, date_end, target_distance_km, focus, notes')
-      .eq('program_id', programId)
-      .eq('athlete_id', athleteId)
-      .order('week_number', { ascending: true })
-    if (data) {
-      setWeeks(data)
-      // Auto-select current week or first week
-      const current = data.find(w => isCurrentWeek(w.date_start, w.date_end))
-      setSelectedWeekId(current?.id ?? (data.length > 0 ? data[0].id : null))
-    }
-    setLoadingWeeks(false)
-  }
-
-  async function loadSessions(weekId: string) {
-    if (!athleteId) return
-    setLoadingSessions(true)
-    const { data } = await supabase
-      .from('program_sessions')
-      .select('id, session_date, day_of_week, session_type, distance_km, duration_min, target_pace_min, target_pace_sec, hr_zone, rwr_run_sec, rwr_walk_sec, coach_notes, sort_order')
-      .eq('program_week_id', weekId)
-      .eq('athlete_id', athleteId)
-      .order('sort_order', { ascending: true })
-    if (data) setSessions(data)
-    setLoadingSessions(false)
-  }
+    load()
+    return () => { cancelled = true }
+  }, [selectedWeekId, athleteId])
 
   const selectedWeek = weeks.find(w => w.id === selectedWeekId)
 
@@ -172,7 +198,6 @@ export default function ProgramPage() {
         />
       ) : (
         <>
-          {/* Program selector */}
           <div className="flex items-center gap-3 mb-5">
             <label className="text-xs text-gray-500 shrink-0">Program:</label>
             <select
@@ -190,28 +215,24 @@ export default function ProgramPage() {
             <p className="text-gray-400 text-sm">Memuat minggu...</p>
           ) : weeks.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm p-5 text-center text-gray-400 text-sm">
-              Program ini belum punya minggu. Tambahkan via coach atau import program.
+              Program ini belum punya minggu.
             </div>
           ) : (
             <div className="flex gap-5">
-              {/* Week list */}
               <div className="w-44 shrink-0">
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Minggu</h3>
                 <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
                   {weeks.map(w => {
                     const isCurrent = isCurrentWeek(w.date_start, w.date_end)
                     return (
-                      <button
-                        key={w.id}
-                        onClick={() => setSelectedWeekId(w.id)}
+                      <button key={w.id} onClick={() => setSelectedWeekId(w.id)}
                         className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                           selectedWeekId === w.id
                             ? 'bg-indigo-600 text-white'
                             : isCurrent
                             ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                             : 'bg-white text-gray-600 border border-gray-100 hover:bg-gray-50'
-                        }`}
-                      >
+                        }`}>
                         <p className="font-medium">W{w.week_number}</p>
                         {w.phase && (
                           <p className={`text-xs mt-0.5 truncate ${selectedWeekId === w.id ? 'text-indigo-200' : 'text-gray-400'}`}>
@@ -227,29 +248,24 @@ export default function ProgramPage() {
                 </div>
               </div>
 
-              {/* Session cards */}
               <div className="flex-1 min-w-0">
                 {selectedWeek && (
                   <div className="bg-white rounded-xl shadow-sm p-4 mb-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="text-sm font-bold text-gray-800">
-                          Minggu {selectedWeek.week_number}
-                          {selectedWeek.phase ? ` — ${selectedWeek.phase}` : ''}
-                          {isCurrentWeek(selectedWeek.date_start, selectedWeek.date_end) && (
-                            <span className="ml-2 text-xs text-indigo-500 font-semibold">📍 Minggu Ini</span>
-                          )}
-                        </h3>
-                        <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
-                          <span>{formatDate(selectedWeek.date_start)} – {formatDate(selectedWeek.date_end)}</span>
-                          {selectedWeek.target_distance_km && <span>Target: {selectedWeek.target_distance_km} km</span>}
-                          {selectedWeek.focus && <span>Fokus: {selectedWeek.focus}</span>}
-                        </div>
-                        {selectedWeek.notes && (
-                          <p className="text-xs text-gray-400 mt-1 italic">{selectedWeek.notes}</p>
-                        )}
-                      </div>
+                    <h3 className="text-sm font-bold text-gray-800">
+                      Minggu {selectedWeek.week_number}
+                      {selectedWeek.phase ? ` — ${selectedWeek.phase}` : ''}
+                      {isCurrentWeek(selectedWeek.date_start, selectedWeek.date_end) && (
+                        <span className="ml-2 text-xs text-indigo-500 font-semibold">📍 Minggu Ini</span>
+                      )}
+                    </h3>
+                    <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-400">
+                      <span>{formatDate(selectedWeek.date_start)} – {formatDate(selectedWeek.date_end)}</span>
+                      {selectedWeek.target_distance_km && <span>Target: {selectedWeek.target_distance_km} km</span>}
+                      {selectedWeek.focus && <span>Fokus: {selectedWeek.focus}</span>}
                     </div>
+                    {selectedWeek.notes && (
+                      <p className="text-xs text-gray-400 mt-1 italic">{selectedWeek.notes}</p>
+                    )}
                   </div>
                 )}
 
@@ -264,39 +280,33 @@ export default function ProgramPage() {
                     {sessions.map(s => (
                       <div key={s.id} className={`bg-white rounded-xl border shadow-sm p-4 ${sessionStyle(s.session_type)}`}>
                         <div className="flex items-start gap-3">
-                          {/* Day badge */}
-                          <div className="shrink-0 text-center">
+                          <div className="shrink-0">
                             {s.day_of_week && (
                               <div className="w-10 h-10 rounded-lg bg-white border border-current flex items-center justify-center">
                                 <span className="text-xs font-bold">{DAY_NAMES[s.day_of_week]}</span>
                               </div>
                             )}
                           </div>
-
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap mb-1">
                               {s.session_type && (
-                                <span className="text-xs font-bold uppercase tracking-wide">
-                                  {s.session_type}
-                                </span>
+                                <span className="text-xs font-bold uppercase tracking-wide">{s.session_type}</span>
                               )}
                               {s.session_date && (
                                 <span className="text-xs opacity-60">{formatDate(s.session_date)}</span>
                               )}
                             </div>
-
                             <div className="flex flex-wrap gap-3 text-xs mb-2">
                               {s.distance_km && <span>📍 {s.distance_km} km</span>}
                               {s.duration_min && <span>⏱ {s.duration_min} menit</span>}
                               {s.target_pace_min !== null && s.target_pace_sec !== null && (
-                                <span>🎯 {s.target_pace_min}:{String(s.target_pace_sec).padStart(2,'0')} /km</span>
+                                <span>🎯 {s.target_pace_min}:{String(s.target_pace_sec).padStart(2, '0')} /km</span>
                               )}
                               {s.hr_zone && <span>❤️ Z{s.hr_zone}</span>}
                               {s.rwr_run_sec && s.rwr_walk_sec && (
                                 <span>🏃 RWR {s.rwr_run_sec}:{s.rwr_walk_sec}</span>
                               )}
                             </div>
-
                             {s.coach_notes && (
                               <div
                                 className="text-xs text-current opacity-80 bg-white bg-opacity-60 rounded-lg px-3 py-2"

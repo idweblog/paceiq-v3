@@ -32,7 +32,9 @@ const STATUS_STYLE: Record<string, string> = {
 }
 
 function slugify(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  const suffix = Date.now().toString().slice(-5)
+  return `${base}-${suffix}`
 }
 
 const emptyForm = {
@@ -59,19 +61,34 @@ export default function RacesPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadRaces()
+    let cancelled = false
+
+    async function load() {
+      if (!athleteId) return
+      setLoading(true)
+      const { data, error: err } = await supabase
+        .from('races')
+        .select('id, slug, name, event_date, distance_km, event_type, status, target_finish, actual_finish')
+        .eq('athlete_id', athleteId!)
+        .order('event_date', { ascending: true })
+      if (err) console.error('[PaceIQ] races:', err.message)
+      if (!cancelled && data) setRaces(data)
+      if (!cancelled) setLoading(false)
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [athleteId])
 
   async function loadRaces() {
     if (!athleteId) return
-    setLoading(true)
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from('races')
       .select('id, slug, name, event_date, distance_km, event_type, status, target_finish, actual_finish')
-      .eq('athlete_id', athleteId)
+      .eq('athlete_id', athleteId!)
       .order('event_date', { ascending: true })
+    if (err) console.error('[PaceIQ] races:', err.message)
     if (data) setRaces(data)
-    setLoading(false)
   }
 
   function openAdd() {
@@ -127,14 +144,14 @@ export default function RacesPage() {
 
     setSaving(false)
     if (err) { setError(err.message); return }
-
     setShowModal(false)
     await loadRaces()
   }
 
   async function handleDelete(id: string) {
     if (!confirm('Hapus race ini?')) return
-    await supabase.from('races').delete().eq('id', id)
+    const { error: err } = await supabase.from('races').delete().eq('id', id)
+    if (err) { console.error('[PaceIQ] delete race:', err.message); return }
     await loadRaces()
   }
 
@@ -159,20 +176,15 @@ export default function RacesPage() {
         title="Race Management"
         subtitle="Daftar dan kelola event race"
         action={
-          <button
-            onClick={openAdd}
-            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
-          >
+          <button onClick={openAdd}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
             + Tambah Race
           </button>
         }
       />
 
       {races.length === 0 ? (
-        <EmptyState
-          title="Belum ada race terdaftar"
-          description="Tambahkan race pertamamu untuk mulai tracking."
-        />
+        <EmptyState title="Belum ada race terdaftar" description="Tambahkan race pertamamu untuk mulai tracking." />
       ) : (
         <div className="space-y-3">
           {races.map(race => {
@@ -186,18 +198,14 @@ export default function RacesPage() {
                         {STATUS_OPTIONS.find(s => s.value === race.status)?.label ?? race.status}
                       </span>
                       {race.event_type && (
-                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">
-                          {race.event_type}
-                        </span>
+                        <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">{race.event_type}</span>
                       )}
                     </div>
                     <h3 className="text-base font-bold text-gray-900">{race.name}</h3>
                     <div className="flex flex-wrap gap-4 mt-1 text-sm text-gray-500">
                       {race.event_date && (
                         <span>
-                          📅 {new Date(race.event_date).toLocaleDateString('id-ID', {
-                            day: 'numeric', month: 'long', year: 'numeric'
-                          })}
+                          📅 {new Date(race.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                           {days !== null && race.status !== 'done' && (
                             <span className="ml-1 text-xs text-gray-400">
                               ({days > 0 ? `${days} hari lagi` : 'sudah lewat'})
@@ -211,18 +219,8 @@ export default function RacesPage() {
                     </div>
                   </div>
                   <div className="flex gap-2 ml-4 shrink-0">
-                    <button
-                      onClick={() => openEdit(race)}
-                      className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(race.id)}
-                      className="text-xs text-red-400 hover:text-red-600 transition-colors"
-                    >
-                      Hapus
-                    </button>
+                    <button onClick={() => openEdit(race)} className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors">Edit</button>
+                    <button onClick={() => handleDelete(race.id)} className="text-xs text-red-400 hover:text-red-600 transition-colors">Hapus</button>
                   </div>
                 </div>
               </div>
@@ -231,113 +229,67 @@ export default function RacesPage() {
         </div>
       )}
 
-      {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
             <h3 className="text-base font-bold text-gray-900 mb-4">
               {editingId ? 'Edit Race' : 'Tambah Race Baru'}
             </h3>
-
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-                {error}
-              </div>
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{error}</div>
             )}
-
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
                 <label className="block text-xs text-gray-500 mb-1">Nama Race *</label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={e => handleChange('name', e.target.value)}
+                <input type="text" value={form.name} onChange={e => handleChange('name', e.target.value)}
                   placeholder="Pocari Sweat Run Bandung 2026"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
-
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Tanggal</label>
-                <input
-                  type="date"
-                  value={form.event_date}
-                  onChange={e => handleChange('event_date', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                <input type="date" value={form.event_date} onChange={e => handleChange('event_date', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
-
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Status</label>
-                <select
-                  value={form.status}
-                  onChange={e => handleChange('status', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                >
-                  {STATUS_OPTIONS.map(s => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
+                <select value={form.status} onChange={e => handleChange('status', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                  {STATUS_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
               </div>
-
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Tipe Event</label>
-                <select
-                  value={form.event_type}
-                  onChange={e => handleChange('event_type', e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                >
+                <select value={form.event_type} onChange={e => handleChange('event_type', e.target.value)}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
                   {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
-
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Jarak (km)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={form.distance_km}
-                  onChange={e => handleChange('distance_km', e.target.value)}
+                <input type="number" step="0.1" value={form.distance_km} onChange={e => handleChange('distance_km', e.target.value)}
                   placeholder="21.1"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
-
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Target Finish</label>
-                <input
-                  type="text"
-                  value={form.target_finish}
-                  onChange={e => handleChange('target_finish', e.target.value)}
+                <input type="text" value={form.target_finish} onChange={e => handleChange('target_finish', e.target.value)}
                   placeholder="2:15:00"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
-
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Hasil Aktual</label>
-                <input
-                  type="text"
-                  value={form.actual_finish}
-                  onChange={e => handleChange('actual_finish', e.target.value)}
+                <input type="text" value={form.actual_finish} onChange={e => handleChange('actual_finish', e.target.value)}
                   placeholder="2:18:45"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                />
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
             </div>
-
             <div className="mt-5 flex gap-3">
-              <button
-                onClick={handleSubmit}
-                disabled={saving}
-                className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-              >
+              <button onClick={handleSubmit} disabled={saving}
+                className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                 {saving ? 'Menyimpan...' : 'Simpan'}
               </button>
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-5 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors"
-              >
+              <button onClick={() => setShowModal(false)}
+                className="px-5 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
                 Batal
               </button>
             </div>

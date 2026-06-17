@@ -17,6 +17,7 @@ const menuItems = [
   { path: '/body-metrics', label: 'Body Metrics', icon: '⚖️' },
   { path: '/export', label: 'Export / Import', icon: '💾' },
   { path: '/referensi', label: 'Referensi & Metodologi', icon: '📚' },
+  { path: '/group', label: 'Group Training', icon: '👥' },
 ]
 
 const adminItems = [

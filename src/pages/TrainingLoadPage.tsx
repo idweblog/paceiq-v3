@@ -16,7 +16,6 @@ interface Session {
   session_type: string | null
 }
 
-// ─── Weekly bucketing ─────────────────────────────────────────
 function getMonday(dateStr: string): string {
   const d = new Date(dateStr)
   const day = d.getDay()
@@ -27,10 +26,12 @@ function getMonday(dateStr: string): string {
 
 interface WeekBucket {
   weekLabel: string
+  weekMonday: string
   totalTrimp: number
   totalKm: number
   sessionCount: number
   dailyTrimps: number[]
+  dateEnd: string
 }
 
 function bucketByWeek(sessions: Session[]): WeekBucket[] {
@@ -39,12 +40,16 @@ function bucketByWeek(sessions: Session[]): WeekBucket[] {
   sessions.forEach(s => {
     const monday = getMonday(s.session_date)
     if (!map.has(monday)) {
+      const endDate = new Date(monday)
+      endDate.setDate(endDate.getDate() + 6)
       map.set(monday, {
         weekLabel: new Date(monday).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
+        weekMonday: monday,
         totalTrimp: 0,
         totalKm: 0,
         sessionCount: 0,
         dailyTrimps: [],
+        dateEnd: endDate.toISOString().split('T')[0],
       })
     }
     const bucket = map.get(monday)!
@@ -68,7 +73,6 @@ function calcMonotony(dailyTrimps: number[]): number {
   return sd === 0 ? 0 : parseFloat((avg / sd).toFixed(2))
 }
 
-// ACWR: 7-day acute / 28-day chronic rolling average of daily TRIMP
 function calcAcwr(sessions: Session[], refDate: string): number | null {
   const ref = new Date(refDate)
   const acute: number[] = []
@@ -91,7 +95,6 @@ function calcAcwr(sessions: Session[], refDate: string): number | null {
   return parseFloat((acuteAvg / chronicAvg).toFixed(2))
 }
 
-// ─── Colors ───────────────────────────────────────────────────
 const PIE_COLORS = ['#4f46e5','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16']
 
 export default function TrainingLoadPage() {
@@ -104,26 +107,28 @@ export default function TrainingLoadPage() {
 
   useEffect(() => {
     if (!athleteId) return
-    loadSessions()
+    let cancelled = false
+
+    async function load() {
+      if (!athleteId) return
+      setLoading(true)
+      const since = new Date()
+      since.setMonth(since.getMonth() - 6)
+      const { data, error } = await supabase
+        .from('training_sessions')
+        .select('session_date, distance_km, duration_sec, trimp, session_type')
+        .eq('athlete_id', athleteId!)
+        .gte('session_date', since.toISOString().split('T')[0])
+        .order('session_date', { ascending: true })
+      if (error) console.error('[PaceIQ] training_sessions:', error.message)
+      if (!cancelled && data) setSessions(data)
+      if (!cancelled) setLoading(false)
+    }
+
+    load()
+    return () => { cancelled = true }
   }, [athleteId])
 
-  async function loadSessions() {
-    if (!athleteId) return
-    setLoading(true)
-    // Ambil 6 bulan terakhir
-    const since = new Date()
-    since.setMonth(since.getMonth() - 6)
-    const { data } = await supabase
-      .from('training_sessions')
-      .select('session_date, distance_km, duration_sec, trimp, session_type')
-      .eq('athlete_id', athleteId)
-      .gte('session_date', since.toISOString().split('T')[0])
-      .order('session_date', { ascending: true })
-    if (data) setSessions(data)
-    setLoading(false)
-  }
-
-  // ── Derived data ──
   const weeks = bucketByWeek(sessions)
 
   const weeklyChartData = weeks.map(w => ({
@@ -134,21 +139,12 @@ export default function TrainingLoadPage() {
     strain: parseFloat((w.totalTrimp * calcMonotony(w.dailyTrimps)).toFixed(1)),
   }))
 
-  // ACWR per week (last day of each week)
-  const acwrChartData = weeks.map((w, i) => {
-    // Approximate last day of week as monday + 6
-    const sessions7 = sessions
-    const monday = Object.keys(
-      sessions.reduce((acc, s) => { acc[getMonday(s.session_date)] = true; return acc }, {} as Record<string, boolean>)
-    ).sort()[i]
-    if (!monday) return { week: w.weekLabel, acwr: null }
-    const lastDay = new Date(monday)
-    lastDay.setDate(lastDay.getDate() + 6)
-    const acwr = calcAcwr(sessions7, lastDay.toISOString().split('T')[0])
-    return { week: w.weekLabel, acwr }
-  })
+  // ACWR per week — menggunakan dateEnd dari setiap week bucket
+  const acwrChartData = weeks.map(w => ({
+    week: w.weekLabel,
+    acwr: calcAcwr(sessions, w.dateEnd),
+  }))
 
-  // Intensity distribution
   const typeMap = new Map<string, number>()
   sessions.forEach(s => {
     const t = s.session_type ?? 'Lainnya'
@@ -156,7 +152,6 @@ export default function TrainingLoadPage() {
   })
   const intensityData = Array.from(typeMap.entries()).map(([name, value]) => ({ name, value }))
 
-  // Current week stats
   const thisWeekMonday = getMonday(new Date().toISOString().split('T')[0])
   const thisWeekSessions = sessions.filter(s => getMonday(s.session_date) === thisWeekMonday)
   const thisWeekKm = thisWeekSessions.reduce((sum, s) => sum + (s.distance_km ?? 0), 0)
@@ -165,11 +160,11 @@ export default function TrainingLoadPage() {
   const thisStrain = thisWeekTrimp * thisMonotony
   const currentAcwr = calcAcwr(sessions, new Date().toISOString().split('T')[0])
 
-  const acwrColor = (v: number | null) => {
+  const acwrAccent = (v: number | null): 'green' | 'red' | 'default' => {
     if (!v) return 'default'
     if (v >= 0.8 && v <= 1.3) return 'green'
-    if (v < 0.8) return 'default'
-    return 'red'
+    if (v > 1.3) return 'red'
+    return 'default'
   }
 
   if (loading) {
@@ -185,15 +180,17 @@ export default function TrainingLoadPage() {
     <div className="p-6 max-w-5xl">
       <PageHeader title="Training Load Analytics" subtitle="6 bulan terakhir" />
 
-      {/* ── Stat Cards ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label="Volume Minggu Ini" value={`${thisWeekKm.toFixed(1)} km`} accent="indigo" />
         <StatCard label="TRIMP Minggu Ini" value={thisWeekTrimp.toFixed(0)} accent="green" />
         <StatCard
           label="ACWR"
           value={currentAcwr?.toFixed(2) ?? '—'}
-          sub={currentAcwr ? (currentAcwr >= 0.8 && currentAcwr <= 1.3 ? '✅ Sweet spot' : currentAcwr > 1.3 ? '⚠️ Terlalu tinggi' : '⬇️ Terlalu rendah') : 'Belum cukup data'}
-          accent={acwrColor(currentAcwr)}
+          sub={currentAcwr
+            ? currentAcwr >= 0.8 && currentAcwr <= 1.3 ? '✅ Sweet spot'
+              : currentAcwr > 1.3 ? '⚠️ Terlalu tinggi' : '⬇️ Terlalu rendah'
+            : 'Belum cukup data'}
+          accent={acwrAccent(currentAcwr)}
         />
         <StatCard label="Monotony" value={thisMonotony.toFixed(2)} sub={`Strain: ${thisStrain.toFixed(0)}`} />
         <StatCard label="CTL" value="—" sub="Tersedia di Fase 4" />
@@ -202,7 +199,6 @@ export default function TrainingLoadPage() {
         <StatCard label="Sesi Minggu Ini" value={thisWeekSessions.length} />
       </div>
 
-      {/* ── Tabs ── */}
       <div className="flex gap-2 mb-4">
         {[
           { key: 'weekly', label: 'Weekly Load' },
@@ -211,16 +207,13 @@ export default function TrainingLoadPage() {
         ].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key as typeof activeTab)}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === t.key
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white text-gray-500 border border-gray-200 hover:border-indigo-300'
+              activeTab === t.key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-indigo-300'
             }`}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* ── Tab Content ── */}
       <div className="bg-white rounded-xl shadow-sm p-5">
         {sessions.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">Belum ada data sesi. Mulai log di Daily Log.</p>
@@ -270,9 +263,9 @@ export default function TrainingLoadPage() {
                     <ResponsiveContainer width="100%" height={220}>
                       <PieChart>
                         <Pie data={intensityData} dataKey="value" nameKey="name"
-                          cx="50%" cy="50%" outerRadius={80} label={({ name, percent }) =>
-                            `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                          } labelLine={false}>
+                          cx="50%" cy="50%" outerRadius={80}
+                          label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+                          labelLine={false}>
                           {intensityData.map((_, i) => (
                             <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                           ))}
@@ -297,7 +290,6 @@ export default function TrainingLoadPage() {
         )}
       </div>
 
-      {/* ── Weekly Table ── */}
       {weeks.length > 0 && (
         <div className="bg-white rounded-xl shadow-sm p-5 mt-4 overflow-x-auto">
           <h3 className="text-sm font-semibold text-gray-700 mb-3">Weekly Summary Table</h3>

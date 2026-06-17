@@ -19,6 +19,7 @@ import BodyMetricsPage from './pages/BodyMetricsPage'
 import ExportPage from './pages/ExportPage'
 import ReferensiPage from './pages/ReferensiPage'
 import { useAuth } from './contexts/AuthContext'
+import GroupPage from './pages/GroupPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -56,6 +57,7 @@ function AppRoutes() {
         <Route path="export" element={<ExportPage />} />
         <Route path="referensi" element={<ReferensiPage />} />
         <Route path="admin" element={<AdminPage />} />
+        <Route path="/group" element={<ProtectedRoute><GroupPage /></ProtectedRoute>} />
       </Route>
     </Routes>
   )
