@@ -30,6 +30,14 @@ interface RecentSession {
   trimp: number | null
 }
 
+interface CoachProgram {
+  id: string
+  name: string
+  date_start: string | null
+  date_end: string | null
+  status: string | null
+}
+
 export default function CoachDashboardPage() {
   const { athlete } = useAthlete()
   const athleteId = athlete?.id ?? null
@@ -39,6 +47,11 @@ export default function CoachDashboardPage() {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [fitnessRows, setFitnessRows] = useState<AthleteFitnessRow[]>([])
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([])
+  const [activeTab, setActiveTab] = useState<'overview' | 'distribute'>('overview')
+  const [coachPrograms, setCoachPrograms] = useState<CoachProgram[]>([])
+  const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null)
+  const [distributing, setDistributing] = useState(false)
+  const [distributeMsg, setDistributeMsg] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingFitness, setLoadingFitness] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +62,7 @@ export default function CoachDashboardPage() {
     cancelledRef.current = false
     if (athleteId && isCoach) {
       loadGroups()
+      loadCoachPrograms()
       setupRealtime()
     }
     return () => {
@@ -171,6 +185,85 @@ export default function CoachDashboardPage() {
     setRecentSessions(sessions)
   }
 
+  async function loadCoachPrograms() {
+    if (!athleteId) return
+    const { data } = await supabase
+      .from('programs').select('id, name, date_start, date_end, status')
+      .eq('athlete_id', athleteId).order('created_at', { ascending: false })
+    if (!cancelledRef.current) setCoachPrograms((data as CoachProgram[]) ?? [])
+  }
+
+  async function handleDistribute() {
+    if (!selectedGroupId || !selectedProgramId) return
+    setDistributing(true); setDistributeMsg(null)
+
+    // Ambil source program
+    const { data: srcProgram } = await supabase
+      .from('programs').select('*').eq('id', selectedProgramId).single()
+    if (!srcProgram) { setDistributeMsg('Program tidak ditemukan.'); setDistributing(false); return }
+
+    // Ambil program_weeks dari source
+    const { data: srcWeeks } = await supabase
+      .from('program_weeks').select('*').eq('program_id', selectedProgramId)
+
+    // Ambil anggota grup
+    const { data: members } = await supabase
+      .from('group_members').select('athlete_id')
+      .eq('group_id', selectedGroupId).eq('status', 'active')
+
+    if (!members?.length) { setDistributeMsg('Tidak ada anggota aktif di grup.'); setDistributing(false); return }
+
+    let successCount = 0
+    for (const m of members) {
+      // Buat program baru untuk tiap atlet
+      const { data: newProg, error: errProg } = await supabase
+        .from('programs').insert({
+          athlete_id: m.athlete_id,
+          name: srcProgram.name,
+          date_start: srcProgram.date_start,
+          date_end: srcProgram.date_end,
+          phase: srcProgram.phase,
+          notes: srcProgram.notes,
+          status: 'active',
+        }).select('id').single()
+
+      if (errProg || !newProg) continue
+
+      // Copy program_weeks
+      if (srcWeeks?.length) {
+        const weekInserts = srcWeeks.map((w: any) => ({
+          program_id: newProg.id,
+          athlete_id: m.athlete_id,
+          week_number: w.week_number,
+          date_start: w.date_start,
+          date_end: w.date_end,
+          focus: w.focus,
+          notes: w.notes,
+          phase: w.phase,
+          target_distance_km: w.target_distance_km,
+          actual_distance_km: w.actual_distance_km,
+        }))
+        await supabase.from('program_weeks').insert(weekInserts)
+      }
+
+      // Kirim notifikasi
+      await supabase.from('notifications').insert({
+        recipient_athlete_id: m.athlete_id,
+        sender_athlete_id: athleteId!,
+        group_id: selectedGroupId,
+        title: `Program Baru: ${srcProgram.name}`,
+        body: `Coach telah mendistribusikan program "${srcProgram.name}" ke Anda.`,
+        type: 'program_distributed',
+        is_read: false,
+      })
+
+      successCount++
+    }
+
+    setDistributing(false)
+    setDistributeMsg(`Program berhasil didistribusikan ke ${successCount} dari ${members.length} atlet.`)
+  }
+
   function getTsbColor(tsb: number | null) {
     if (tsb === null) return 'text-gray-400'
     if (tsb > 10) return 'text-green-600 dark:text-green-400'
@@ -237,6 +330,56 @@ export default function CoachDashboardPage() {
               </button>
             ))}
           </div>
+
+          {/* Tabs */}
+          <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+            {(['overview', 'distribute'] as const).map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === tab ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}>
+                {tab === 'overview' ? 'Overview' : 'Distribusi Program'}
+              </button>
+            ))}
+          </div>
+
+          {/* ── TAB: DISTRIBUTE ── */}
+          {activeTab === 'distribute' && (
+            <div className="space-y-4 max-w-lg">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Pilih program milik Anda, lalu distribusikan ke semua anggota aktif grup yang dipilih.
+              </p>
+              <div>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Program</label>
+                <select value={selectedProgramId ?? ''} onChange={e => setSelectedProgramId(e.target.value || null)}
+                  className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="">-- Pilih program --</option>
+                  {coachPrograms.map(p => (
+                    <option key={p.id} value={p.id}>{p.name} {p.date_start ? `(${p.date_start})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Grup Tujuan</label>
+                <select value={selectedGroupId ?? ''} onChange={e => setSelectedGroupId(e.target.value || null)}
+                  className="mt-1 w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-800 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  {groups.map(g => (
+                    <option key={g.id} value={g.id}>{g.name} ({g.member_count} anggota)</option>
+                  ))}
+                </select>
+              </div>
+              {distributeMsg && (
+                <div className="rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 px-4 py-3 text-sm text-green-700 dark:text-green-300">
+                  {distributeMsg}
+                </div>
+              )}
+              <button onClick={handleDistribute} disabled={!selectedProgramId || !selectedGroupId || distributing}
+                className="w-full py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors disabled:opacity-60">
+                {distributing ? 'Mendistribusikan...' : 'Distribusikan ke Grup'}
+              </button>
+            </div>
+          )}
+
+          {/* ── TAB: OVERVIEW ── */}
+          {activeTab === 'overview' && <>
 
           {/* Overview stats */}
           {selectedGroup && (
@@ -362,6 +505,7 @@ export default function CoachDashboardPage() {
               </div>
             )}
           </div>
+          </>}
         </>
       )}
     </div>
