@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { Database } from '../lib/database.types'
 import { supabase } from '../lib/supabase'
 
 type AthleteRow = Database['public']['Tables']['athletes']['Row']
 type RoleRow = Database['public']['Tables']['athlete_roles']['Row']
 type InviteRow = Database['public']['Tables']['coach_invitations']['Row']
+type Policy = 'invitation_only' | 'open_email_verification' | 'open_admin_approval'
 
 interface AthleteWithRoles extends AthleteRow {
   roles: string[]
@@ -13,16 +14,22 @@ interface AthleteWithRoles extends AthleteRow {
 export default function AdminPage() {
   const [athletes, setAthletes] = useState<AthleteWithRoles[]>([])
   const [invites, setInvites] = useState<InviteRow[]>([])
+  const [pendingAthletes, setPendingAthletes] = useState<AthleteRow[]>([])
+  const [policy, setPolicy] = useState<Policy>('open_email_verification')
+  const [savingPolicy, setSavingPolicy] = useState(false)
   const [loadingAthletes, setLoadingAthletes] = useState(true)
   const [loadingInvites, setLoadingInvites] = useState(true)
+  const [loadingPolicy, setLoadingPolicy] = useState(true)
+  const [loadingPending, setLoadingPending] = useState(false)
   const [generatingInvite, setGeneratingInvite] = useState(false)
   const [inviteRole, setInviteRole] = useState(3)
   const [inviteMaxUses, setInviteMaxUses] = useState(1)
   const [inviteEmails, setInviteEmails] = useState('')
   const [newCode, setNewCode] = useState('')
-  const [tab, setTab] = useState<'users' | 'invites'>('users')
+  const [tab, setTab] = useState<'users' | 'invites' | 'registration'>('users')
+  const cancelledRef = useRef(false)
 
-  const fetchAthletes = async (cancelled = false) => {
+  const fetchAthletes = async () => {
     setLoadingAthletes(true)
     const { data: athleteData } = await supabase
       .from('athletes')
@@ -41,24 +48,80 @@ export default function AdminPage() {
       if (ids.includes(3)) roleNames.push('athlete')
       return { ...a, roles: roleNames }
     })
-    if (!cancelled) { setAthletes(mapped); setLoadingAthletes(false) }
+    if (!cancelledRef.current) { setAthletes(mapped); setLoadingAthletes(false) }
   }
 
-  const fetchInvites = async (cancelled = false) => {
+  const fetchInvites = async () => {
     setLoadingInvites(true)
     const { data } = await supabase
       .from('coach_invitations')
       .select('*')
       .order('created_at', { ascending: false })
-    if (!cancelled) { setInvites(data ?? []); setLoadingInvites(false) }
+    if (!cancelledRef.current) { setInvites(data ?? []); setLoadingInvites(false) }
+  }
+
+  const fetchPolicy = async () => {
+    setLoadingPolicy(true)
+    const { data } = await supabase.rpc('get_registration_policy')
+    if (!cancelledRef.current) {
+      setPolicy((data as Policy) ?? 'open_email_verification')
+      setLoadingPolicy(false)
+    }
+  }
+
+  const fetchPending = async () => {
+    setLoadingPending(true)
+    const { data } = await supabase
+      .from('athletes')
+      .select('id, name, email, created_at, auth_id, status')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: true })
+    if (!cancelledRef.current) { setPendingAthletes(data ?? []); setLoadingPending(false) }
   }
 
   useEffect(() => {
-    let cancelled = false
-    fetchAthletes(cancelled)
-    fetchInvites(cancelled)
-    return () => { cancelled = true }
+    cancelledRef.current = false
+    fetchAthletes()
+    fetchInvites()
+    fetchPolicy()
+    return () => { cancelledRef.current = true }
   }, [])
+
+  useEffect(() => {
+    if (tab === 'registration') fetchPending()
+  }, [tab])
+
+  // Realtime: update pending queue live
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-pending-athletes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'athletes' }, () => {
+        if (!cancelledRef.current) fetchPending()
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [])
+
+  const savePolicy = async (p: Policy) => {
+    setSavingPolicy(true)
+    const { error } = await supabase.rpc('set_registration_policy', { p_policy: p } as never)
+    if (error) alert('Gagal menyimpan policy: ' + error.message)
+    else setPolicy(p)
+    setSavingPolicy(false)
+  }
+
+  const approveAthlete = async (id: string) => {
+    await supabase.from('athletes').update({ status: 'active' }).eq('id', id)
+    fetchPending()
+    fetchAthletes()
+  }
+
+  const rejectAthlete = async (id: string) => {
+    if (!confirm('Tolak dan suspend akun ini?')) return
+    await supabase.from('athletes').update({ status: 'suspended' }).eq('id', id)
+    fetchPending()
+    fetchAthletes()
+  }
 
   const generateInvite = async () => {
     setGeneratingInvite(true)
@@ -112,18 +175,33 @@ export default function AdminPage() {
     return { label: 'Active', cls: 'bg-green-100 text-green-700' }
   }
 
+  const policyOptions: { value: Policy; label: string; desc: string }[] = [
+    { value: 'invitation_only', label: 'Invitation Only', desc: 'Registrasi hanya dengan kode invite valid.' },
+    { value: 'open_email_verification', label: 'Open + Email Verification', desc: 'Bebas register, wajib verifikasi email sebelum login.' },
+    { value: 'open_admin_approval', label: 'Open + Admin Approval', desc: 'Bebas register, Admin harus approve sebelum akun aktif.' },
+  ]
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
       <h2 className="text-lg font-medium text-gray-800 mb-6">Admin Panel</h2>
 
-      <div className="flex gap-2 mb-6">
-        {(['users', 'invites'] as const).map(t => (
+      <div className="flex gap-2 mb-6 flex-wrap">
+        {(['users', 'invites', 'registration'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
             className={`px-4 py-1.5 rounded-lg text-sm transition-colors ${tab === t ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           >
-            {t === 'users' ? 'Users' : 'Invite Codes'}
+            {t === 'users' ? 'Users' : t === 'invites' ? 'Invite Codes' : (
+              <span className="flex items-center gap-1.5">
+                Registrasi
+                {pendingAthletes.length > 0 && (
+                  <span className="bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-medium">
+                    {pendingAthletes.length}
+                  </span>
+                )}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -136,6 +214,7 @@ export default function AdminPage() {
                 <tr>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">Nama</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">Email</th>
+                  <th className="text-left px-4 py-3 text-gray-500 font-medium">Status</th>
                   <th className="text-left px-4 py-3 text-gray-500 font-medium">Roles</th>
                 </tr>
               </thead>
@@ -144,6 +223,13 @@ export default function AdminPage() {
                   <tr key={a.id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 text-gray-800">{a.name}</td>
                     <td className="px-4 py-3 text-gray-500">{a.email}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        a.status === 'active' ? 'bg-green-100 text-green-700' :
+                        a.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>{a.status}</span>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1 flex-wrap">
                         {a.roles.map(r => (
@@ -280,6 +366,101 @@ export default function AdminPage() {
                   {invites.length === 0 && (
                     <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400 text-sm">Belum ada invite code</td></tr>
                   )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
+
+      {tab === 'registration' && (
+        <div className="space-y-6">
+          {/* Policy Switcher */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <p className="text-sm font-medium text-gray-700 mb-1">Kebijakan Registrasi</p>
+            <p className="text-xs text-gray-400 mb-4">Tentukan bagaimana user baru bisa bergabung ke platform.</p>
+            {loadingPolicy ? <p className="text-sm text-gray-400">Loading...</p> : (
+              <div className="space-y-3">
+                {policyOptions.map(opt => (
+                  <label
+                    key={opt.value}
+                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                      policy === opt.value ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="policy"
+                      value={opt.value}
+                      checked={policy === opt.value}
+                      onChange={() => savePolicy(opt.value)}
+                      disabled={savingPolicy}
+                      className="mt-0.5 accent-indigo-600"
+                    />
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">{opt.label}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
+                    </div>
+                  </label>
+                ))}
+                {savingPolicy && <p className="text-xs text-indigo-500">Menyimpan...</p>}
+              </div>
+            )}
+          </div>
+
+          {/* Approval Queue */}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-700">Antrian Persetujuan</p>
+                <p className="text-xs text-gray-400 mt-0.5">Akun yang menunggu aktivasi Admin.</p>
+              </div>
+              {policy !== 'open_admin_approval' && (
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded">
+                  Tidak aktif pada mode ini
+                </span>
+              )}
+            </div>
+            {loadingPending ? (
+              <p className="text-sm text-gray-400 p-6">Loading...</p>
+            ) : pendingAthletes.length === 0 ? (
+              <p className="text-sm text-gray-400 p-6 text-center">Tidak ada akun yang menunggu persetujuan.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">Nama</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">Email</th>
+                    <th className="text-left px-4 py-3 text-gray-500 font-medium">Daftar</th>
+                    <th className="px-4 py-3"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {pendingAthletes.map(a => (
+                    <tr key={a.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 text-gray-800">{a.name}</td>
+                      <td className="px-4 py-3 text-gray-500">{a.email}</td>
+                      <td className="px-4 py-3 text-gray-400 text-xs">
+                        {a.created_at ? new Date(a.created_at).toLocaleDateString('id-ID') : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            onClick={() => approveAthlete(a.id)}
+                            className="text-xs px-3 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 transition-colors font-medium"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            onClick={() => rejectAthlete(a.id)}
+                            className="text-xs px-3 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                          >
+                            Tolak
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}
