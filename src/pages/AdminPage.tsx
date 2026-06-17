@@ -128,8 +128,17 @@ export default function AdminPage() {
 
   const deleteAthlete = async (a: AthleteWithRoles) => {
     if (!confirm(`Hapus user "${a.name}" (${a.email})? Semua data akan dihapus permanen.`)) return
-    const { error } = await supabase.rpc('admin_delete_athlete', { p_athlete_id: a.id } as never)
-    if (error) alert('Gagal menghapus: ' + error.message)
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-delete-user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token ?? ''}`,
+      },
+      body: JSON.stringify({ athlete_id: a.id }),
+    })
+    const result = await res.json()
+    if (!res.ok) alert('Gagal menghapus: ' + result.error)
     else fetchAthletes()
   }
 
