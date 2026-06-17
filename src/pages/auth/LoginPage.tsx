@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 
 type Mode = 'login' | 'register'
+type Policy = 'invitation_only' | 'open_email_verification' | 'open_admin_approval' | null
 
-export default function LoginPage() {
+export default function LoginPage({ onPending }: { onPending?: () => void }) {
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -12,6 +13,15 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
+  const [policy, setPolicy] = useState<Policy>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    supabase.rpc('get_registration_policy').then(({ data }) => {
+      if (!cancelled) setPolicy((data as Policy) ?? 'open_email_verification')
+    })
+    return () => { cancelled = true }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,103 +30,87 @@ export default function LoginPage() {
     setLoading(true)
 
     if (mode === 'register') {
-      if (inviteCode.trim()) {
-        const { data: invite } = await supabase
-          .from('coach_invitations')
-          .select('id, used_count, max_uses, is_active, expires_at, allowed_email')
-          .eq('code', inviteCode.trim().toUpperCase())
-          .single()
-
-        if (!invite) {
-          setError('Kode invite tidak ditemukan.')
-          setLoading(false)
-          return
-        }
-        if (!invite.is_active) {
-          setError('Kode invite telah dinonaktifkan.')
-          setLoading(false)
-          return
-        }
-        if (new Date(invite.expires_at as string) < new Date()) {
-          setError('Kode invite sudah kadaluarsa.')
-          setLoading(false)
-          return
-        }
-        const maxUses = (invite.max_uses as number) ?? 1
-        const usedCount = (invite.used_count as number) ?? 0
-        if (maxUses > 0 && usedCount >= maxUses) {
-          setError('Kode invite sudah mencapai batas penggunaan.')
-          setLoading(false)
-          return
-        }
-        const allowedEmails = (invite.allowed_email as string[]) ?? []
-        if (allowedEmails.length > 0 &&
-            !allowedEmails.map((e: string) => e.toLowerCase()).includes(email.toLowerCase())) {
-          setError('Email tidak sesuai dengan kode invite.')
-          setLoading(false)
-          return
-        }
-      }
-
-      const { data, error: signUpError } = await supabase.auth.signUp({ email, password })
-      if (signUpError) { setError(signUpError.message); setLoading(false); return }
-
-      const userId = data.user?.id
-      if (!userId) { setError('Gagal mendapatkan user ID.'); setLoading(false); return }
-
-      const { error: rpcError } = await supabase.rpc('register_athlete', {
-        p_auth_id: userId,
-        p_name: name,
-        p_email: email,
-      })
-
-      if (rpcError) {
-        await supabase.auth.signOut()
-        setError('Gagal membuat profil. Silakan coba lagi atau hubungi admin.')
+      // Validasi invite code wajib jika policy invitation_only
+      if (policy === 'invitation_only' && !inviteCode.trim()) {
+        setError('Kode invite diperlukan untuk registrasi.')
         setLoading(false)
         return
       }
 
-      if (inviteCode.trim()) {
-        const { data: athleteData } = await supabase
-          .from('athletes')
-          .select('id')
-          .eq('auth_id', userId)
-          .single()
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password })
+      if (signUpError) { setError(signUpError.message); setLoading(false); return }
 
-        if (athleteData) {
-          const { data: claimResult } = await supabase.rpc('claim_invite', {
-            p_code: inviteCode.trim().toUpperCase(),
-            p_athlete_id: athleteData.id,
-            p_email: email,
-          })
-          if (claimResult === 0) {
-            setError('Kode invite tidak valid.')
-            setLoading(false)
-            return
-          }
-          if (claimResult === 2) {
-            setError('Email tidak sesuai dengan kode invite.')
-            setLoading(false)
-            return
-          }
-        }
+      const userId = signUpData.user?.id
+      if (!userId) { setError('Gagal mendapatkan user ID.'); setLoading(false); return }
+
+      const { data: rpcData, error: rpcError } = await supabase.rpc('register_athlete', {
+        p_name: name,
+        p_email: email,
+        p_invite_code: inviteCode.trim().toUpperCase() || null,
+      } as never)
+
+      if (rpcError) {
+        await supabase.auth.signOut()
+        const msg = rpcError.message ?? ''
+        if (msg.includes('INVITE_REQUIRED')) setError('Kode invite diperlukan untuk registrasi.')
+        else if (msg.includes('INVITE_INVALID')) setError('Kode invite tidak valid atau sudah habis.')
+        else setError('Gagal membuat profil. Silakan coba lagi atau hubungi admin.')
+        setLoading(false)
+        return
+      }
+
+      const result = rpcData as unknown as { status: string; policy: string } | null
+
+      if (result?.status === 'pending') {
+        setLoading(false)
+        if (onPending) onPending()
+        return
+      }
+
+      if (policy === 'open_email_verification') {
+        await supabase.auth.signOut()
+        setInfo('Registrasi berhasil! Silakan cek email Anda untuk verifikasi sebelum login.')
+        setMode('login')
+        setName(''); setEmail(''); setPassword(''); setInviteCode('')
+        setLoading(false)
+        return
       }
 
       setInfo('Registrasi berhasil! Silakan login.')
       setMode('login')
-      setName('')
-      setEmail('')
-      setPassword('')
-      setInviteCode('')
+      setName(''); setEmail(''); setPassword(''); setInviteCode('')
 
     } else {
       const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
       if (signInError) { setError(signInError.message); setLoading(false); return }
+
+      // Cek status athlete setelah login
+      const { data: athleteData } = await supabase
+        .from('athletes')
+        .select('status')
+        .eq('auth_id', (await supabase.auth.getUser()).data.user?.id ?? '')
+        .single()
+
+      if (athleteData?.status === 'pending') {
+        await supabase.auth.signOut()
+        setError('Akun Anda sedang menunggu persetujuan Admin.')
+        setLoading(false)
+        return
+      }
+
+      if (athleteData?.status === 'suspended') {
+        await supabase.auth.signOut()
+        setError('Akun Anda telah ditangguhkan. Hubungi admin.')
+        setLoading(false)
+        return
+      }
     }
 
     setLoading(false)
   }
+
+  const showInviteField = mode === 'register' && (policy === 'invitation_only' || policy === null)
+  const inviteOptional = policy !== 'invitation_only'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -149,21 +143,38 @@ export default function LoginPage() {
                   placeholder="Nama lengkap"
                 />
               </div>
-              <div>
-                <label className="block text-sm text-gray-600 mb-1">
-                  Kode invite <span className="text-gray-400">(opsional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={inviteCode}
-                  onChange={e => setInviteCode(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 uppercase tracking-widest"
-                  placeholder="XXXXXXXX"
-                  maxLength={8}
-                />
-              </div>
+
+              {showInviteField && (
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">
+                    Kode invite {inviteOptional && <span className="text-gray-400">(opsional)</span>}
+                    {!inviteOptional && <span className="text-red-500"> *</span>}
+                  </label>
+                  <input
+                    type="text"
+                    value={inviteCode}
+                    onChange={e => setInviteCode(e.target.value)}
+                    required={!inviteOptional}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 uppercase tracking-widest"
+                    placeholder="XXXXXXXX"
+                    maxLength={8}
+                  />
+                </div>
+              )}
+
+              {policy === 'open_admin_approval' && (
+                <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+                  Akun Anda akan direview oleh Admin sebelum bisa mengakses platform.
+                </p>
+              )}
+              {policy === 'open_email_verification' && (
+                <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2">
+                  Setelah register, cek email Anda untuk verifikasi akun.
+                </p>
+              )}
             </>
           )}
+
           <div>
             <label className="block text-sm text-gray-600 mb-1">Email</label>
             <input
@@ -193,7 +204,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || (mode === 'register' && policy === null)}
             className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
           >
             {loading ? 'Memproses...' : mode === 'login' ? 'Login' : 'Register'}
