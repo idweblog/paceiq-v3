@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useRole } from '../../hooks/useRole'
 
 const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -20,12 +21,17 @@ const menuItems = [
   { path: '/group', label: 'Group Training', icon: '👥' },
 ]
 
+const coachItems = [
+  { path: '/coach', label: 'Coach Dashboard', icon: '🎓' },
+]
+
 const adminItems = [
   { path: '/admin', label: 'Admin Panel', icon: '⚙️' },
 ]
 
 export function Sidebar() {
   const { signOut, user } = useAuth()
+  const { isCoach } = useRole()
   const navigate = useNavigate()
 
   async function handleSignOut() {
@@ -62,6 +68,32 @@ export function Sidebar() {
             </li>
           ))}
         </ul>
+
+        {/* Coach section */}
+        {isCoach && (
+          <div className="mt-4 pt-4 border-t border-indigo-800">
+            <p className="px-3 mb-1 text-xs font-semibold uppercase text-indigo-400 tracking-wider">Coach</p>
+            <ul className="space-y-0.5">
+              {coachItems.map((item) => (
+                <li key={item.path}>
+                  <NavLink
+                    to={item.path}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isActive
+                          ? 'bg-indigo-600 text-white font-medium'
+                          : 'text-indigo-200 hover:bg-indigo-900 hover:text-white'
+                      }`
+                    }
+                  >
+                    <span className="text-base leading-none">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Admin section */}
         <div className="mt-4 pt-4 border-t border-indigo-800">
