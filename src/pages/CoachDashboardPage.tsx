@@ -43,12 +43,51 @@ export default function CoachDashboardPage() {
   const [loadingFitness, setLoadingFitness] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const cancelledRef = useRef(false)
+  const realtimeRef = useRef<any>(null)
 
   useEffect(() => {
     cancelledRef.current = false
-    if (athleteId && isCoach) loadGroups()
-    return () => { cancelledRef.current = true }
+    if (athleteId && isCoach) {
+      loadGroups()
+      setupRealtime()
+    }
+    return () => {
+      cancelledRef.current = true
+      if (realtimeRef.current) {
+        supabase.removeChannel(realtimeRef.current)
+        realtimeRef.current = null
+      }
+    }
   }, [athleteId, isCoach])
+
+  function setupRealtime() {
+    if (realtimeRef.current) {
+      supabase.removeChannel(realtimeRef.current)
+    }
+    const channel = supabase
+      .channel('coach-dashboard')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'training_sessions' },
+        () => {
+          if (!cancelledRef.current && selectedGroupId) {
+            loadGroupFitness(selectedGroupId)
+            loadRecentSessions(selectedGroupId)
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        () => {
+          if (!cancelledRef.current && selectedGroupId) {
+            loadGroups()
+          }
+        }
+      )
+      .subscribe()
+    realtimeRef.current = channel
+  }
 
   useEffect(() => {
     if (selectedGroupId) {
