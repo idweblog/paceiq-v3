@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useAuth } from '../contexts/AuthContext'
 import type { Database } from '../lib/database.types'
 import { supabase } from '../lib/supabase'
 
@@ -28,6 +29,7 @@ export default function AdminPage() {
   const [inviteEmails, setInviteEmails] = useState('')
   const [newCode, setNewCode] = useState('')
   const [tab, setTab] = useState<'users' | 'invites' | 'registration'>('users')
+  const { user: currentUser } = useAuth()
   const cancelledRef = useRef(false)
 
   const fetchAthletes = async () => {
@@ -281,7 +283,8 @@ export default function AdminPage() {
                     <td className="px-4 py-3">
                       <button
                         onClick={() => deleteAthlete(a)}
-                        className="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                        disabled={a.auth_id === currentUser?.id}
+                        className="text-xs px-2 py-1 rounded border border-red-200 text-red-500 hover:bg-red-50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                       >
                         Hapus
                       </button>
