@@ -71,7 +71,11 @@ export default function LoginPage() {
         // Buat user via Edge Function agar auto-confirm email (tidak kirim email konfirmasi)
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-confirm-user`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
           body: JSON.stringify({ email, password }),
         })
         const result = await res.json()
