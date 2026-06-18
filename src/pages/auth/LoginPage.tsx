@@ -64,7 +64,7 @@ export default function LoginPage() {
       const userId = signUpData.user?.id
       if (!userId) { setError('Gagal mendapatkan user ID.'); setLoading(false); return }
 
-      const { data: rpcData, error: rpcError } = await supabase.rpc('register_athlete', {
+      const { error: rpcError } = await supabase.rpc('register_athlete', {
         p_name: name,
         p_email: email,
         p_auth_id: userId,
@@ -81,25 +81,20 @@ export default function LoginPage() {
         return
       }
 
-      const result = rpcData as unknown as { status: string; policy: string } | null
 
       await supabase.auth.signOut()
 
-      if (result?.status === 'pending') {
-        setInfo('Registrasi berhasil! Akun Anda sedang menunggu persetujuan Admin sebelum bisa digunakan.')
-        setMode('login')
-        setName(''); setEmail(''); setPassword(''); setInviteCode('')
-        setLoading(false)
-        return
-      }
-
       if (policy === 'open_email_verification') {
         setInfo('Registrasi berhasil! Silakan cek email Anda untuk verifikasi sebelum login.')
-        setMode('login')
-        setName(''); setEmail(''); setPassword(''); setInviteCode('')
-        setLoading(false)
-        return
+      } else if (policy === 'open_admin_approval') {
+        setInfo('Registrasi berhasil! Akun Anda sedang menunggu persetujuan Admin sebelum bisa digunakan.')
+      } else {
+        setInfo('Registrasi berhasil! Silakan login.')
       }
+      setMode('login')
+      setName(''); setEmail(''); setPassword(''); setInviteCode('')
+      setLoading(false)
+      return
 
       setInfo('Registrasi berhasil! Silakan login.')
       setMode('login')
