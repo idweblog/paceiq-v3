@@ -65,10 +65,24 @@ export default function LoginPage() {
         }
       }
 
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } })
-      if (signUpError) { setError(signUpError.message); setLoading(false); return }
+      let userId: string | null = null
 
-      const userId = signUpData.user?.id
+      if (policy === 'open_admin_approval') {
+        // Buat user via Edge Function agar auto-confirm email (tidak kirim email konfirmasi)
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-confirm-user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY },
+          body: JSON.stringify({ email, password }),
+        })
+        const result = await res.json()
+        if (!res.ok) { setError(result.error ?? 'Gagal membuat akun.'); setLoading(false); return }
+        userId = result.auth_id
+      } else {
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } })
+        if (signUpError) { setError(signUpError.message); setLoading(false); return }
+        userId = signUpData.user?.id ?? null
+      }
+
       if (!userId) { setError('Gagal mendapatkan user ID.'); setLoading(false); return }
 
       const { error: rpcError } = await supabase.rpc('register_athlete', {
