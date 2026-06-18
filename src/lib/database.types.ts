@@ -122,6 +122,7 @@ export type Database = {
           email: string
           id: string
           name: string
+          registration_mode: string | null
           status: string
         }
         Insert: {
@@ -130,6 +131,7 @@ export type Database = {
           email: string
           id?: string
           name: string
+          registration_mode?: string | null
           status?: string
         }
         Update: {
@@ -138,6 +140,7 @@ export type Database = {
           email?: string
           id?: string
           name?: string
+          registration_mode?: string | null
           status?: string
         }
         Relationships: []
@@ -1228,6 +1231,15 @@ export type Database = {
         | {
             Args: { p_auth_id: string; p_email: string; p_name: string }
             Returns: undefined
+          }
+        | {
+            Args: {
+              p_auth_id?: string
+              p_email: string
+              p_invite_code?: string
+              p_name: string
+            }
+            Returns: Json
           }
         | {
             Args: { p_email: string; p_invite_code?: string; p_name: string }

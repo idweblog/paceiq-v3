@@ -36,7 +36,7 @@ export default function AdminPage() {
     setLoadingAthletes(true)
     const { data: athleteData } = await supabase
       .from('athletes')
-      .select('id, name, email, created_at, auth_id, status')
+      .select('id, name, email, created_at, auth_id, status, registration_mode')
       .order('created_at', { ascending: false })
     const { data: roleData } = await supabase
       .from('athlete_roles')
@@ -76,8 +76,9 @@ export default function AdminPage() {
     setLoadingPending(true)
     const { data } = await supabase
       .from('athletes')
-      .select('id, name, email, created_at, auth_id, status')
+      .select('id, name, email, created_at, auth_id, status, registration_mode')
       .eq('status', 'pending')
+      .eq('registration_mode', 'open_admin_approval')
       .order('created_at', { ascending: true })
     if (!cancelledRef.current) { setPendingAthletes(data ?? []); setLoadingPending(false) }
   }
