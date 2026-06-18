@@ -10,32 +10,41 @@ Deno.serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  const supabaseAdmin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-  )
+  try {
+    const url = Deno.env.get('SUPABASE_URL') ?? ''
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
-  const body = await req.json()
+    const supabaseAdmin = createClient(url, key)
+    const body = await req.json()
 
-  // Mode 1: confirm existing user (dipanggil saat admin approve)
-  if (body.auth_id) {
-    const { error } = await supabaseAdmin.auth.admin.updateUser(body.auth_id, {
-      email_confirm: true
-    })
-    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
-    return new Response(JSON.stringify({ success: true }), { status: 200, headers: corsHeaders })
+    if (body.auth_id) {
+      const { error } = await supabaseAdmin.auth.admin.updateUser(body.auth_id, { email_confirm: true })
+      if (error) return new Response(JSON.stringify({ ok: false, error: error.message, status: error.status, name: error.name }), { status: 200, headers: corsHeaders })
+      return new Response(JSON.stringify({ ok: true }), { status: 200, headers: corsHeaders })
+    }
+
+    if (body.email && body.password) {
+      const res = await fetch(`${url}/auth/v1/admin/users`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${key}`,
+          'apikey': key,
+        },
+        body: JSON.stringify({
+          email: body.email,
+          password: body.password,
+          email_confirm: true,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) return new Response(JSON.stringify({ ok: false, error: JSON.stringify(data) }), { status: 200, headers: corsHeaders })
+      return new Response(JSON.stringify({ ok: true, auth_id: data.id }), { status: 200, headers: corsHeaders })
+    }
+
+    return new Response(JSON.stringify({ ok: false, error: 'email and password required' }), { status: 200, headers: corsHeaders })
+
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 200, headers: corsHeaders })
   }
-
-  // Mode 2: create user dengan auto-confirm (untuk open_admin_approval)
-  if (body.email && body.password) {
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email: body.email,
-      password: body.password,
-      email_confirm: true,
-    })
-    if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: corsHeaders })
-    return new Response(JSON.stringify({ auth_id: data.user.id }), { status: 200, headers: corsHeaders })
-  }
-
-  return new Response(JSON.stringify({ error: 'Invalid request' }), { status: 400, headers: corsHeaders })
 })
