@@ -67,6 +67,7 @@ export default function LoginPage() {
       const { data: rpcData, error: rpcError } = await supabase.rpc('register_athlete', {
         p_name: name,
         p_email: email,
+        p_auth_id: userId,
         p_invite_code: inviteCode.trim().toUpperCase() || null,
       } as never)
 

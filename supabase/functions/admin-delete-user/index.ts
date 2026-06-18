@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } }
   )
 
-  const { data: isAdmin } = await supabaseUser.rpc('has_role', { p_role: 'admin' })
+  const { data: isAdmin } = await supabaseUser.rpc('has_role', { role_name: 'admin' })
   if (!isAdmin) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       status: 403, headers: corsHeaders
