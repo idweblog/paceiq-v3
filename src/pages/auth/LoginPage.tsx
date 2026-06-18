@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 
@@ -9,6 +9,7 @@ type Policy = 'invitation_only' | 'open_email_verification' | 'open_admin_approv
 export default function LoginPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [mode, setMode] = useState<Mode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -22,6 +23,12 @@ export default function LoginPage() {
   useEffect(() => {
     if (user) navigate('/dashboard', { replace: true })
   }, [user, navigate])
+
+  useEffect(() => {
+    if (searchParams.get('verified') === '1') {
+      setInfo('Email berhasil diverifikasi! Silakan login.')
+    }
+  }, [searchParams])
 
   useEffect(() => {
     let cancelled = false
@@ -58,7 +65,7 @@ export default function LoginPage() {
         }
       }
 
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password })
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } })
       if (signUpError) { setError(signUpError.message); setLoading(false); return }
 
       const userId = signUpData.user?.id

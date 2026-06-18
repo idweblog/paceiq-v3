@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { AppLayout } from './components/layout/AppLayout'
 import LoginPage from './pages/auth/LoginPage'
@@ -18,6 +18,7 @@ import RacesPage from './pages/RacesPage'
 import BodyMetricsPage from './pages/BodyMetricsPage'
 import ExportPage from './pages/ExportPage'
 import ReferensiPage from './pages/ReferensiPage'
+import { useEffect } from 'react'
 import { useAuth } from './contexts/AuthContext'
 import { useRole } from './hooks/useRole'
 import GroupPage from './pages/GroupPage'
@@ -37,9 +38,20 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function AuthCallback() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    // Supabase akan set session via onAuthStateChange setelah email verified
+    const timer = setTimeout(() => navigate('/login?verified=1', { replace: true }), 1500)
+    return () => clearTimeout(timer)
+  }, [navigate])
+  return <div className="flex items-center justify-center h-screen text-gray-400">Memverifikasi email...</div>
+}
+
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/login" element={<LoginPage />} />
       <Route
         path="/"

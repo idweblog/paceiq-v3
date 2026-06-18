@@ -114,8 +114,20 @@ export default function AdminPage() {
     setSavingPolicy(false)
   }
 
-  const approveAthlete = async (id: string) => {
-    await supabase.from('athletes').update({ status: 'active' }).eq('id', id)
+  const approveAthlete = async (a: AthleteRow) => {
+    // Auto-confirm email via Edge Function jika belum confirmed
+    if (a.auth_id) {
+      const { data: { session } } = await supabase.auth.getSession()
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-confirm-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token ?? ''}`,
+        },
+        body: JSON.stringify({ auth_id: a.auth_id }),
+      })
+    }
+    await supabase.from('athletes').update({ status: 'active' }).eq('id', a.id)
     fetchPending()
     fetchAthletes()
   }
@@ -508,7 +520,7 @@ export default function AdminPage() {
                       <td className="px-4 py-3">
                         <div className="flex gap-2 justify-end">
                           <button
-                            onClick={() => approveAthlete(a.id)}
+                            onClick={() => approveAthlete(a)}
                             className="text-xs px-3 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50 transition-colors font-medium"
                           >
                             Approve
