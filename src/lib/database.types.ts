@@ -65,42 +65,60 @@ export type Database = {
       athlete_settings: {
         Row: {
           athlete_id: string
+          birth_date: string | null
+          cedera: string | null
           domisili: string | null
           easy_pace_min: number | null
           easy_pace_sec: number | null
           height_cm: number | null
           id: string
+          lr_distance_km: number | null
+          lr_pace_min: number | null
+          lr_pace_sec: number | null
           lthr: number | null
           max_hr: number | null
           resting_hr: number | null
+          start_training_date: string | null
           training_age_years: number | null
           updated_at: string | null
           weight_kg: number | null
         }
         Insert: {
           athlete_id: string
+          birth_date?: string | null
+          cedera?: string | null
           domisili?: string | null
           easy_pace_min?: number | null
           easy_pace_sec?: number | null
           height_cm?: number | null
           id?: string
+          lr_distance_km?: number | null
+          lr_pace_min?: number | null
+          lr_pace_sec?: number | null
           lthr?: number | null
           max_hr?: number | null
           resting_hr?: number | null
+          start_training_date?: string | null
           training_age_years?: number | null
           updated_at?: string | null
           weight_kg?: number | null
         }
         Update: {
           athlete_id?: string
+          birth_date?: string | null
+          cedera?: string | null
           domisili?: string | null
           easy_pace_min?: number | null
           easy_pace_sec?: number | null
           height_cm?: number | null
           id?: string
+          lr_distance_km?: number | null
+          lr_pace_min?: number | null
+          lr_pace_sec?: number | null
           lthr?: number | null
           max_hr?: number | null
           resting_hr?: number | null
+          start_training_date?: string | null
           training_age_years?: number | null
           updated_at?: string | null
           weight_kg?: number | null
@@ -121,6 +139,7 @@ export type Database = {
           created_at: string | null
           email: string
           id: string
+          nama: string | null
           name: string
           registration_mode: string | null
           status: string
@@ -130,6 +149,7 @@ export type Database = {
           created_at?: string | null
           email: string
           id?: string
+          nama?: string | null
           name: string
           registration_mode?: string | null
           status?: string
@@ -139,6 +159,7 @@ export type Database = {
           created_at?: string | null
           email?: string
           id?: string
+          nama?: string | null
           name?: string
           registration_mode?: string | null
           status?: string
@@ -1184,6 +1205,7 @@ export type Database = {
         Args: { p_athlete_id: string; p_code: string; p_email?: string }
         Returns: number
       }
+      delete_auth_user: { Args: { p_auth_id: string }; Returns: undefined }
       generate_invite_code:
         | { Args: { p_role_id?: number }; Returns: string }
         | {
