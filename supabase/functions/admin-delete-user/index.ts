@@ -28,37 +28,52 @@ Deno.serve(async (req) => {
     { global: { headers: { Authorization: authHeader } } }
   )
 
-  const { data: isAdmin } = await supabaseUser.rpc('has_role', { role_name: 'admin' })
+  const { data: isAdmin, error: roleError } = await supabaseUser.rpc('has_role', { role_name: 'admin' })
+  console.log('isAdmin:', isAdmin, 'roleError:', JSON.stringify(roleError))
   if (!isAdmin) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       status: 403, headers: corsHeaders
     })
   }
 
-  const { athlete_id } = await req.json()
+  let body: { athlete_id?: string }
+  try {
+    body = await req.json()
+  } catch (e) {
+    console.log('json parse error:', e)
+    return new Response(JSON.stringify({ error: 'Invalid JSON' }), {
+      status: 400, headers: corsHeaders
+    })
+  }
+
+  const { athlete_id } = body
   if (!athlete_id) {
     return new Response(JSON.stringify({ error: 'athlete_id required' }), {
       status: 400, headers: corsHeaders
     })
   }
 
-  const { data: athlete } = await supabaseUser
+  const { data: athlete, error: fetchError } = await supabaseAdmin
     .from('athletes')
     .select('auth_id')
     .eq('id', athlete_id)
     .single()
 
-  if (!athlete?.auth_id) {
-    return new Response(JSON.stringify({ error: 'Athlete not found' }), {
+  console.log('athlete:', JSON.stringify(athlete), 'fetchError:', JSON.stringify(fetchError))
+
+  if (fetchError || !athlete?.auth_id) {
+    return new Response(JSON.stringify({ error: 'Athlete not found', detail: fetchError?.message }), {
       status: 404, headers: corsHeaders
     })
   }
 
-  await supabaseUser.from('athletes').delete().eq('id', athlete_id)
+  const { error: deleteError } = await supabaseAdmin.rpc('delete_auth_user', {
+    p_auth_id: athlete.auth_id
+  })
+  console.log('deleteError:', JSON.stringify(deleteError))
 
-  const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(athlete.auth_id)
-  if (authError) {
-    return new Response(JSON.stringify({ error: authError.message }), {
+  if (deleteError) {
+    return new Response(JSON.stringify({ error: deleteError.message }), {
       status: 500, headers: corsHeaders
     })
   }
