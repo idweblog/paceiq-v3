@@ -31,6 +31,14 @@ interface TtEntry {
   notes: string | null
 }
 
+interface FitnessData {
+  ctl: number
+  atl: number
+  tsb: number
+  acwr: number
+  day: string
+}
+
 interface Race {
   id: string
   name: string
@@ -253,6 +261,7 @@ export default function ProfilPage() {
   const [hrHistory, setHrHistory] = useState<HrHistoryEntry[]>([])
   const [lastLongRun, setLastLongRun] = useState<TrainingSession | null>(null)
   const [races, setRaces] = useState<Race[]>([])
+  const [fitness, setFitness] = useState<FitnessData | null>(null)
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, string>>({})
@@ -282,7 +291,7 @@ export default function ProfilPage() {
     let cancelled = false
     async function load() {
       setLoading(true)
-      const [sRes, ttRes, sesRes, hrRes, lrRes, racesRes] = await Promise.all([
+      const [sRes, ttRes, sesRes, hrRes, lrRes, racesRes, fitRes] = await Promise.all([
         supabase.from('athlete_settings')
           .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date')
           .eq('athlete_id', athleteId as string).maybeSingle(),
@@ -300,6 +309,7 @@ export default function ProfilPage() {
           .eq('athlete_id', athleteId as string)
           .neq('status', 'done')
           .order('event_date', { ascending: true }),
+        supabase.rpc('get_my_fitness'),
         supabase.from('training_sessions')
           .select('session_date,session_type,pace_avg_min,pace_avg_sec,hr_avg,trimp,distance_km,duration_sec')
           .eq('athlete_id', athleteId as string)
@@ -313,6 +323,10 @@ export default function ProfilPage() {
       if (hrRes.data) setHrHistory(hrRes.data)
       if (lrRes.data && lrRes.data.length > 0) setLastLongRun(lrRes.data[0] as unknown as TrainingSession)
       if (racesRes.data) setRaces(racesRes.data as unknown as Race[])
+      if (fitRes.data && fitRes.data.length > 0) {
+        const last = fitRes.data[fitRes.data.length - 1]
+        setFitness(last as unknown as FitnessData)
+      }
       setLoading(false)
     }
     load()
@@ -759,7 +773,96 @@ export default function ProfilPage() {
         )}
       </section>
 
-            {/* ── EFFICIENCY & ECONOMY ── */}
+            {/* ── FITNESS DASHBOARD ── */}
+      <section className="bg-white rounded-xl shadow-sm p-5">
+        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Fitness Dashboard</div>
+        {!fitness ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="flex flex-col items-center justify-center p-8 bg-gray-50 rounded-xl">
+              {/* EFS Gauge kosong */}
+              <svg width="160" height="160" viewBox="0 0 160 160">
+                <circle cx="80" cy="80" r="65" fill="none" stroke="#e5e7eb" strokeWidth="14" />
+                <text x="80" y="75" textAnchor="middle" fontSize="13" fill="#9ca3af" fontWeight="600">Belum Ada</text>
+                <text x="80" y="95" textAnchor="middle" fontSize="11" fill="#d1d5db">Data Latihan</text>
+              </svg>
+              <div className="text-xs text-gray-400 mt-2 text-center">Tambahkan sesi latihan dengan data TRIMP untuk melihat Estimated Fitness Score</div>
+            </div>
+            <div className="flex flex-col justify-center space-y-3">
+              {[
+                { label: 'CTL (Chronic Training Load)', val: '—', sub: 'Fitness jangka panjang (42 hari)', color: '#6366f1' },
+                { label: 'ATL (Acute Training Load)', val: '—', sub: 'Kelelahan jangka pendek (7 hari)', color: '#f59e0b' },
+                { label: 'TSB (Training Stress Balance)', val: '—', sub: 'CTL − ATL (Form)', color: '#10b981' },
+                { label: 'ACWR', val: '—', sub: 'Acute:Chronic Workload Ratio', color: '#3b82f6' },
+              ].map(f => (
+                <div key={f.label} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500">{f.label}</div>
+                    <div className="text-xs text-gray-400">{f.sub}</div>
+                  </div>
+                  <div className="text-lg font-extrabold" style={{ color: f.color }}>{f.val}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (() => {
+          const { ctl, atl, tsb, acwr } = fitness
+          const efs = Math.min(100, Math.round(ctl))
+          const efsLevel = efs >= 80 ? 'Elite' : efs >= 60 ? 'Advanced' : efs >= 40 ? 'Intermediate' : efs >= 20 ? 'Base' : 'Pemula'
+          const efsColor = efs >= 80 ? '#10b981' : efs >= 60 ? '#6366f1' : efs >= 40 ? '#3b82f6' : efs >= 20 ? '#f59e0b' : '#9ca3af'
+          const acwrStatus = acwr < 0.8 ? { label: 'Undertraining', color: '#9ca3af' }
+            : acwr < 1.3 ? { label: 'Optimal', color: '#10b981' }
+            : acwr < 1.5 ? { label: 'Elevated Risk', color: '#f59e0b' }
+            : { label: 'High Risk', color: '#ef4444' }
+          const tsbStatus = tsb > 10 ? { label: 'Fresh', color: '#10b981' }
+            : tsb > -10 ? { label: 'Optimal', color: '#6366f1' }
+            : tsb > -30 ? { label: 'Tired', color: '#f59e0b' }
+            : { label: 'Very Tired', color: '#ef4444' }
+
+          // SVG gauge
+          const radius = 65
+          const circumference = 2 * Math.PI * radius
+          const dashOffset = circumference - (efs / 100) * circumference
+
+          return (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="flex flex-col items-center justify-center p-4 bg-indigo-50 rounded-xl">
+                <svg width="160" height="160" viewBox="0 0 160 160">
+                  <circle cx="80" cy="80" r={radius} fill="none" stroke="#e0e7ff" strokeWidth="14" />
+                  <circle cx="80" cy="80" r={radius} fill="none" stroke={efsColor} strokeWidth="14"
+                    strokeDasharray={circumference} strokeDashoffset={dashOffset}
+                    strokeLinecap="round" transform="rotate(-90 80 80)" />
+                  <text x="80" y="72" textAnchor="middle" fontSize="28" fill={efsColor} fontWeight="800">{efs}</text>
+                  <text x="80" y="90" textAnchor="middle" fontSize="11" fill="#6b7280" fontWeight="600">{efsLevel}</text>
+                  <text x="80" y="106" textAnchor="middle" fontSize="9" fill="#9ca3af">Est. Fitness Score</text>
+                </svg>
+                <div className="grid grid-cols-3 gap-2 w-full mt-2 text-center">
+                  <div><div className="text-xs text-gray-400">CTL</div><div className="text-sm font-bold text-indigo-600">{Number(ctl).toFixed(1)}</div></div>
+                  <div><div className="text-xs text-gray-400">Target</div><div className="text-sm font-bold text-gray-600">75</div></div>
+                  <div><div className="text-xs text-gray-400">TSB</div><div className="text-sm font-bold" style={{ color: tsbStatus.color }}>{Number(tsb).toFixed(1)}</div></div>
+                </div>
+              </div>
+              <div className="flex flex-col justify-center space-y-3">
+                {[
+                  { label: 'CTL (Chronic Training Load)', val: Number(ctl).toFixed(1), sub: 'Fitness jangka panjang (42 hari)', color: '#6366f1' },
+                  { label: 'ATL (Acute Training Load)', val: Number(atl).toFixed(1), sub: 'Kelelahan jangka pendek (7 hari)', color: '#f59e0b' },
+                  { label: 'TSB (Form)', val: `${Number(tsb) >= 0 ? '+' : ''}${Number(tsb).toFixed(1)} · ${tsbStatus.label}`, sub: 'CTL − ATL', color: tsbStatus.color },
+                  { label: 'ACWR', val: `${Number(acwr).toFixed(2)} · ${acwrStatus.label}`, sub: 'Acute:Chronic Workload Ratio', color: acwrStatus.color },
+                ].map(f => (
+                  <div key={f.label} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <div>
+                      <div className="text-xs font-semibold text-gray-500">{f.label}</div>
+                      <div className="text-xs text-gray-400">{f.sub}</div>
+                    </div>
+                    <div className="text-base font-extrabold" style={{ color: f.color }}>{f.val}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+      </section>
+
+      {/* ── EFFICIENCY & ECONOMY ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Efficiency &amp; Economy</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
