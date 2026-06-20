@@ -31,6 +31,16 @@ interface TtEntry {
   notes: string | null
 }
 
+interface Race {
+  id: string
+  name: string
+  event_type: string | null
+  event_date: string | null
+  status: string
+  target_finish: string | null
+  distance_km: number | null
+}
+
 interface TrainingSession {
   session_date: string
   session_type: string | null
@@ -225,11 +235,6 @@ const TT_DISTANCES: Record<string, number> = {
   '5K': 5.0, '10K': 10.0, 'HM': 21.0975, 'FM': 42.195,
 }
 
-const RACE_TARGETS = [
-  { label: '🏁 Maybank <2:30', target: 9000, color: '#6366f1' },
-  { label: '⭐ Pocari <2:15',  target: 8100, color: '#f59e0b' },
-]
-
 const emptySettings: AthleteSettings = {
   lthr: null, resting_hr: null, max_hr: null, weight_kg: null,
   height_cm: null, domisili: null, birth_date: null, cedera: null, start_training_date: null,
@@ -247,6 +252,7 @@ export default function ProfilPage() {
   const [sessions, setSessions] = useState<TrainingSession[]>([])
   const [hrHistory, setHrHistory] = useState<HrHistoryEntry[]>([])
   const [lastLongRun, setLastLongRun] = useState<TrainingSession | null>(null)
+  const [races, setRaces] = useState<Race[]>([])
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, string>>({})
@@ -276,7 +282,7 @@ export default function ProfilPage() {
     let cancelled = false
     async function load() {
       setLoading(true)
-      const [sRes, ttRes, sesRes, hrRes, lrRes] = await Promise.all([
+      const [sRes, ttRes, sesRes, hrRes, lrRes, racesRes] = await Promise.all([
         supabase.from('athlete_settings')
           .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date')
           .eq('athlete_id', athleteId as string).maybeSingle(),
@@ -289,6 +295,11 @@ export default function ProfilPage() {
         supabase.from('hr_history')
           .select('hr_type,hr_value,recorded_date')
           .eq('athlete_id', athleteId as string).order('recorded_date', { ascending: false }).limit(20),
+        supabase.from('races')
+          .select('id,name,event_type,event_date,status,target_finish,distance_km')
+          .eq('athlete_id', athleteId as string)
+          .neq('status', 'done')
+          .order('event_date', { ascending: true }),
         supabase.from('training_sessions')
           .select('session_date,session_type,pace_avg_min,pace_avg_sec,hr_avg,trimp,distance_km,duration_sec')
           .eq('athlete_id', athleteId as string)
@@ -300,7 +311,8 @@ export default function ProfilPage() {
       if (ttRes.data) setTtList(ttRes.data)
       if (sesRes.data) setSessions(sesRes.data)
       if (hrRes.data) setHrHistory(hrRes.data)
-      if (lrRes.data && lrRes.data.length > 0) setLastLongRun(lrRes.data[0])
+      if (lrRes.data && lrRes.data.length > 0) setLastLongRun(lrRes.data[0] as unknown as TrainingSession)
+      if (racesRes.data) setRaces(racesRes.data as unknown as Race[])
       setLoading(false)
     }
     load()
@@ -321,7 +333,6 @@ export default function ProfilPage() {
   const bmiData = (settings.height_cm && settings.weight_kg) ? calcBmi(settings.height_cm, settings.weight_kg) : null
   const taStr = calcTrainingAge(settings.start_training_date)
   const vdotRel = getVdotReliability(settings.start_training_date)
-  const predHmSec = latestTt ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 21097.5) : null
   const easyPaceStr = vdot ? easyPaceFromVdot(vdot) : null
   const ef = calcEF(sessions)
   const pes = calcPES(sessions)
@@ -663,36 +674,92 @@ export default function ProfilPage() {
         </div>
       </section>
 
-            {/* ── PREDICTED HM ── */}
+            {/* ── RACE PREDICTION ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Predicted HM</div>
-        <div className="mb-4">
-          <div className="text-xs font-medium text-gray-500 mb-1">Predicted Finish</div>
-          <div className="text-4xl font-extrabold text-gray-800">{predHmSec ? fmtTime(Math.round(predHmSec)) : '—:—:—'}</div>
-          {predHmSec && <div className="text-sm text-gray-400 mt-1">{secToPace(Math.round(predHmSec / 21.0975))}/km · HM 21.1 km</div>}
-        </div>
-        <div className="space-y-3">
-          {RACE_TARGETS.map(rt => {
-            const gap = predHmSec ? predHmSec - rt.target : null
-            const gapMm = gap != null ? Math.floor(Math.abs(gap) / 60) : 0
-            const gapSs = gap != null ? Math.round(Math.abs(gap) % 60) : 0
-            const gapStr = gap == null ? '—' : gap <= 0 ? `✅ +${gapMm}:${String(gapSs).padStart(2,'0')}` : `⚠ -${gapMm}:${String(gapSs).padStart(2,'0')}`
-            const bc = gap != null && gap <= 0 ? '#10b981' : '#f59e0b'
-            const prog = predHmSec ? Math.min(100, Math.max(0, Math.round(((rt.target * 1.15) - predHmSec) / (rt.target * 0.15) * 100))) : 0
-            return (
-              <div key={rt.label}>
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-xs font-semibold text-gray-600">{rt.label}</span>
-                  <span className="text-xs font-bold" style={{ color: bc }}>{gapStr}</span>
-                </div>
-                <div className="h-2 bg-gray-100 rounded-full"><div className="h-full rounded-full transition-all" style={{ width: `${prog}%`, background: bc }} /></div>
-              </div>
-            )
-          })}
-        </div>
+        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Race Prediction</div>
+        <p className="text-xs text-gray-400 mb-4">Prediksi berdasarkan Time Trial terbaru menggunakan formula Riegel (t₂ = t₁ × (d₂/d₁)^1.06)</p>
+
+        {/* 4 Card Prediksi */}
+        {latestTt && latestTt.distance_km ? (() => {
+          const preds = [
+            { label: 'Full Marathon', dist: 42195, emoji: '🏅', color: '#6366f1' },
+            { label: 'Half Marathon', dist: 21097.5, emoji: '🏃', color: '#3b82f6' },
+            { label: '10K', dist: 10000, emoji: '⚡', color: '#10b981' },
+            { label: '5K', dist: 5000, emoji: '🚀', color: '#f59e0b' },
+          ]
+          return (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              {preds.map(p => {
+                const sec = Math.round(predictTime(latestTt.distance_km! * 1000, latestTt.finish_time_sec, p.dist))
+                const pacePerKm = secToPace(Math.round(sec / (p.dist / 1000)))
+                return (
+                  <div key={p.label} className="rounded-xl p-4 text-center" style={{ background: p.color + '12', border: `1.5px solid ${p.color}30` }}>
+                    <div className="text-xl mb-1">{p.emoji}</div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">{p.label}</div>
+                    <div className="text-xl font-extrabold" style={{ color: p.color }}>{fmtTime(sec)}</div>
+                    <div className="text-xs text-gray-400 mt-1">{pacePerKm}/km</div>
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })() : (
+          <div className="p-4 bg-gray-50 rounded-xl text-center text-sm text-gray-400 mb-6">
+            Tambahkan Time Trial untuk melihat prediksi race.
+          </div>
+        )}
+
+        {/* Gap Progress vs Race Aktif */}
+        {races.length > 0 && latestTt && latestTt.distance_km && (
+          <div>
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Gap vs Target Race</div>
+            <div className="space-y-3">
+              {races.map(race => {
+                if (!race.target_finish || !race.distance_km) return null
+                const targetSec = (() => {
+                  const parts = race.target_finish.split(':').map(Number)
+                  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+                  if (parts.length === 2) return parts[0] * 60 + parts[1]
+                  return 0
+                })()
+                if (!targetSec) return null
+                const predSec = Math.round(predictTime(latestTt.distance_km! * 1000, latestTt.finish_time_sec, race.distance_km * 1000))
+                const gap = predSec - targetSec
+                const gapAbs = Math.abs(gap)
+                const gapMm = Math.floor(gapAbs / 60)
+                const gapSs = Math.round(gapAbs % 60)
+                const gapStr = gap <= 0
+                  ? `✅ ${gapMm}:${String(gapSs).padStart(2,'0')} lebih cepat dari target`
+                  : `⚠️ ${gapMm}:${String(gapSs).padStart(2,'0')} lebih lambat dari target`
+                const bc = gap <= 0 ? '#10b981' : '#f59e0b'
+                const statusBadge = race.status === 'A' ? '🏆 Goal' : race.status === 'B' ? '🏁 Tune-up' : '📅'
+                const daysLeft = race.event_date ? Math.ceil((new Date(race.event_date).getTime() - Date.now()) / 86400000) : null
+                const prog = Math.min(100, Math.max(0, Math.round(((targetSec * 1.15) - predSec) / (targetSec * 0.15) * 100)))
+                return (
+                  <div key={race.id} className="p-3 rounded-xl border border-gray-100 bg-gray-50">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <span className="text-xs font-semibold text-gray-700">{statusBadge} {race.name}</span>
+                        <div className="text-xs text-gray-400">
+                          {race.event_type} · Target: <strong>{race.target_finish}</strong>
+                          {daysLeft != null && daysLeft > 0 && <span className="ml-2 text-indigo-500">{daysLeft} hari lagi</span>}
+                        </div>
+                      </div>
+                      <span className="text-xs font-bold" style={{ color: bc }}>{gapStr}</span>
+                    </div>
+                    <div className="h-2 bg-gray-200 rounded-full">
+                      <div className="h-full rounded-full transition-all" style={{ width: `${prog}%`, background: bc }} />
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">Prediksi: <strong>{fmtTime(predSec)}</strong> vs Target: <strong>{race.target_finish}</strong></div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
-      {/* ── EFFICIENCY & ECONOMY ── */}
+            {/* ── EFFICIENCY & ECONOMY ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Efficiency &amp; Economy</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
