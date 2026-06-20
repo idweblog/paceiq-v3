@@ -210,13 +210,13 @@ function calcHSI(temp: number, rh: number) {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const TT_TYPES = [
-  { value: '8min',      label: '8 Menit',  race: 'Race 5K',         hint: 'LTHR = HR avg × 0.952',            partialLabel: null },
-  { value: '15min-5k',  label: '15 Menit', race: 'Race 5K',         hint: 'LTHR = HR avg menit 4–15 × 0.962', partialLabel: 'Avg HR Menit 4–15 (bpm)' },
-  { value: '15min-10k', label: '15 Menit', race: 'Race 10K',        hint: 'LTHR = HR avg menit 4–15 × 0.978', partialLabel: 'Avg HR Menit 4–15 (bpm)' },
-  { value: '20min',     label: '20 Menit', race: 'Race 10K',        hint: 'LTHR = HR avg × 0.971',            partialLabel: null },
-  { value: '30min',     label: '30 Menit', race: 'Race HM & FM',    hint: 'LTHR = HR avg menit 11–30',        partialLabel: 'Avg HR Menit 11–30 (bpm)' },
-  { value: '45min',     label: '45 Menit', race: 'Race FM & Ultra', hint: 'LTHR = HR avg × 0.987',            partialLabel: null },
-  { value: '60min',     label: '60 Menit', race: 'Race FM & Ultra', hint: 'LTHR = HR avg menit 31–60',        partialLabel: 'Avg HR Menit 31–60 (bpm)' },
+  { value: '8min',      label: '8 Menit',  race: 'Race 5K',         hint: 'LTHR = HR avg × 0.952',            accuracy: 'Akurasi 92% vs MLSS', partialLabel: null },
+  { value: '15min-5k',  label: '15 Menit', race: 'Race 5K',         hint: 'LTHR = HR avg menit 4–15 × 0.962', accuracy: 'Akurasi 92% vs MLSS', partialLabel: 'Avg HR Menit 4–15 (bpm)' },
+  { value: '15min-10k', label: '15 Menit', race: 'Race 10K',        hint: 'LTHR = HR avg menit 4–15 × 0.978', accuracy: 'Akurasi 92% vs MLSS', partialLabel: 'Avg HR Menit 4–15 (bpm)' },
+  { value: '20min',     label: '20 Menit', race: 'Race 10K',        hint: 'LTHR = HR avg × 0.971',            accuracy: 'Akurasi 93% vs MLSS', partialLabel: null },
+  { value: '30min',     label: '30 Menit', race: 'Race HM & FM',    hint: 'LTHR = HR avg menit 11–30',        accuracy: 'Akurasi 94% vs MLSS', partialLabel: 'Avg HR Menit 11–30 (bpm)' },
+  { value: '45min',     label: '45 Menit', race: 'Race FM & Ultra', hint: 'LTHR = HR avg × 0.987',            accuracy: 'Akurasi 91% vs MLSS', partialLabel: null },
+  { value: '60min',     label: '60 Menit', race: 'Race FM & Ultra', hint: 'LTHR = HR avg menit 31–60',        accuracy: 'Akurasi 90% vs MLSS', partialLabel: 'Avg HR Menit 31–60 (bpm)' },
 ]
 
 const TT_DISTANCES: Record<string, number> = {
@@ -259,6 +259,9 @@ export default function ProfilPage() {
     hr_avg: '', hr_partial_avg: '', notes: '',
   })
   const [ttSaving, setTtSaving] = useState(false)
+  const [editTtId, setEditTtId] = useState<string | null>(null)
+  const [editTtForm, setEditTtForm] = useState<Record<string, string>>({})
+  const [editTtSaving, setEditTtSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hsiState, setHsiState] = useState({ temp: 30.8, rh: 58 })
 
@@ -456,6 +459,53 @@ export default function ProfilPage() {
     if (data) setTtList(data)
   }
 
+  function openEditTt(tt: TtEntry) {
+    setEditTtId(tt.id)
+    setEditTtForm({
+      tt_date: tt.tt_date,
+      tt_type: tt.tt_type ?? '8min',
+      distance_km: tt.distance_km?.toString() ?? '',
+      finish_time: fmtTime(tt.finish_time_sec),
+      hr_avg: tt.hr_avg?.toString() ?? '',
+      hr_partial_avg: tt.hr_partial_avg?.toString() ?? '',
+    })
+  }
+
+  async function saveEditTt() {
+    if (!athleteId || !editTtId) return
+    setEditTtSaving(true)
+    const finishSec = parseTimeToSec(editTtForm.finish_time)
+    if (!finishSec) { setError('Format waktu tidak valid.'); setEditTtSaving(false); return }
+    const distKm = parseFloat(editTtForm.distance_km || '0')
+    const hrAvgVal = editTtForm.hr_avg ? parseInt(editTtForm.hr_avg) : null
+    const hrPartialVal = editTtForm.hr_partial_avg ? parseInt(editTtForm.hr_partial_avg) : null
+    const lthrCalc = calcLthrFromTT(editTtForm.tt_type, hrAvgVal, hrPartialVal)
+    const vdotVal = distKm > 0 ? calcVdot(distKm * 1000, finishSec) : null
+    const { error: err } = await supabase.from('tt_history').update({
+      tt_date: editTtForm.tt_date,
+      tt_type: editTtForm.tt_type,
+      distance_km: distKm > 0 ? distKm : 0,
+      finish_time_sec: finishSec,
+      hr_avg: hrAvgVal,
+      hr_partial_avg: hrPartialVal,
+      lthr_calculated: lthrCalc,
+      vdot: vdotVal,
+    }).eq('id', editTtId)
+    setEditTtSaving(false)
+    if (err) { setError(err.message); return }
+    if (lthrCalc) {
+      await supabase.from('athlete_settings').upsert(
+        { athlete_id: athleteId, lthr: lthrCalc, updated_at: new Date().toISOString() },
+        { onConflict: 'athlete_id' }
+      )
+    }
+    setEditTtId(null)
+    const { data } = await supabase.from('tt_history')
+      .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_partial_avg,lthr_calculated,vdot,notes')
+      .eq('athlete_id', athleteId as string).order('tt_date', { ascending: false })
+    if (data) setTtList(data)
+  }
+
   async function deleteTt(id: string) {
     if (!confirm('Hapus entri TT ini?')) return
     await supabase.from('tt_history').delete().eq('id', id)
@@ -482,7 +532,7 @@ export default function ProfilPage() {
 
       {/* ── IDENTITAS ATLET ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">Identitas Atlet</div>
+        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Identitas Atlet</div>
         <div className="flex items-center gap-4 mb-5">
           <div className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xl shrink-0">{initials}</div>
           <div>
@@ -502,8 +552,8 @@ export default function ProfilPage() {
             { label: 'Status Cedera', val: settings.cedera ?? '—', color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' },
           ].map(f => (
             <div key={f.label} className="bg-gray-50 rounded-lg p-3">
-              <div className="text-xs text-gray-400 mb-1">{f.label}</div>
-              <div className="text-sm font-semibold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
+              <div className="text-xs font-medium text-gray-500 mb-1">{f.label}</div>
+              <div className="text-base font-bold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
             </div>
           ))}
         </div>
@@ -562,7 +612,7 @@ export default function ProfilPage() {
 
       {/* ── DATA PERFORMA ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">Data Performa</div>
+        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Data Performa</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
           <div className="space-y-3 md:pr-6 pb-4 md:pb-0">
             {[
@@ -573,7 +623,7 @@ export default function ProfilPage() {
               { label: 'Magic Mile', val: latestTt && latestTt.distance_km ? magicMilePace(latestTt) : '—', note: 'Per km (Galloway)' },
             ].map(f => (
               <div key={f.label} className="flex justify-between items-start">
-                <div><div className="text-xs text-gray-400">{f.label}</div><div className="text-xs text-gray-300">{f.note}</div></div>
+                <div><div className="text-xs font-medium text-gray-500">{f.label}</div><div className="text-xs italic text-gray-400">{f.note}</div></div>
                 <div className="text-sm font-semibold text-gray-800">{f.val}</div>
               </div>
             ))}
@@ -593,8 +643,8 @@ export default function ProfilPage() {
               { label: 'Status Cedera', val: settings.cedera ?? '—', note: '', color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' },
             ].map(f => (
               <div key={f.label} className="flex justify-between items-start">
-                <div><div className="text-xs text-gray-400">{f.label}</div><div className="text-xs text-gray-300">{f.note}</div></div>
-                <div className="text-sm font-semibold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
+                <div><div className="text-xs font-medium text-gray-500">{f.label}</div><div className="text-xs italic text-gray-400">{f.note}</div></div>
+                <div className="text-base font-bold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
               </div>
             ))}
           </div>
@@ -603,9 +653,9 @@ export default function ProfilPage() {
 
       {/* ── PREDICTED HM ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">Predicted HM</div>
+        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Predicted HM</div>
         <div className="mb-4">
-          <div className="text-xs text-gray-400 mb-1">Predicted Finish</div>
+          <div className="text-xs font-medium text-gray-500 mb-1">Predicted Finish</div>
           <div className="text-4xl font-extrabold text-gray-800">{predHmSec ? fmtTime(Math.round(predHmSec)) : '—:—:—'}</div>
           {predHmSec && <div className="text-sm text-gray-400 mt-1">{secToPace(Math.round(predHmSec / 21.0975))}/km · HM 21.1 km</div>}
         </div>
@@ -632,7 +682,7 @@ export default function ProfilPage() {
 
       {/* ── EFFICIENCY & ECONOMY ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">Efficiency &amp; Economy</div>
+        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Efficiency &amp; Economy</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <div className="text-sm font-semibold text-gray-700 mb-2">⚡ Efficiency Factor (EF)</div>
@@ -704,9 +754,10 @@ export default function ProfilPage() {
                   ))}
                 </select>
                 {activeTtType && (
-                  <div className="flex gap-3 mt-1">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
                     <span className="text-xs text-indigo-500">{activeTtType.hint}</span>
                     <span className="text-xs font-semibold text-green-600">📍 {activeTtType.race}</span>
+                    <span className="text-xs font-semibold text-amber-600">🎯 {activeTtType.accuracy}</span>
                   </div>
                 )}
               </div>
@@ -741,15 +792,15 @@ export default function ProfilPage() {
             {/* Preview Real-time */}
             <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
               <div className="text-center">
-                <div className="text-xs text-gray-400 mb-1">Avg Pace</div>
+                <div className="text-xs font-medium text-gray-500 mb-1">Avg Pace</div>
                 <div className="text-lg font-extrabold text-indigo-700">{previewPace ? `${previewPace}/km` : '—'}</div>
               </div>
               <div className="text-center">
-                <div className="text-xs text-gray-400 mb-1">VDOT</div>
+                <div className="text-xs font-medium text-gray-500 mb-1">VDOT</div>
                 <div className="text-lg font-extrabold text-indigo-700">{previewVdot ?? '—'}</div>
               </div>
               <div className="text-center">
-                <div className="text-xs text-gray-400 mb-1">LTHR</div>
+                <div className="text-xs font-medium text-gray-500 mb-1">LTHR</div>
                 <div className="text-lg font-extrabold text-red-600">{previewLthr ? `${previewLthr} bpm` : '—'}</div>
               </div>
             </div>
@@ -779,23 +830,102 @@ export default function ProfilPage() {
                   const isActive = idx === 0
                   const predHm = tt.distance_km ? predictTime(tt.distance_km * 1000, tt.finish_time_sec, 21097.5) : null
                   const pace = tt.distance_km ? secToPace(Math.round(tt.finish_time_sec / tt.distance_km)) : '—'
+                  const isEditing = editTtId === tt.id
+                  const editType = TT_TYPES.find(t => t.value === editTtForm.tt_type)
+                  const editFinishSec = isEditing ? parseTimeToSec(editTtForm.finish_time) : null
+                  const editDistKm = isEditing ? parseFloat(editTtForm.distance_km || '0') : 0
+                  const editHrAvg = isEditing && editTtForm.hr_avg ? parseInt(editTtForm.hr_avg) : null
+                  const editHrPartial = isEditing && editTtForm.hr_partial_avg ? parseInt(editTtForm.hr_partial_avg) : null
+                  const editPreviewPace = (editDistKm > 0 && editFinishSec) ? secToPace(Math.round(editFinishSec / editDistKm)) : null
+                  const editPreviewVdot = (editDistKm > 0 && editFinishSec) ? calcVdot(editDistKm * 1000, editFinishSec) : null
+                  const editPreviewLthr = isEditing ? calcLthrFromTT(editTtForm.tt_type, editHrAvg, editHrPartial) : null
+                  const editNeedsPartial = editType?.partialLabel ?? null
                   return (
-                    <tr key={tt.id} className={`border-b border-gray-50 ${isActive ? 'bg-blue-50' : ''}`}>
+                    <>
+                    <tr key={tt.id} className={`border-b border-gray-50 ${isActive ? 'bg-blue-50' : ''} ${isEditing ? 'bg-yellow-50' : ''}`}>
                       <td className="py-2 pr-3 text-xs text-gray-500 whitespace-nowrap">
                         {new Date(tt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                         {isActive && <div className="text-blue-600 font-bold text-xs">▶ Aktif</div>}
                       </td>
-                      <td className="py-2 pr-3 font-medium text-xs whitespace-nowrap">{TT_TYPES.find(t => t.value === tt.tt_type)?.label ?? tt.tt_type ?? '—'}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap">{fmtTime(tt.finish_time_sec)}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap">{pace}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap">{predHm ? fmtTime(Math.round(predHm)) : '—'}</td>
-                      <td className="py-2 pr-3 font-semibold text-indigo-600">{tt.vdot ?? '—'}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap">{tt.distance_km ? magicMilePace(tt) : '—'}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        <div className="text-xs font-semibold text-gray-700">{TT_TYPES.find(t => t.value === tt.tt_type)?.label ?? tt.tt_type ?? '—'}</div>
+                        <div className="text-xs text-green-600">{TT_TYPES.find(t => t.value === tt.tt_type)?.race ?? ''}</div>
+                      </td>
+                      <td className="py-2 pr-3 whitespace-nowrap text-sm">{fmtTime(tt.finish_time_sec)}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap text-sm">{pace}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap text-sm">{predHm ? fmtTime(Math.round(predHm)) : '—'}</td>
+                      <td className="py-2 pr-3 font-bold text-indigo-600 text-sm">{tt.vdot ?? '—'}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap text-sm">{tt.distance_km ? magicMilePace(tt) : '—'}</td>
                       <td className="py-2 pr-3 whitespace-nowrap">
                         {tt.lthr_calculated ? <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{tt.lthr_calculated} bpm</span> : '—'}
                       </td>
-                      <td className="py-2"><button onClick={() => deleteTt(tt.id)} className="text-xs text-red-400 hover:text-red-600">Hapus</button></td>
+                      <td className="py-2 whitespace-nowrap">
+                        <button onClick={() => isEditing ? setEditTtId(null) : openEditTt(tt)} className="text-xs text-indigo-400 hover:text-indigo-600 mr-2">{isEditing ? 'Batal' : 'Edit'}</button>
+                        <button onClick={() => deleteTt(tt.id)} className="text-xs text-red-400 hover:text-red-600">Hapus</button>
+                      </td>
                     </tr>
+                    {isEditing && (
+                      <tr key={`edit-${tt.id}`} className="bg-yellow-50 border-b border-yellow-100">
+                        <td colSpan={9} className="px-3 py-4">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Tanggal</label>
+                              <input type="date" value={editTtForm.tt_date} onChange={e => setEditTtForm(p => ({ ...p, tt_date: e.target.value }))}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Jenis TT</label>
+                              <select value={editTtForm.tt_type} onChange={e => setEditTtForm(p => ({ ...p, tt_type: e.target.value, hr_partial_avg: '' }))}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                {TT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label} — {t.race}</option>)}
+                              </select>
+                              {editType && <div className="text-xs text-amber-600 mt-1">🎯 {editType.accuracy}</div>}
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Jarak (km)</label>
+                              <input type="number" step="0.01" value={editTtForm.distance_km} onChange={e => setEditTtForm(p => ({ ...p, distance_km: e.target.value }))}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Total Waktu</label>
+                              <input type="text" value={editTtForm.finish_time} onChange={e => setEditTtForm(p => ({ ...p, finish_time: e.target.value }))}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-500 mb-1">Avg HR (bpm)</label>
+                              <input type="number" value={editTtForm.hr_avg} onChange={e => setEditTtForm(p => ({ ...p, hr_avg: e.target.value }))}
+                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                            </div>
+                            {editNeedsPartial && (
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">{editNeedsPartial}</label>
+                                <input type="number" value={editTtForm.hr_partial_avg} onChange={e => setEditTtForm(p => ({ ...p, hr_partial_avg: e.target.value }))}
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                            <div className="text-center">
+                              <div className="text-xs font-medium text-gray-500 mb-1">Avg Pace</div>
+                              <div className="text-base font-extrabold text-indigo-700">{editPreviewPace ? `${editPreviewPace}/km` : '—'}</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-xs font-medium text-gray-500 mb-1">VDOT</div>
+                              <div className="text-base font-extrabold text-indigo-700">{editPreviewVdot ?? '—'}</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-xs font-medium text-gray-500 mb-1">LTHR</div>
+                              <div className="text-base font-extrabold text-red-600">{editPreviewLthr ? `${editPreviewLthr} bpm` : '—'}</div>
+                            </div>
+                          </div>
+                          <button onClick={saveEditTt} disabled={editTtSaving}
+                            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                            {editTtSaving ? 'Menyimpan...' : 'Simpan Perubahan'}
+                          </button>
+                        </td>
+                      </tr>
+                    )}
+                    </>
                   )
                 })}
               </tbody>
@@ -806,7 +936,7 @@ export default function ProfilPage() {
 
       {/* ── HEAT STRESS INDEX ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">🌡️ Heat Stress Index</div>
+        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">🌡️ Heat Stress Index</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div>
