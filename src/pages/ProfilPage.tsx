@@ -4,22 +4,18 @@ import { useAthlete } from '../hooks/useAthlete'
 import { PageHeader } from '../components/ui/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+
 interface AthleteSettings {
   lthr: number | null
-  easy_pace_min: number | null
-  easy_pace_sec: number | null
   resting_hr: number | null
   max_hr: number | null
   weight_kg: number | null
   height_cm: number | null
-  training_age_years: number | null
   domisili: string | null
   birth_date: string | null
   cedera: string | null
   start_training_date: string | null
-  lr_distance_km: number | null
-  lr_pace_min: number | null
-  lr_pace_sec: number | null
 }
 
 interface TtEntry {
@@ -27,8 +23,11 @@ interface TtEntry {
   tt_date: string
   distance_km: number
   finish_time_sec: number
-  vdot: number | null
+  tt_type: string | null
   hr_avg: number | null
+  hr_last_half: number | null
+  lthr_calculated: number | null
+  vdot: number | null
   notes: string | null
 }
 
@@ -39,6 +38,7 @@ interface TrainingSession {
   pace_avg_sec: number | null
   hr_avg: number | null
   trimp: number | null
+  distance_km: number | null
   duration_sec: number | null
 }
 
@@ -48,6 +48,8 @@ interface HrHistoryEntry {
   recorded_date: string
 }
 
+// ─── Algorithms ──────────────────────────────────────────────────────────────
+
 function calcVdot(distanceM: number, finishTimeSec: number): number {
   const v = distanceM / finishTimeSec * 60
   const vo2 = -4.60 + 0.182258 * v + 0.000104 * v * v
@@ -56,30 +58,37 @@ function calcVdot(distanceM: number, finishTimeSec: number): number {
   return parseFloat((vo2 / pctVo2).toFixed(1))
 }
 
-function vdotToPaces(vdot: number) {
-  const zones = [
-    { name: 'Easy', pct: 0.65 },
-    { name: 'Tempo', pct: 0.88 },
-    { name: 'SubLT', pct: 0.92 },
-    { name: 'VO2max', pct: 0.98 },
-    { name: 'Race (HM)', pct: 0.855 },
-  ]
+function calcLthrFromTT(ttType: string, hrAvg: number | null, hrLastHalf: number | null): number | null {
+  if (!hrAvg) return null
+  switch (ttType) {
+    case '8min':   return Math.round(hrAvg * 0.952)
+    case '20min':  return Math.round(hrAvg * 0.971)
+    case '30min':  return hrLastHalf ? Math.round(hrLastHalf) : null
+    case '45min':  return Math.round(hrAvg * 0.987)
+    case '60min':  return hrLastHalf ? Math.round(hrLastHalf) : null
+    default:       return null
+  }
+}
+
+function vdotToPaces(vdot: number): Record<string, number> {
+  const pcts = [0.55, 0.65, 0.70, 0.75, 0.83, 0.88, 0.92, 0.97, 1.03]
   const result: Record<string, number> = {}
-  for (const z of zones) {
-    let lo = 100, hi = 600
-    for (let i = 0; i < 60; i++) {
+  const keys = ['Recovery','Easy (LR)','Easy Run','Medium 1','Tempo','Threshold','Aerobic Power','Interval','Anaerob End.']
+  pcts.forEach((pct, i) => {
+    let lo = 80, hi = 700
+    for (let j = 0; j < 60; j++) {
       const mid = (lo + hi) / 2
       const vo2atV = -4.60 + 0.182258 * mid + 0.000104 * mid * mid
-      if (vo2atV / vdot < z.pct) lo = mid; else hi = mid
+      if (vo2atV / vdot < pct) lo = mid; else hi = mid
     }
-    result[z.name] = Math.round(1000 / ((lo + hi) / 2) * 60)
-  }
+    result[keys[i]] = Math.round(1000 / ((lo + hi) / 2) * 60)
+  })
   return result
 }
 
 function easyPaceFromVdot(vdot: number): string {
   const paces = vdotToPaces(vdot)
-  return secToPace(paces['Easy'])
+  return secToPace(paces['Easy Run'])
 }
 
 function predictTime(knownDistM: number, knownTimeSec: number, targetDistM: number): number {
@@ -113,39 +122,43 @@ function parseTimeToSec(val: string): number | null {
   return null
 }
 
-function calcBmi(heightCm: number, weightKg: number) {
-  const bmi = weightKg / Math.pow(heightCm / 100, 2)
+function calcBmi(h: number, w: number) {
+  const bmi = w / Math.pow(h / 100, 2)
   const label = bmi < 18.5 ? 'Underweight' : bmi < 25 ? 'Normal' : bmi < 30 ? 'Overweight' : 'Obese'
   const color = bmi < 25 ? '#10b981' : bmi < 30 ? '#f59e0b' : '#ef4444'
   return { bmi: bmi.toFixed(1), label, color }
 }
 
 function calcAge(birthDate: string): number {
-  const today = new Date()
-  const dob = new Date(birthDate)
+  const today = new Date(), dob = new Date(birthDate)
   let age = today.getFullYear() - dob.getFullYear()
   const m = today.getMonth() - dob.getMonth()
   if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--
   return age
 }
 
-function calcTrainingAge(startDate: string | null): { years: number; months: number; total: number } {
-  if (!startDate) return { years: 0, months: 0, total: 0 }
-  const start = new Date(startDate)
-  const now = new Date()
-  const months = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth())
-  return { years: Math.floor(months / 12), months: months % 12, total: months / 12 }
+function calcTrainingAge(startDate: string | null): string {
+  if (!startDate) return '—'
+  const start = new Date(startDate), now = new Date()
+  const totalMonths = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth())
+  const years = Math.floor(totalMonths / 12)
+  const months = totalMonths % 12
+  if (years === 0) return `${months} Bulan`
+  if (months === 0) return `${years} Tahun`
+  return `${years} Tahun ${months} Bulan`
 }
 
-function getVdotReliability(taYears: number) {
-  if (taYears < 2) return { icon: '🔴', label: 'Akurasi ±8%', note: 'Running economy masih berkembang. Potensi aktual bisa 5–10% lebih baik dari VDOT.' }
-  if (taYears < 5) return { icon: '🟡', label: 'Akurasi ±5%', note: 'Running economy cukup stabil. Potensi aktual mungkin 2–5% lebih baik.' }
+function getVdotReliability(startDate: string | null) {
+  if (!startDate) return { icon: '🔴', label: 'Akurasi ±8%', note: 'Running economy masih berkembang.' }
+  const months = (new Date().getFullYear() - new Date(startDate).getFullYear()) * 12 + (new Date().getMonth() - new Date(startDate).getMonth())
+  const years = months / 12
+  if (years < 2) return { icon: '🔴', label: 'Akurasi ±8%', note: 'Running economy masih berkembang. Potensi aktual bisa 5–10% lebih baik dari VDOT.' }
+  if (years < 5) return { icon: '🟡', label: 'Akurasi ±5%', note: 'Running economy cukup stabil. Potensi aktual mungkin 2–5% lebih baik.' }
   return { icon: '🟢', label: 'Akurasi ±3%', note: 'Running economy sudah mature. VDOT mencerminkan potensi realistis.' }
 }
 
 function calcEF(sessions: TrainingSession[]) {
-  const easyLR = sessions.filter(s => s.session_type === 'Easy' || s.session_type === 'LR')
-  const valid = easyLR.filter(s => s.pace_avg_min != null && s.hr_avg != null && s.hr_avg > 0)
+  const valid = sessions.filter(s => (s.session_type === 'Easy' || s.session_type === 'LR') && s.pace_avg_min != null && s.hr_avg && s.hr_avg > 0)
   if (!valid.length) return null
   const efs = valid.map(s => {
     const paceSec = (s.pace_avg_min! * 60) + (s.pace_avg_sec ?? 0)
@@ -160,7 +173,7 @@ function calcEF(sessions: TrainingSession[]) {
 
 function calcPES(sessions: TrainingSession[]) {
   if (sessions.length < 3) return null
-  const withPaceHr = sessions.filter(s => s.pace_avg_min != null && s.hr_avg != null && s.hr_avg > 0)
+  const withPaceHr = sessions.filter(s => s.pace_avg_min != null && s.hr_avg && s.hr_avg > 0)
   if (!withPaceHr.length) return null
   const avgEf = withPaceHr.reduce((acc, s) => {
     const paceSec = (s.pace_avg_min! * 60) + (s.pace_avg_sec ?? 0)
@@ -168,15 +181,13 @@ function calcPES(sessions: TrainingSession[]) {
   }, 0) / withPaceHr.length
   const phrNorm = Math.min(100, Math.round(avgEf / 1.4 * 100))
   const withTrimp = sessions.filter(s => s.trimp)
-  const avgTrimp = withTrimp.length ? withTrimp.reduce((a, s) => a + s.trimp!, 0) / withTrimp.length : 0
-  const teNorm = Math.min(100, Math.round(avgTrimp / 80 * 100))
+  const teNorm = withTrimp.length ? Math.min(100, Math.round(withTrimp.reduce((a, s) => a + s.trimp!, 0) / withTrimp.length / 80 * 100)) : 0
   const rhrNorm = 70
-  const z12 = sessions.filter(s => s.session_type === 'Easy' || s.session_type === 'LR').length
-  const z12Norm = Math.min(100, Math.round(z12 / sessions.length * 100))
+  const z12Norm = Math.min(100, Math.round(sessions.filter(s => s.session_type === 'Easy' || s.session_type === 'LR').length / sessions.length * 100))
   const pes = Math.round(phrNorm * 0.4 + teNorm * 0.25 + rhrNorm * 0.2 + z12Norm * 0.15)
   const color = pes >= 80 ? '#10b981' : pes >= 60 ? '#3b82f6' : pes >= 40 ? '#f59e0b' : '#ef4444'
   const label = pes >= 80 ? 'Excellent' : pes >= 60 ? 'Baik' : pes >= 40 ? 'Cukup' : 'Perlu Ditingkatkan'
-  const msg = pes >= 80 ? 'Efisiensi latihan sangat baik.' : pes >= 60 ? 'Latihan cukup efisien, ada ruang peningkatan.' : 'Fokus pada sesi easy dan konsistensi.'
+  const msg = pes >= 80 ? 'Efisiensi latihan sangat baik.' : pes >= 60 ? 'Latihan cukup efisien.' : 'Fokus pada sesi easy dan konsistensi.'
   return { pes, label, color, msg, phrNorm, teNorm, rhrNorm, z12Norm }
 }
 
@@ -196,25 +207,36 @@ function calcHSI(temp: number, rh: number) {
   return { wbgt, hrDrift, penalties, risk, emoji, cls }
 }
 
-const TT_DISTANCES = [
-  { label: 'Magic Mile (1.6 km)', value: 1.6 },
-  { label: '5K', value: 5.0 },
-  { label: '10K', value: 10.0 },
-  { label: 'Half Marathon', value: 21.0975 },
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const TT_TYPES = [
+  { value: '8min',  label: '8 Menit (→ LTHR 5K)',   hint: 'LTHR = HR avg × 0.952' },
+  { value: '20min', label: '20 Menit (→ LTHR 10K)',  hint: 'LTHR = HR avg × 0.971' },
+  { value: '30min', label: '30 Menit (→ LTHR HM)',   hint: 'LTHR = HR avg menit 11–30' },
+  { value: '45min', label: '45 Menit (→ LTHR FM)',   hint: 'LTHR = HR avg × 0.987' },
+  { value: '60min', label: '60 Menit (→ LTHR Ultra)',hint: 'LTHR = HR avg menit 31–60' },
+  { value: '5K',    label: '5K Race',                hint: 'VDOT only, no LTHR' },
+  { value: '10K',   label: '10K Race',               hint: 'VDOT only, no LTHR' },
+  { value: 'HM',    label: 'Half Marathon',          hint: 'VDOT only, no LTHR' },
+  { value: 'FM',    label: 'Full Marathon',          hint: 'VDOT only, no LTHR' },
 ]
+
+const TT_DISTANCES: Record<string, number> = {
+  '8min': 0, '20min': 0, '30min': 0, '45min': 0, '60min': 0,
+  '5K': 5.0, '10K': 10.0, 'HM': 21.0975, 'FM': 42.195,
+}
 
 const RACE_TARGETS = [
   { label: '🏁 Maybank <2:30', target: 9000, color: '#6366f1' },
-  { label: '⭐ Pocari <2:15', target: 8100, color: '#f59e0b' },
+  { label: '⭐ Pocari <2:15',  target: 8100, color: '#f59e0b' },
 ]
 
 const emptySettings: AthleteSettings = {
-  lthr: null, easy_pace_min: null, easy_pace_sec: null,
-  resting_hr: null, max_hr: null, weight_kg: null,
-  height_cm: null, training_age_years: null, domisili: null,
-  birth_date: null, cedera: null, start_training_date: null,
-  lr_distance_km: null, lr_pace_min: null, lr_pace_sec: null,
+  lthr: null, resting_hr: null, max_hr: null, weight_kg: null,
+  height_cm: null, domisili: null, birth_date: null, cedera: null, start_training_date: null,
 }
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function ProfilPage() {
   const { athlete } = useAthlete()
@@ -225,14 +247,18 @@ export default function ProfilPage() {
   const [ttList, setTtList] = useState<TtEntry[]>([])
   const [sessions, setSessions] = useState<TrainingSession[]>([])
   const [hrHistory, setHrHistory] = useState<HrHistoryEntry[]>([])
+  const [lastLongRun, setLastLongRun] = useState<TrainingSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
-  const [settingsForm, setSettingsForm] = useState<Record<string, string>>({})
+  const [editForm, setEditForm] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwMsg, setPwMsg] = useState<string | null>(null)
   const [showTtForm, setShowTtForm] = useState(false)
   const [ttForm, setTtForm] = useState({
     tt_date: new Date().toISOString().split('T')[0],
-    distance_km: '5.0', finish_time: '', hr_avg: '', notes: '',
+    tt_type: '5K', distance_km: '5.0', finish_time: '',
+    hr_avg: '', hr_last_half: '', notes: '',
   })
   const [ttSaving, setTtSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -248,133 +274,188 @@ export default function ProfilPage() {
     let cancelled = false
     async function load() {
       setLoading(true)
-      const [sRes, ttRes, sesRes, hrRes] = await Promise.all([
+      const [sRes, ttRes, sesRes, hrRes, lrRes] = await Promise.all([
         supabase.from('athlete_settings')
-          .select('lthr,easy_pace_min,easy_pace_sec,resting_hr,max_hr,weight_kg,height_cm,training_age_years,domisili,birth_date,cedera,start_training_date,lr_distance_km,lr_pace_min,lr_pace_sec')
+          .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date')
           .eq('athlete_id', athleteId as string).maybeSingle(),
         supabase.from('tt_history')
-          .select('id,tt_date,distance_km,finish_time_sec,vdot,hr_avg,notes')
+          .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_last_half,lthr_calculated,vdot,notes')
           .eq('athlete_id', athleteId as string).order('tt_date', { ascending: false }),
         supabase.from('training_sessions')
-          .select('session_date,session_type,pace_avg_min,pace_avg_sec,hr_avg,trimp,duration_sec')
+          .select('session_date,session_type,pace_avg_min,pace_avg_sec,hr_avg,trimp,distance_km,duration_sec')
           .eq('athlete_id', athleteId as string).order('session_date', { ascending: false }).limit(90),
         supabase.from('hr_history')
           .select('hr_type,hr_value,recorded_date')
           .eq('athlete_id', athleteId as string).order('recorded_date', { ascending: false }).limit(20),
+        supabase.from('training_sessions')
+          .select('session_date,session_type,pace_avg_min,pace_avg_sec,hr_avg,trimp,distance_km,duration_sec')
+          .eq('athlete_id', athleteId as string)
+          .or('distance_km.gte.10,duration_sec.gte.5400')
+          .order('session_date', { ascending: false }).limit(1),
       ])
       if (cancelled) return
       if (sRes.data) setSettings(sRes.data as AthleteSettings)
       if (ttRes.data) setTtList(ttRes.data)
       if (sesRes.data) setSessions(sesRes.data)
       if (hrRes.data) setHrHistory(hrRes.data)
+      if (lrRes.data && lrRes.data.length > 0) setLastLongRun(lrRes.data[0])
       setLoading(false)
     }
     load()
     return () => { cancelled = true }
   }, [athleteId])
 
+  // ─── Derived ─────────────────────────────────────────────────────────────
+
   const latestTt = ttList[0] ?? null
   const vdot = latestTt?.vdot ?? null
-  const taFromStart = calcTrainingAge(settings.start_training_date)
-  const taYears = settings.start_training_date ? taFromStart.total : (settings.training_age_years ?? 0)
-  const taStr = settings.start_training_date
-    ? (taFromStart.years > 0 ? `${taFromStart.years} tahun${taFromStart.months > 0 ? ' ' + taFromStart.months + ' bulan' : ''}` : `${taFromStart.months} bulan`)
-    : (settings.training_age_years ? `${settings.training_age_years} tahun` : '—')
-
-  const age = settings.birth_date ? calcAge(settings.birth_date) : null
-  const bmiData = (settings.height_cm && settings.weight_kg) ? calcBmi(settings.height_cm, settings.weight_kg) : null
-  const lthrRef = hrHistory.find(h => h.hr_type === 'lthr')?.hr_value ?? settings.lthr
+  const lthrFromTt = ttList.find(t => t.lthr_calculated != null)?.lthr_calculated ?? null
+  const lthrRef = lthrFromTt ?? settings.lthr
   const rhrValues = hrHistory.filter(h => h.hr_type === 'rhr').map(h => h.hr_value)
   const rhrAvg = rhrValues.length ? Math.round(rhrValues.reduce((a, b) => a + b, 0) / rhrValues.length) : (settings.resting_hr ?? null)
   const maxHR = settings.max_hr ?? (lthrRef ? Math.round(lthrRef / 0.88) : null)
   const hrr = (lthrRef && rhrAvg && maxHR) ? maxHR - rhrAvg : null
+  const age = settings.birth_date ? calcAge(settings.birth_date) : null
+  const bmiData = (settings.height_cm && settings.weight_kg) ? calcBmi(settings.height_cm, settings.weight_kg) : null
+  const taStr = calcTrainingAge(settings.start_training_date)
+  const vdotRel = getVdotReliability(settings.start_training_date)
   const predHmSec = latestTt ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 21097.5) : null
   const pred10kSec = latestTt ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 10000) : null
-  const vdotRel = getVdotReliability(taYears)
+  const easyPaceStr = vdot ? easyPaceFromVdot(vdot) : null
   const ef = calcEF(sessions)
   const pes = calcPES(sessions)
-  const easyPaceStr = vdot ? easyPaceFromVdot(vdot) : (settings.easy_pace_min != null && settings.easy_pace_sec != null ? `${settings.easy_pace_min}:${String(settings.easy_pace_sec).padStart(2, '0')}` : null)
-  const basePaces: Record<string, number> = vdot ? vdotToPaces(vdot) : {}
+  const basePaces = vdot ? vdotToPaces(vdot) : {}
   const hsi = calcHSI(hsiState.temp, hsiState.rh)
-  const lrStr = (settings.lr_distance_km && settings.lr_pace_min != null) ? `${settings.lr_distance_km} km @ ${settings.lr_pace_min}:${String(settings.lr_pace_sec ?? 0).padStart(2, '0')}/km` : '—'
+
+  const lrStr = lastLongRun
+    ? (() => {
+        const dist = lastLongRun.distance_km ? `${lastLongRun.distance_km} km` : '—'
+        const pace = lastLongRun.pace_avg_min != null
+          ? ` @ ${lastLongRun.pace_avg_min}:${String(lastLongRun.pace_avg_sec ?? 0).padStart(2, '0')}/km`
+          : ''
+        const date = new Date(lastLongRun.session_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+        return `${dist}${pace} (${date})`
+      })()
+    : '—'
+
   const initials = (athlete?.name ?? 'A').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
 
-  function openEdit() {
-    setSettingsForm({
-      lthr: settings.lthr?.toString() ?? '',
-      resting_hr: settings.resting_hr?.toString() ?? '',
-      max_hr: settings.max_hr?.toString() ?? '',
-      easy_pace_min: settings.easy_pace_min?.toString() ?? '',
-      easy_pace_sec: settings.easy_pace_sec?.toString() ?? '',
-      weight_kg: settings.weight_kg?.toString() ?? '',
-      height_cm: settings.height_cm?.toString() ?? '',
-      training_age_years: settings.training_age_years?.toString() ?? '',
-      domisili: settings.domisili ?? '',
-      birth_date: settings.birth_date ?? '',
-      cedera: settings.cedera ?? 'Tidak ada',
-      start_training_date: settings.start_training_date ?? '',
-      lr_distance_km: settings.lr_distance_km?.toString() ?? '',
-      lr_pace_min: settings.lr_pace_min?.toString() ?? '',
-      lr_pace_sec: settings.lr_pace_sec?.toString() ?? '',
-    })
-    setEditMode(true)
+  // TT form: auto-fill distance from tt_type
+  function onTtTypeChange(val: string) {
+    const dist = TT_DISTANCES[val] ?? 0
+    setTtForm(p => ({ ...p, tt_type: val, distance_km: dist > 0 ? dist.toString() : '' }))
   }
 
-  async function saveSettings() {
+  const needsHrLastHalf = ttForm.tt_type === '30min' || ttForm.tt_type === '60min'
+  const needsDistance = !['8min','20min','30min','45min','60min'].includes(ttForm.tt_type)
+
+  // ─── Handlers ────────────────────────────────────────────────────────────
+
+  function openEdit() {
+    setEditForm({
+      name: athlete?.name ?? '',
+      whatsapp: (athlete as Record<string, unknown>)?.whatsapp as string ?? '',
+      birth_date: settings.birth_date ?? '',
+      height_cm: settings.height_cm?.toString() ?? '',
+      weight_kg: settings.weight_kg?.toString() ?? '',
+      domisili: settings.domisili ?? '',
+      cedera: settings.cedera ?? 'Tidak ada',
+      start_training_date: settings.start_training_date ?? '',
+    })
+    setEditMode(true)
+    setPwMsg(null)
+  }
+
+  async function saveProfile() {
     if (!athleteId) return
     setSaving(true); setError(null)
-    const p = settingsForm
+    const p = editForm
+
+    // Update athletes.name & whatsapp
+    const { error: nameErr } = await supabase.from('athletes')
+      .update({ name: p.name || athlete?.name, whatsapp: p.whatsapp || null })
+      .eq('id', athleteId as string)
+    if (nameErr) { setError(nameErr.message); setSaving(false); return }
+
+    // Update athlete_settings
     const payload = {
       athlete_id: athleteId,
-      lthr: p.lthr ? parseInt(p.lthr) : null,
-      resting_hr: p.resting_hr ? parseInt(p.resting_hr) : null,
-      max_hr: p.max_hr ? parseInt(p.max_hr) : null,
-      easy_pace_min: p.easy_pace_min ? parseInt(p.easy_pace_min) : null,
-      easy_pace_sec: p.easy_pace_sec ? parseInt(p.easy_pace_sec) : null,
-      weight_kg: p.weight_kg ? parseFloat(p.weight_kg) : null,
       height_cm: p.height_cm ? parseInt(p.height_cm) : null,
-      training_age_years: p.training_age_years ? parseInt(p.training_age_years) : null,
+      weight_kg: p.weight_kg ? parseFloat(p.weight_kg) : null,
       domisili: p.domisili || null,
       birth_date: p.birth_date || null,
       cedera: p.cedera || 'Tidak ada',
       start_training_date: p.start_training_date || null,
-      lr_distance_km: p.lr_distance_km ? parseFloat(p.lr_distance_km) : null,
-      lr_pace_min: p.lr_pace_min ? parseInt(p.lr_pace_min) : null,
-      lr_pace_sec: p.lr_pace_sec ? parseInt(p.lr_pace_sec) : null,
       updated_at: new Date().toISOString(),
     }
-    const { error: err } = await supabase.from('athlete_settings').upsert(payload, { onConflict: 'athlete_id' })
+    const { error: settErr } = await supabase.from('athlete_settings')
+      .upsert(payload, { onConflict: 'athlete_id' })
     setSaving(false)
-    if (err) { setError(err.message); return }
+    if (settErr) { setError(settErr.message); return }
     setEditMode(false)
+    // Reload settings
     const { data } = await supabase.from('athlete_settings')
-      .select('lthr,easy_pace_min,easy_pace_sec,resting_hr,max_hr,weight_kg,height_cm,training_age_years,domisili,birth_date,cedera,start_training_date,lr_distance_km,lr_pace_min,lr_pace_sec')
+      .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date')
       .eq('athlete_id', athleteId as string).maybeSingle()
     if (data) setSettings(data as AthleteSettings)
+  }
+
+  async function sendPasswordReset() {
+    const email = athlete?.email
+    if (!email) return
+    setPwLoading(true); setPwMsg(null)
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setPwLoading(false)
+    if (err) setPwMsg(`❌ ${err.message}`)
+    else setPwMsg('✅ Email reset password telah dikirim. Cek inbox Anda.')
   }
 
   async function saveTt() {
     if (!athleteId) return
     setError(null)
+    const isTimeBased = ['8min','20min','30min','45min','60min'].includes(ttForm.tt_type)
     const finishSec = parseTimeToSec(ttForm.finish_time)
     if (!finishSec) { setError('Format waktu tidak valid. Gunakan MM:SS atau HH:MM:SS.'); return }
-    const distM = parseFloat(ttForm.distance_km) * 1000
-    const vdotVal = calcVdot(distM, finishSec)
+    const distKm = isTimeBased
+      ? parseFloat(ttForm.distance_km || '0')
+      : (TT_DISTANCES[ttForm.tt_type] || parseFloat(ttForm.distance_km))
+    const lthrCalc = calcLthrFromTT(
+      ttForm.tt_type,
+      ttForm.hr_avg ? parseInt(ttForm.hr_avg) : null,
+      ttForm.hr_last_half ? parseInt(ttForm.hr_last_half) : null,
+    )
+    const vdotVal = distKm > 0 ? calcVdot(distKm * 1000, finishSec) : null
     setTtSaving(true)
     const { error: err } = await supabase.from('tt_history').insert({
       athlete_id: athleteId,
       tt_date: ttForm.tt_date,
-      distance_km: parseFloat(ttForm.distance_km),
+      tt_type: ttForm.tt_type,
+      distance_km: distKm > 0 ? distKm : 0,
       finish_time_sec: finishSec,
-      vdot: vdotVal,
       hr_avg: ttForm.hr_avg ? parseInt(ttForm.hr_avg) : null,
+      hr_last_half: ttForm.hr_last_half ? parseInt(ttForm.hr_last_half) : null,
+      lthr_calculated: lthrCalc,
+      vdot: vdotVal,
       notes: ttForm.notes || null,
     })
     setTtSaving(false)
     if (err) { setError(err.message); return }
-    setTtForm({ tt_date: new Date().toISOString().split('T')[0], distance_km: '5.0', finish_time: '', hr_avg: '', notes: '' })
+
+    // Mirror LTHR ke athlete_settings jika ada
+    if (lthrCalc) {
+      await supabase.from('athlete_settings').upsert(
+        { athlete_id: athleteId, lthr: lthrCalc, updated_at: new Date().toISOString() },
+        { onConflict: 'athlete_id' }
+      )
+    }
+
+    setTtForm({ tt_date: new Date().toISOString().split('T')[0], tt_type: '5K', distance_km: '5.0', finish_time: '', hr_avg: '', hr_last_half: '', notes: '' })
     setShowTtForm(false)
-    const { data } = await supabase.from('tt_history').select('id,tt_date,distance_km,finish_time_sec,vdot,hr_avg,notes').eq('athlete_id', athleteId as string).order('tt_date', { ascending: false })
+    const { data } = await supabase.from('tt_history')
+      .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_last_half,lthr_calculated,vdot,notes')
+      .eq('athlete_id', athleteId as string).order('tt_date', { ascending: false })
     if (data) setTtList(data)
   }
 
@@ -386,13 +467,15 @@ export default function ProfilPage() {
 
   if (loading) return <div className="p-6"><PageHeader title="Profil & Analisis" subtitle="Memuat data..." /></div>
 
+  // ─── Render ───────────────────────────────────────────────────────────────
+
   return (
-    <div className="p-6 max-w-4xl space-y-6">
+    <div className="p-6 max-w-6xl space-y-6">
       <PageHeader
         title="Profil & Analisis"
         subtitle="Data atlet, fitness scoring, prediksi race, dan efficiency metrics"
         action={!editMode ? (
-          <button onClick={openEdit} className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2">
+          <button onClick={openEdit} className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors">
             ✏️ Edit Profil
           </button>
         ) : undefined}
@@ -400,19 +483,19 @@ export default function ProfilPage() {
 
       {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{error}</div>}
 
-      {/* IDENTITAS ATLET */}
+      {/* ── IDENTITAS ATLET ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">Identitas Atlet</div>
         <div className="flex items-center gap-4 mb-5">
-          <div className="w-12 h-12 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-lg shrink-0">{initials}</div>
+          <div className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xl shrink-0">{initials}</div>
           <div>
-            <div className="font-bold text-gray-800 text-lg">{athlete?.name ?? '—'}</div>
+            <div className="font-bold text-gray-800 text-xl">{athlete?.name ?? '—'}</div>
             <div className="text-sm text-gray-500">{settings.domisili ?? '—'}</div>
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Usia', val: age ? `${age} thn` : '—' },
+            { label: 'Usia', val: age ? `${age} tahun` : '—' },
             { label: 'Tinggi / Berat', val: `${settings.height_cm ?? '—'} cm · ${settings.weight_kg ?? '—'} kg` },
             { label: 'BMI', val: bmiData ? `${bmiData.bmi} (${bmiData.label})` : '—', color: bmiData?.color },
             { label: 'Training Age', val: taStr },
@@ -429,72 +512,49 @@ export default function ProfilPage() {
         </div>
       </section>
 
-      {/* EDIT FORM */}
+      {/* ── EDIT PROFIL ── */}
       {editMode && (
         <section className="bg-white rounded-xl shadow-sm p-6">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Edit Profil</h3>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Tanggal Lahir</label>
-              <input type="date" value={settingsForm.birth_date ?? ''} onChange={e => setSettingsForm(p => ({ ...p, birth_date: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              {settingsForm.birth_date && <div className="text-xs text-indigo-600 mt-1">Usia saat ini: {calcAge(settingsForm.birth_date)} tahun</div>}
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
             {[
-              { key: 'lthr', label: 'LTHR (bpm)', ph: '160' },
-              { key: 'resting_hr', label: 'HR Rest (bpm)', ph: '48' },
-              { key: 'max_hr', label: 'HR Max (bpm)', ph: '185' },
-              { key: 'easy_pace_min', label: 'Easy Pace (menit)', ph: '7' },
-              { key: 'easy_pace_sec', label: 'Easy Pace (detik)', ph: '30' },
-              { key: 'weight_kg', label: 'Berat (kg)', ph: '69' },
-              { key: 'height_cm', label: 'Tinggi (cm)', ph: '164' },
-              { key: 'training_age_years', label: 'Training Age (tahun)', ph: '6' },
+              { key: 'name', label: 'Nama Lengkap', ph: 'Andita Sely Bestoro', type: 'text' },
+              { key: 'whatsapp', label: 'Nomor WhatsApp', ph: '08xxxxxxxxxx', type: 'text' },
+              { key: 'birth_date', label: 'Tanggal Lahir', ph: '', type: 'date' },
+              { key: 'height_cm', label: 'Tinggi (cm)', ph: '164', type: 'number' },
+              { key: 'weight_kg', label: 'Berat (kg)', ph: '69', type: 'number' },
+              { key: 'domisili', label: 'Domisili', ph: 'Makassar', type: 'text' },
+              { key: 'cedera', label: 'Status Cedera', ph: 'Tidak ada', type: 'text' },
+              { key: 'start_training_date', label: 'Mulai Latihan Terprogram', ph: '', type: 'date' },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
-                <input type="number" value={settingsForm[f.key] ?? ''} placeholder={f.ph}
-                  onChange={e => setSettingsForm(p => ({ ...p, [f.key]: e.target.value }))}
+                <input type={f.type} value={editForm[f.key] ?? ''} placeholder={f.ph}
+                  onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                {f.key === 'birth_date' && editForm.birth_date && (
+                  <div className="text-xs text-indigo-600 mt-1">Usia: {calcAge(editForm.birth_date)} tahun</div>
+                )}
+                {f.key === 'start_training_date' && editForm.start_training_date && (
+                  <div className="text-xs text-indigo-600 mt-1">Training Age: {calcTrainingAge(editForm.start_training_date)}</div>
+                )}
               </div>
             ))}
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Status Cedera</label>
-              <input type="text" value={settingsForm.cedera ?? ''} placeholder="Tidak ada"
-                onChange={e => setSettingsForm(p => ({ ...p, cedera: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Mulai Latihan Terprogram</label>
-              <input type="date" value={settingsForm.start_training_date ?? ''} onChange={e => setSettingsForm(p => ({ ...p, start_training_date: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Long Run Terakhir (km)</label>
-              <input type="number" value={settingsForm.lr_distance_km ?? ''} placeholder="12.6"
-                onChange={e => setSettingsForm(p => ({ ...p, lr_distance_km: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">LR Pace (menit)</label>
-              <input type="number" value={settingsForm.lr_pace_min ?? ''} placeholder="7"
-                onChange={e => setSettingsForm(p => ({ ...p, lr_pace_min: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">LR Pace (detik)</label>
-              <input type="number" value={settingsForm.lr_pace_sec ?? ''} placeholder="56"
-                onChange={e => setSettingsForm(p => ({ ...p, lr_pace_sec: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            </div>
-            <div className="col-span-2 md:col-span-3">
-              <label className="block text-xs text-gray-500 mb-1">Domisili</label>
-              <input type="text" value={settingsForm.domisili ?? ''} placeholder="Makassar"
-                onChange={e => setSettingsForm(p => ({ ...p, domisili: e.target.value }))}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-            </div>
           </div>
-          <div className="mt-4 flex gap-3">
-            <button onClick={saveSettings} disabled={saving}
+
+          {/* Ganti Password */}
+          <div className="border-t border-gray-100 pt-4 mb-4">
+            <div className="text-xs font-semibold text-gray-500 mb-2">Ganti Password</div>
+            <p className="text-xs text-gray-400 mb-3">Email reset password akan dikirim ke <strong>{athlete?.email}</strong>. Klik link di email untuk membuat password baru.</p>
+            <button onClick={sendPasswordReset} disabled={pwLoading}
+              className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors">
+              {pwLoading ? 'Mengirim...' : '📧 Kirim Email Reset Password'}
+            </button>
+            {pwMsg && <div className="mt-2 text-xs text-gray-600">{pwMsg}</div>}
+          </div>
+
+          <div className="flex gap-3">
+            <button onClick={saveProfile} disabled={saving}
               className="px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
               {saving ? 'Menyimpan...' : 'Simpan'}
             </button>
@@ -503,49 +563,40 @@ export default function ProfilPage() {
         </section>
       )}
 
-      {/* DATA PERFORMA */}
+      {/* ── DATA PERFORMA ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">Data Performa</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
           <div className="space-y-3 md:pr-6 pb-4 md:pb-0">
             {[
-              { label: 'Time Trial Aktif', val: latestTt ? `${latestTt.distance_km}K — ${fmtTime(latestTt.finish_time_sec)}` : '—', note: latestTt ? new Date(latestTt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Tambahkan TT via tombol di bawah' },
-              { label: 'Pace TT', val: latestTt ? secToPace(Math.round(latestTt.finish_time_sec / latestTt.distance_km)) : '—', note: 'Avg pace per km' },
+              { label: 'Time Trial Aktif', val: latestTt ? `${latestTt.distance_km ?? '—'} km — ${fmtTime(latestTt.finish_time_sec)}` : '—', note: latestTt ? new Date(latestTt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Tambahkan TT via tombol di bawah' },
+              { label: 'Pace TT', val: latestTt && latestTt.distance_km ? secToPace(Math.round(latestTt.finish_time_sec / latestTt.distance_km)) : '—', note: 'Avg pace per km' },
               { label: 'Predicted HM', val: predHmSec ? fmtTime(Math.round(predHmSec)) : '—', note: 'Riegel formula' },
               { label: 'Predicted 10K', val: pred10kSec ? fmtTime(Math.round(pred10kSec)) : '—', note: 'Riegel formula' },
-              { label: 'Magic Mile', val: latestTt ? magicMilePace(latestTt) : '—', note: 'Per km (Galloway)' },
+              { label: 'Magic Mile', val: latestTt && latestTt.distance_km ? magicMilePace(latestTt) : '—', note: 'Per km (Galloway)' },
             ].map(f => (
               <div key={f.label} className="flex justify-between items-start">
-                <div>
-                  <div className="text-xs text-gray-400">{f.label}</div>
-                  <div className="text-xs text-gray-300">{f.note}</div>
-                </div>
+                <div><div className="text-xs text-gray-400">{f.label}</div><div className="text-xs text-gray-300">{f.note}</div></div>
                 <div className="text-sm font-semibold text-gray-800">{f.val}</div>
               </div>
             ))}
           </div>
           <div className="space-y-3 md:pl-6 pt-4 md:pt-0">
             <div className="flex justify-between items-start">
-              <div>
-                <div className="text-xs text-gray-400">VDOT</div>
-                <div className="text-xs text-gray-300">{vdotRel.note}</div>
-              </div>
+              <div><div className="text-xs text-gray-400">VDOT</div><div className="text-xs text-gray-300">{vdotRel.note}</div></div>
               <div className="text-right">
                 <div className="text-sm font-semibold text-gray-800">{vdot?.toFixed(1) ?? '—'}</div>
                 {vdot && <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-semibold">{vdotRel.icon} {vdotRel.label}</span>}
               </div>
             </div>
             {[
-              { label: 'Easy Run Pace', val: easyPaceStr ? `${easyPaceStr}/km` : '—', note: 'Aerobic base pace' },
-              { label: 'Long Run Terakhir', val: lrStr, note: '' },
-              { label: 'LTHR', val: lthrRef ? `${lthrRef} bpm` : '—', note: 'Joe Friel reference' },
-              { label: 'Status Cedera', val: settings.cedera ?? '—', note: settings.cedera === 'Tidak ada' ? '✅ Aman progressive overload' : '⚠️ Monitor cedera', color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' },
+              { label: 'Easy Run Pace', val: easyPaceStr ? `${easyPaceStr}/km` : '—', note: 'Dari VDOT terbaru' },
+              { label: 'Long Run Terakhir', val: lrStr, note: 'Sesi ≥10 km atau ≥90 menit' },
+              { label: 'LTHR', val: lthrRef ? `${lthrRef} bpm` : '—', note: lthrFromTt ? 'Dari Time Trial' : 'Joe Friel reference' },
+              { label: 'Status Cedera', val: settings.cedera ?? '—', note: '', color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' },
             ].map(f => (
               <div key={f.label} className="flex justify-between items-start">
-                <div>
-                  <div className="text-xs text-gray-400">{f.label}</div>
-                  {f.note && <div className="text-xs text-gray-300">{f.note}</div>}
-                </div>
+                <div><div className="text-xs text-gray-400">{f.label}</div><div className="text-xs text-gray-300">{f.note}</div></div>
                 <div className="text-sm font-semibold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
               </div>
             ))}
@@ -553,12 +604,12 @@ export default function ProfilPage() {
         </div>
       </section>
 
-      {/* PREDICTED HM */}
+      {/* ── PREDICTED HM ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">Predicted HM</div>
         <div className="mb-4">
           <div className="text-xs text-gray-400 mb-1">Predicted Finish</div>
-          <div className="text-3xl font-extrabold text-gray-800">{predHmSec ? fmtTime(Math.round(predHmSec)) : '—:—:—'}</div>
+          <div className="text-4xl font-extrabold text-gray-800">{predHmSec ? fmtTime(Math.round(predHmSec)) : '—:—:—'}</div>
           {predHmSec && <div className="text-sm text-gray-400 mt-1">{secToPace(Math.round(predHmSec / 21.0975))}/km · HM 21.1 km</div>}
         </div>
         <div className="space-y-3">
@@ -566,7 +617,7 @@ export default function ProfilPage() {
             const gap = predHmSec ? predHmSec - rt.target : null
             const gapMm = gap != null ? Math.floor(Math.abs(gap) / 60) : 0
             const gapSs = gap != null ? Math.round(Math.abs(gap) % 60) : 0
-            const gapStr = gap == null ? '—' : gap <= 0 ? `✅ +${gapMm}:${String(gapSs).padStart(2, '0')}` : `⚠ -${gapMm}:${String(gapSs).padStart(2, '0')}`
+            const gapStr = gap == null ? '—' : gap <= 0 ? `✅ +${gapMm}:${String(gapSs).padStart(2,'0')}` : `⚠ -${gapMm}:${String(gapSs).padStart(2,'0')}`
             const bc = gap != null && gap <= 0 ? '#10b981' : '#f59e0b'
             const prog = predHmSec ? Math.min(100, Math.max(0, Math.round(((rt.target * 1.15) - predHmSec) / (rt.target * 0.15) * 100))) : 0
             return (
@@ -575,16 +626,14 @@ export default function ProfilPage() {
                   <span className="text-xs font-semibold text-gray-600">{rt.label}</span>
                   <span className="text-xs font-bold" style={{ color: bc }}>{gapStr}</span>
                 </div>
-                <div className="h-1.5 bg-gray-100 rounded-full">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${prog}%`, background: bc }} />
-                </div>
+                <div className="h-2 bg-gray-100 rounded-full"><div className="h-full rounded-full transition-all" style={{ width: `${prog}%`, background: bc }} /></div>
               </div>
             )
           })}
         </div>
       </section>
 
-      {/* EFFICIENCY & ECONOMY */}
+      {/* ── EFFICIENCY & ECONOMY ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">Efficiency &amp; Economy</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -597,7 +646,7 @@ export default function ProfilPage() {
                 <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: ef.color + '22', color: ef.color }}>{ef.label}</span>
                 <div className="text-xs text-gray-300 mt-1">Referensi Coggan &amp; Allen</div>
               </>
-            ) : <p className="text-sm text-gray-400">Belum ada sesi easy/LR dengan data HR &amp; pace.</p>}
+            ) : <p className="text-sm text-gray-400 mt-2">Belum ada sesi easy/LR dengan data HR &amp; pace.</p>}
           </div>
           <div>
             <div className="text-sm font-semibold text-gray-700 mb-2">📊 Performance Efficiency Score</div>
@@ -608,7 +657,7 @@ export default function ProfilPage() {
                 <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: pes.color + '22', color: pes.color }}>{pes.label}</span>
                 <div className="text-xs text-gray-500 mt-2 mb-3">{pes.msg}</div>
                 <div className="space-y-2">
-                  {([['Pace-HR Ratio', '40%', pes.phrNorm, 'Coggan EF'], ['TRIMP Efficiency', '25%', pes.teNorm, 'Banister'], ['RHR Trend', '20%', pes.rhrNorm, 'Cardiac proxy'], ['Z1-Z2 Dist.', '15%', pes.z12Norm, 'Seiler 80/20']] as [string, string, number, string][]).map(([l, w, v, r]) => (
+                  {([['Pace-HR Ratio','40%',pes.phrNorm,'Coggan EF'],['TRIMP Efficiency','25%',pes.teNorm,'Banister'],['RHR Trend','20%',pes.rhrNorm,'Cardiac proxy'],['Z1-Z2 Dist.','15%',pes.z12Norm,'Seiler 80/20']] as [string,string,number,string][]).map(([l,w,v,r]) => (
                     <div key={l}>
                       <div className="flex justify-between text-xs text-gray-500 mb-0.5"><span>{l} <span className="text-gray-300">({w})</span></span><span>{v}%</span></div>
                       <div className="h-1.5 bg-gray-100 rounded-full"><div className="h-full bg-indigo-400 rounded-full" style={{ width: `${v}%` }} /></div>
@@ -617,12 +666,12 @@ export default function ProfilPage() {
                   ))}
                 </div>
               </>
-            ) : <p className="text-sm text-gray-400">Minimal 3 sesi latihan diperlukan.</p>}
+            ) : <p className="text-sm text-gray-400 mt-2">Minimal 3 sesi latihan diperlukan.</p>}
           </div>
         </div>
       </section>
 
-      {/* TIME TRIAL HISTORY */}
+      {/* ── TIME TRIAL HISTORY ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Time Trial History</div>
@@ -631,6 +680,7 @@ export default function ProfilPage() {
             {showTtForm ? 'Batal' : '+ Tambah TT'}
           </button>
         </div>
+
         {showTtForm && (
           <div className="mb-5 p-4 bg-gray-50 rounded-lg">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
@@ -639,16 +689,25 @@ export default function ProfilPage() {
                 <input type="date" value={ttForm.tt_date} onChange={e => setTtForm(p => ({ ...p, tt_date: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Jarak</label>
-                <select value={ttForm.distance_km} onChange={e => setTtForm(p => ({ ...p, distance_km: e.target.value }))}
+              <div className="col-span-2">
+                <label className="block text-xs text-gray-500 mb-1">Jenis Time Trial</label>
+                <select value={ttForm.tt_type} onChange={e => onTtTypeChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                  {TT_DISTANCES.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                  {TT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
+                <div className="text-xs text-indigo-500 mt-1">{TT_TYPES.find(t => t.value === ttForm.tt_type)?.hint}</div>
               </div>
+              {needsDistance && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Jarak (km)</label>
+                  <input type="number" value={ttForm.distance_km} onChange={e => setTtForm(p => ({ ...p, distance_km: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+              )}
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Waktu (MM:SS atau HH:MM:SS)</label>
-                <input type="text" value={ttForm.finish_time} placeholder="31:10" onChange={e => setTtForm(p => ({ ...p, finish_time: e.target.value }))}
+                <label className="block text-xs text-gray-500 mb-1">Waktu Finish (MM:SS atau HH:MM:SS)</label>
+                <input type="text" value={ttForm.finish_time} placeholder={needsDistance ? '31:10' : '20:00'}
+                  onChange={e => setTtForm(p => ({ ...p, finish_time: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
               <div>
@@ -656,9 +715,20 @@ export default function ProfilPage() {
                 <input type="number" value={ttForm.hr_avg} placeholder="165" onChange={e => setTtForm(p => ({ ...p, hr_avg: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
-              <div className="col-span-2">
+              {needsHrLastHalf && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    HR Avg {ttForm.tt_type === '30min' ? 'Menit 11–30' : 'Menit 31–60'} (bpm)
+                  </label>
+                  <input type="number" value={ttForm.hr_last_half} placeholder="172"
+                    onChange={e => setTtForm(p => ({ ...p, hr_last_half: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+              )}
+              <div className="col-span-2 md:col-span-3">
                 <label className="block text-xs text-gray-500 mb-1">Catatan</label>
-                <input type="text" value={ttForm.notes} placeholder="Kondisi, cuaca..." onChange={e => setTtForm(p => ({ ...p, notes: e.target.value }))}
+                <input type="text" value={ttForm.notes} placeholder="Kondisi, cuaca, rute..."
+                  onChange={e => setTtForm(p => ({ ...p, notes: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
             </div>
@@ -668,38 +738,39 @@ export default function ProfilPage() {
             </button>
           </div>
         )}
+
         {ttList.length === 0 ? (
-          <EmptyState title="Belum ada time trial" description="Input TT untuk menghitung VDOT dan prediksi race." />
+          <EmptyState title="Belum ada time trial" description="Input TT untuk menghitung VDOT dan LTHR otomatis." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-gray-400 border-b border-gray-100">
-                  {['Tanggal', 'Jarak', 'Waktu', 'Pace', 'Pred. HM', 'VDOT', 'Magic Mile', 'Akurasi', ''].map(h => (
-                    <th key={h} className="text-left py-2 pr-3 font-medium">{h}</th>
+                  {['Tanggal','Jenis TT','Waktu','Pace','Pred. HM','VDOT','Magic Mile','LTHR',''].map(h => (
+                    <th key={h} className="text-left py-2 pr-3 font-medium whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {ttList.map((tt, idx) => {
                   const isActive = idx === 0
-                  const predHm = predictTime(tt.distance_km * 1000, tt.finish_time_sec, 21097.5)
-                  const ageDays = (Date.now() - new Date(tt.tt_date).getTime()) / 86400000
-                  const acc: 'high' | 'medium' | 'low' = tt.distance_km >= 8 ? 'high' : (tt.distance_km >= 5 && ageDays <= 28 ? 'medium' : 'low')
-                  const accMap = { high: ['bg-green-100 text-green-700', '🟢 High'], medium: ['bg-yellow-100 text-yellow-700', '🟡 Medium'], low: ['bg-red-100 text-red-700', '🔴 Low'] } as const
+                  const predHm = tt.distance_km ? predictTime(tt.distance_km * 1000, tt.finish_time_sec, 21097.5) : null
+                  const pace = tt.distance_km ? secToPace(Math.round(tt.finish_time_sec / tt.distance_km)) : '—'
                   return (
                     <tr key={tt.id} className={`border-b border-gray-50 ${isActive ? 'bg-blue-50' : ''}`}>
-                      <td className="py-2 pr-3 text-xs text-gray-500">
+                      <td className="py-2 pr-3 text-xs text-gray-500 whitespace-nowrap">
                         {new Date(tt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                         {isActive && <div className="text-blue-600 font-bold text-xs">▶ Aktif</div>}
                       </td>
-                      <td className="py-2 pr-3 font-semibold">{tt.distance_km} km</td>
-                      <td className="py-2 pr-3">{fmtTime(tt.finish_time_sec)}</td>
-                      <td className="py-2 pr-3">{secToPace(Math.round(tt.finish_time_sec / tt.distance_km))}</td>
-                      <td className="py-2 pr-3">{fmtTime(Math.round(predHm))}</td>
-                      <td className="py-2 pr-3 font-semibold text-indigo-600">{tt.vdot}</td>
-                      <td className="py-2 pr-3">{magicMilePace(tt)}</td>
-                      <td className="py-2 pr-3"><span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${accMap[acc][0]}`}>{accMap[acc][1]}</span></td>
+                      <td className="py-2 pr-3 font-medium text-xs whitespace-nowrap">{TT_TYPES.find(t => t.value === tt.tt_type)?.label ?? tt.tt_type ?? '—'}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap">{fmtTime(tt.finish_time_sec)}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap">{pace}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap">{predHm ? fmtTime(Math.round(predHm)) : '—'}</td>
+                      <td className="py-2 pr-3 font-semibold text-indigo-600">{tt.vdot ?? '—'}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap">{tt.distance_km ? magicMilePace(tt) : '—'}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {tt.lthr_calculated ? <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{tt.lthr_calculated} bpm</span> : '—'}
+                      </td>
                       <td className="py-2"><button onClick={() => deleteTt(tt.id)} className="text-xs text-red-400 hover:text-red-600">Hapus</button></td>
                     </tr>
                   )
@@ -710,24 +781,26 @@ export default function ProfilPage() {
         )}
       </section>
 
-      {/* HEAT STRESS INDEX */}
+      {/* ── HEAT STRESS INDEX ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest mb-4">🌡️ Heat Stress Index</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><label>Suhu (°C)</label><span>{hsiState.temp}°C</span></div>
+              <div className="flex justify-between text-xs text-gray-500 mb-1"><label>Suhu (°C)</label><span className="font-semibold">{hsiState.temp}°C</span></div>
               <input type="range" min={15} max={45} step={0.5} value={hsiState.temp} onChange={e => setHsiState(s => ({ ...s, temp: parseFloat(e.target.value) }))} className="w-full accent-indigo-600" />
             </div>
             <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><label>Kelembaban (%)</label><span>{hsiState.rh}%</span></div>
+              <div className="flex justify-between text-xs text-gray-500 mb-1"><label>Kelembaban (%)</label><span className="font-semibold">{hsiState.rh}%</span></div>
               <input type="range" min={20} max={100} step={1} value={hsiState.rh} onChange={e => setHsiState(s => ({ ...s, rh: parseInt(e.target.value) }))} className="w-full accent-indigo-600" />
             </div>
-            <div className="text-xs text-gray-300">Nilai tersimpan otomatis</div>
+            <div className={`inline-block text-sm font-bold px-3 py-1 rounded-full ${hsi.cls === 'safe' ? 'bg-green-100 text-green-700' : hsi.cls === 'low' ? 'bg-yellow-100 text-yellow-700' : hsi.cls === 'mod' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+              {hsi.emoji} WBGT {hsi.wbgt}°C — {hsi.risk}
+            </div>
           </div>
           <div>
-            <div className={`inline-block text-sm font-bold px-3 py-1 rounded-full mb-3 ${hsi.cls === 'safe' ? 'bg-green-100 text-green-700' : hsi.cls === 'low' ? 'bg-yellow-100 text-yellow-700' : hsi.cls === 'mod' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{hsi.emoji} {hsi.risk}</div>
             <table className="w-full text-xs text-gray-600 mb-2">
+              <thead><tr className="text-gray-400 border-b border-gray-100"><th className="text-left py-1 pr-3">Zona</th><th className="text-right py-1">Penyesuaian Pace</th></tr></thead>
               <tbody>
                 {Object.entries(hsi.penalties).map(([zone, pen]) => {
                   const base = basePaces[zone] ?? null
@@ -740,7 +813,7 @@ export default function ProfilPage() {
                 })}
               </tbody>
             </table>
-            <div className="text-xs text-gray-400">WBGT: {hsi.wbgt}°C · HR drift: +{hsi.hrDrift} bpm · Ref: Moran et al. (2004)</div>
+            <div className="text-xs text-gray-400">HR drift estimasi: +{hsi.hrDrift} bpm · Ref: Moran et al. (2004)</div>
             {hsi.hrDrift > 8 && (
               <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
                 ⚠️ HR drift tinggi — <strong>prioritaskan HR bukan pace</strong> saat lari hari ini.

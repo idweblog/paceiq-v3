@@ -68,18 +68,12 @@ export type Database = {
           birth_date: string | null
           cedera: string | null
           domisili: string | null
-          easy_pace_min: number | null
-          easy_pace_sec: number | null
           height_cm: number | null
           id: string
-          lr_distance_km: number | null
-          lr_pace_min: number | null
-          lr_pace_sec: number | null
           lthr: number | null
           max_hr: number | null
           resting_hr: number | null
           start_training_date: string | null
-          training_age_years: number | null
           updated_at: string | null
           weight_kg: number | null
         }
@@ -88,18 +82,12 @@ export type Database = {
           birth_date?: string | null
           cedera?: string | null
           domisili?: string | null
-          easy_pace_min?: number | null
-          easy_pace_sec?: number | null
           height_cm?: number | null
           id?: string
-          lr_distance_km?: number | null
-          lr_pace_min?: number | null
-          lr_pace_sec?: number | null
           lthr?: number | null
           max_hr?: number | null
           resting_hr?: number | null
           start_training_date?: string | null
-          training_age_years?: number | null
           updated_at?: string | null
           weight_kg?: number | null
         }
@@ -108,18 +96,12 @@ export type Database = {
           birth_date?: string | null
           cedera?: string | null
           domisili?: string | null
-          easy_pace_min?: number | null
-          easy_pace_sec?: number | null
           height_cm?: number | null
           id?: string
-          lr_distance_km?: number | null
-          lr_pace_min?: number | null
-          lr_pace_sec?: number | null
           lthr?: number | null
           max_hr?: number | null
           resting_hr?: number | null
           start_training_date?: string | null
-          training_age_years?: number | null
           updated_at?: string | null
           weight_kg?: number | null
         }
@@ -143,6 +125,7 @@ export type Database = {
           name: string
           registration_mode: string | null
           status: string
+          whatsapp: string | null
         }
         Insert: {
           auth_id?: string | null
@@ -153,6 +136,7 @@ export type Database = {
           name: string
           registration_mode?: string | null
           status?: string
+          whatsapp?: string | null
         }
         Update: {
           auth_id?: string | null
@@ -163,6 +147,7 @@ export type Database = {
           name?: string
           registration_mode?: string | null
           status?: string
+          whatsapp?: string | null
         }
         Relationships: []
       }
@@ -549,6 +534,51 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "nutrition_log_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pace_zone_adjustments: {
+        Row: {
+          adjusted_at: string | null
+          adjusted_by_athlete_id: string | null
+          athlete_id: string | null
+          id: string
+          notes: string | null
+          pct_override: number
+          zone_key: string
+        }
+        Insert: {
+          adjusted_at?: string | null
+          adjusted_by_athlete_id?: string | null
+          athlete_id?: string | null
+          id?: string
+          notes?: string | null
+          pct_override: number
+          zone_key: string
+        }
+        Update: {
+          adjusted_at?: string | null
+          adjusted_by_athlete_id?: string | null
+          athlete_id?: string | null
+          id?: string
+          notes?: string | null
+          pct_override?: number
+          zone_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pace_zone_adjustments_adjusted_by_athlete_id_fkey"
+            columns: ["adjusted_by_athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pace_zone_adjustments_athlete_id_fkey"
             columns: ["athlete_id"]
             isOneToOne: false
             referencedRelation: "athletes"
@@ -1137,9 +1167,12 @@ export type Database = {
           distance_km: number
           finish_time_sec: number
           hr_avg: number | null
+          hr_last_half: number | null
           id: string
+          lthr_calculated: number | null
           notes: string | null
           tt_date: string
+          tt_type: string | null
           vdot: number | null
         }
         Insert: {
@@ -1148,9 +1181,12 @@ export type Database = {
           distance_km: number
           finish_time_sec: number
           hr_avg?: number | null
+          hr_last_half?: number | null
           id?: string
+          lthr_calculated?: number | null
           notes?: string | null
           tt_date: string
+          tt_type?: string | null
           vdot?: number | null
         }
         Update: {
@@ -1159,9 +1195,12 @@ export type Database = {
           distance_km?: number
           finish_time_sec?: number
           hr_avg?: number | null
+          hr_last_half?: number | null
           id?: string
+          lthr_calculated?: number | null
           notes?: string | null
           tt_date?: string
+          tt_type?: string | null
           vdot?: number | null
         }
         Relationships: [
