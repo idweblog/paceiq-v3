@@ -58,15 +58,16 @@ function calcVdot(distanceM: number, finishTimeSec: number): number {
   return parseFloat((vo2 / pctVo2).toFixed(1))
 }
 
-function calcLthrFromTT(ttType: string, hrAvg: number | null, hrLastHalf: number | null): number | null {
-  if (!hrAvg) return null
+function calcLthrFromTT(ttType: string, hrAvg: number | null, hrPartial: number | null): number | null {
   switch (ttType) {
-    case '8min':   return Math.round(hrAvg * 0.952)
-    case '20min':  return Math.round(hrAvg * 0.971)
-    case '30min':  return hrLastHalf ? Math.round(hrLastHalf) : null
-    case '45min':  return Math.round(hrAvg * 0.987)
-    case '60min':  return hrLastHalf ? Math.round(hrLastHalf) : null
-    default:       return null
+    case '8min':      return hrAvg ? Math.round(hrAvg * 0.952) : null
+    case '15min-5k':  return hrPartial ? Math.round(hrPartial * 0.962) : null
+    case '15min-10k': return hrPartial ? Math.round(hrPartial * 0.978) : null
+    case '20min':     return hrAvg ? Math.round(hrAvg * 0.971) : null
+    case '30min':     return hrPartial ? Math.round(hrPartial) : null
+    case '45min':     return hrAvg ? Math.round(hrAvg * 0.987) : null
+    case '60min':     return hrPartial ? Math.round(hrPartial) : null
+    default:          return null
   }
 }
 
