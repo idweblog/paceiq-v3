@@ -211,6 +211,57 @@ function calcPES(sessions: TrainingSession[]) {
   return { pes, label, color, msg, phrNorm, teNorm, rhrNorm, z12Norm }
 }
 
+function wxGearRecommendation(temp: number, rh: number, code: number) {
+  const isRain = code >= 51
+  const isHot  = temp >= 28
+  const isCold = temp < 20
+  const isHumid= rh >= 80
+  const required: string[] = [], recommended: string[] = [], optional: string[] = []
+  if (isHot) {
+    required.push('🧢 Cap/Visor', '🧴 Sunscreen SPF50+')
+    recommended.push('💧 Ekstra Gel', '⚡ Elektrolit Tambahan')
+    if (isHumid) recommended.push('🧴 Anti-chafe', '🧦 Anti-blister Socks')
+  }
+  if (isCold) {
+    required.push('🧤 Arm Warmer')
+    recommended.push('🎿 Beanie/Ear Cover', '🧥 Light Jacket')
+    optional.push('🧣 Buff/Neck Gaiter')
+  }
+  if (isRain) {
+    required.push('🌧️ Dry Bag')
+    recommended.push('🦺 Poncho Tipis', '💦 Anti-slip Socks')
+    optional.push('🕶️ Sport Glasses')
+  }
+  if (!isHot && !isCold && !isRain) {
+    recommended.push('🧢 Cap/Visor', '💧 Standard Gel')
+    optional.push('🧤 Arm Warmer (jaga-jaga)')
+  }
+  return { required, recommended, optional }
+}
+
+function wxStrategyText(temp: number, rh: number, uv: number, wind: number): string[] {
+  const e = (rh/100)*6.105*Math.exp(17.27*temp/(237.3+temp))
+  const wbgt = parseFloat((0.567*temp + 0.393*e + 3.94).toFixed(1))
+  const lines: string[] = []
+  if (wbgt >= 32) lines.push('🔴 WBGT ekstrem — pertimbangkan tunda sesi atau ganti ke treadmill indoor.')
+  else if (wbgt >= 28) lines.push('🟠 WBGT tinggi — kurangi intensitas 1 zona, prioritaskan HR bukan pace.')
+  else if (wbgt >= 23) lines.push('🟡 WBGT moderat — pace mungkin +15–30 det/km lebih lambat dari normal.')
+  else lines.push('🟢 Kondisi cuaca baik untuk lari — pace target tercapai.')
+  if (uv >= 8) lines.push(`☀️ UV Index tinggi (${uv}) — sunscreen wajib, hindari jam 10–14.`)
+  if (wind >= 20) lines.push(`💨 Angin kencang (${wind} km/h) — adjustment pace di bagian headwind.`)
+  if (rh >= 85) lines.push('💧 Kelembaban sangat tinggi — peningkatan HR drift +8–12 bpm diprediksi.')
+  return lines
+}
+
+function wxGetWBGTStatus(wbgt: number): { label: string; color: string; pct: number } {
+  if (wbgt < 18) return { label: 'Sejuk — Ideal', color: '#34d399', pct: Math.round((wbgt/35)*100) }
+  if (wbgt < 23) return { label: 'Nyaman', color: '#34d399', pct: Math.round((wbgt/35)*100) }
+  if (wbgt < 28) return { label: 'Moderat — Waspada', color: '#fbbf24', pct: Math.round((wbgt/35)*100) }
+  if (wbgt < 32) return { label: 'Panas — Kurangi Intensitas', color: '#f97316', pct: Math.round((wbgt/35)*100) }
+  if (wbgt < 35) return { label: 'Sangat Panas — Hindari Intensitas', color: '#ef4444', pct: 95 }
+  return { label: 'Ekstrem — Stop Training', color: '#7f1d1d', pct: 100 }
+}
+
 function calcHSI(temp: number, rh: number) {
   const e = (rh / 100) * 6.105 * Math.exp(17.27 * temp / (237.3 + temp))
   const wbgt = parseFloat((0.567 * temp + 0.393 * e + 3.94).toFixed(1))
@@ -328,18 +379,7 @@ export default function ProfilPage() {
     return 'Badai'
   }
 
-  function calcWbgt(temp: number, rh: number): number {
-    const e = (rh / 100) * 6.105 * Math.exp(17.27 * temp / (237.3 + temp))
-    return parseFloat((0.567 * temp + 0.393 * e + 3.94).toFixed(1))
-  }
 
-  function wbgtStatus(wbgt: number): { label: string; color: string; cls: string } {
-    if (wbgt < 20) return { label: 'Aman', color: '#10b981', cls: 'bg-green-100 text-green-700' }
-    if (wbgt < 24) return { label: 'Rendah', color: '#22c55e', cls: 'bg-green-50 text-green-600' }
-    if (wbgt < 28) return { label: 'Sedang — Waspada', color: '#f59e0b', cls: 'bg-yellow-100 text-yellow-700' }
-    if (wbgt < 32) return { label: 'Panas — Kurangi Intensitas', color: '#ef4444', cls: 'bg-red-100 text-red-700' }
-    return { label: 'Berbahaya', color: '#7f1d1d', cls: 'bg-red-200 text-red-900' }
-  }
 
   async function loadWeather() {
     if (!settings.domisili) return
@@ -1197,110 +1237,218 @@ export default function ProfilPage() {
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-indigo-100">
           <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest">🌤️ Cuaca Latihan & Race</div>
           <button onClick={loadWeather} disabled={wxLoading}
-            className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors">
+            className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center gap-1">
             {wxLoading ? '⏳ Memuat...' : '🔄 Refresh'}
           </button>
         </div>
 
-        {!settings.domisili ? (
-          <div className="p-4 bg-gray-50 rounded-xl text-sm text-gray-400 text-center">
-            Isi domisili di Edit Profil untuk melihat cuaca latihan.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Cuaca Latihan */}
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="text-xs font-semibold text-gray-500 mb-3">🏃 Cuaca Latihan — {settings.domisili}</div>
-              {!wxTraining ? (
-                <div className="text-xs text-gray-400">{wxLoading ? 'Mengambil data cuaca...' : 'Tidak ada data cuaca.'}</div>
-              ) : (() => {
-                const temp = Number(wxTraining.temp)
-                const rh = Number(wxTraining.rh)
-                const wbgt = calcWbgt(temp, rh)
-                const wst = wbgtStatus(wbgt)
-                return (
-                  <>
-                    <div className="text-sm font-semibold text-gray-700 mb-3">{wxConditionLabel(Number(wxTraining.code))}</div>
-                    <div className="grid grid-cols-4 gap-2 mb-3">
-                      {[
-                        { label: 'Suhu', val: `${temp}°C` },
-                        { label: 'Humidity', val: `${rh}%` },
-                        { label: 'Angin km/h', val: `${wxTraining.wind}` },
-                        { label: 'UV Index', val: `${wxTraining.uv}` },
-                      ].map(f => (
-                        <div key={f.label} className="text-center bg-white rounded-lg p-2">
-                          <div className="text-xs text-gray-400">{f.label}</div>
-                          <div className="text-sm font-bold text-gray-700">{f.val}</div>
-                        </div>
-                      ))}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          {/* Cuaca Latihan */}
+          <div>
+            <div className="text-xs font-semibold text-gray-500 mb-3">🏃 Cuaca Latihan Hari Ini</div>
+            {!settings.domisili ? (
+              <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400 text-center">Isi domisili di Edit Profil.</div>
+            ) : !wxTraining ? (
+              <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400">{wxLoading ? '⏳ Mengambil data cuaca...' : 'Tidak ada data cuaca.'}</div>
+            ) : (() => {
+              const temp = Number(wxTraining.temp)
+              const rh   = Number(wxTraining.rh)
+              const wind = Number(wxTraining.wind)
+              const uv   = Number(wxTraining.uv)
+              const code = Number(wxTraining.code)
+              const e    = (rh/100)*6.105*Math.exp(17.27*temp/(237.3+temp))
+              const wbgt = parseFloat((0.567*temp + 0.393*e + 3.94).toFixed(1))
+              const ws   = wxGetWBGTStatus(wbgt)
+              const strat = wxStrategyText(temp, rh, uv, wind)
+              const gear  = wxGearRecommendation(temp, rh, code)
+              const wbgtBg = wbgt < 23 ? '#d1fae5' : wbgt < 28 ? '#fef3c7' : wbgt < 32 ? '#fed7aa' : '#fee2e2'
+              const wbgtTxt = wbgt < 23 ? '#065f46' : wbgt < 28 ? '#78350f' : wbgt < 32 ? '#9a3412' : '#7f1d1d'
+              return (
+                <div>
+                  {/* Kondisi */}
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div>
+                      <div className="text-base font-bold text-gray-800">{wxConditionLabel(code)}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">📍 {settings.domisili} · Terasa {temp}°C</div>
                     </div>
-                    <div className={`text-xs font-bold px-3 py-2 rounded-lg ${wst.cls} mb-2`}>
-                      WBGT Index: {wbgt}°C — {wst.label}
-                    </div>
-                    {wbgt >= 28 && (
-                      <div className="text-xs text-orange-600 bg-orange-50 rounded-lg p-2">
-                        ⚠️ WBGT tinggi — kurangi intensitas 1 zona, prioritaskan HR bukan pace.
-                      </div>
-                    )}
-                    <button onClick={() => setHsiState({ temp, rh })}
-                      className="mt-2 text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors">
-                      🔁 Sync ke HSI Calculator
-                    </button>
-                  </>
-                )
-              })()}
-            </div>
-
-            {/* Cuaca Race */}
-            <div className="space-y-3">
-              {races.filter(r => r.city).length === 0 ? (
-                <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-400 text-center">
-                  Isi kota race di Race Management untuk melihat cuaca race.
-                </div>
-              ) : races.filter(r => r.city).map(race => {
-                const wx = wxRaces[race.id]
-                const statusBadge = race.status === 'A' ? '🏆' : race.status === 'B' ? '🏁' : '📅'
-                return (
-                  <div key={race.id} className="bg-gray-50 rounded-xl p-4">
-                    <div className="text-xs font-semibold text-gray-500 mb-2">{statusBadge} {race.name} — {race.city}</div>
-                    {!wx ? (
-                      <div className="text-xs text-gray-400">{wxLoading ? 'Mengambil data cuaca...' : 'Tidak ada data cuaca.'}</div>
-                    ) : (() => {
-                      const temp = Number(wx.temp)
-                      const rh = Number(wx.rh)
-                      const wbgt = calcWbgt(temp, rh)
-                      const wst = wbgtStatus(wbgt)
-                      return (
-                        <>
-                          <div className="text-xs font-medium text-gray-600 mb-2">{wxConditionLabel(Number(wx.code))} · {temp}°C</div>
-                          <div className="grid grid-cols-4 gap-1 mb-2">
-                            {[
-                              { label: 'Suhu', val: `${temp}°C` },
-                              { label: 'Humidity', val: `${rh}%` },
-                              { label: 'Angin', val: `${wx.wind}` },
-                              { label: 'UV', val: `${wx.uv}` },
-                            ].map(f => (
-                              <div key={f.label} className="text-center bg-white rounded-lg p-1.5">
-                                <div className="text-xs text-gray-400">{f.label}</div>
-                                <div className="text-xs font-bold text-gray-700">{f.val}</div>
-                              </div>
-                            ))}
-                          </div>
-                          <div className={`text-xs font-bold px-2 py-1.5 rounded-lg ${wst.cls}`}>
-                            WBGT: {wbgt}°C — {wst.label}
-                          </div>
-                        </>
-                      )
-                    })()}
                   </div>
-                )
-              })}
-            </div>
+                  {/* Metric tiles */}
+                  <div className="grid grid-cols-4 gap-2 mb-3">
+                    {[
+                      { icon: '🌡️', val: `${temp}°C`,  label: 'Suhu',       bg: '#eff6ff', color: '#1e40af' },
+                      { icon: '💧', val: `${rh}%`,     label: 'Humidity',   bg: '#f0fdf4', color: '#065f46' },
+                      { icon: '💨', val: `${wind}`,    label: 'Angin km/h', bg: '#f5f3ff', color: '#5b21b6' },
+                      { icon: '☀️', val: `${uv}`,      label: 'UV Index',   bg: '#fefce8', color: '#713f12' },
+                    ].map(t => (
+                      <div key={t.label} style={{ background: t.bg }} className="rounded-xl p-2.5 text-center">
+                        <div className="text-base mb-1">{t.icon}</div>
+                        <div className="text-sm font-extrabold" style={{ color: t.color }}>{t.val}</div>
+                        <div className="text-xs text-gray-500 uppercase mt-0.5" style={{ fontSize: '0.6rem' }}>{t.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* WBGT bar */}
+                  <div className="rounded-xl px-4 py-3 mb-3" style={{ background: wbgtBg }}>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <span className="text-xs font-bold uppercase" style={{ color: wbgtTxt }}>WBGT Index</span>
+                      <span className="text-sm font-extrabold" style={{ color: wbgtTxt }}>{wbgt}°C — {ws.label}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full" style={{ background: 'rgba(0,0,0,0.08)' }}>
+                      <div className="h-full rounded-full transition-all" style={{ width: `${ws.pct}%`, background: ws.color }} />
+                    </div>
+                  </div>
+                  {/* Advisory */}
+                  {strat.length > 0 && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-3 space-y-1">
+                      {strat.map((s, i) => <div key={i} className="text-xs text-gray-700">{s}</div>)}
+                    </div>
+                  )}
+                  {/* Gear */}
+                  {(gear.required.length > 0 || gear.recommended.length > 0 || gear.optional.length > 0) && (
+                    <div className="bg-gray-50 rounded-xl px-4 py-3 mb-3 space-y-2">
+                      {gear.required.length > 0 && (
+                        <div>
+                          <div className="text-xs font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>⚠️ Wajib</div>
+                          <div className="flex flex-wrap gap-1">{gear.required.map(g => <span key={g} className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">{g}</span>)}</div>
+                        </div>
+                      )}
+                      {gear.recommended.length > 0 && (
+                        <div>
+                          <div className="text-xs font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>✅ Disarankan</div>
+                          <div className="flex flex-wrap gap-1">{gear.recommended.map(g => <span key={g} className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-green-100 text-green-700">{g}</span>)}</div>
+                        </div>
+                      )}
+                      {gear.optional.length > 0 && (
+                        <div>
+                          <div className="text-xs font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>💡 Opsional</div>
+                          <div className="flex flex-wrap gap-1">{gear.optional.map(g => <span key={g} className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">{g}</span>)}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <button onClick={() => setHsiState({ temp, rh })}
+                    className="text-xs px-3 py-1.5 rounded-lg transition-colors"
+                    style={{ background: '#ede9fe', color: '#4f46e5' }}>
+                    🔁 Sync ke HSI Calculator
+                  </button>
+                </div>
+              )
+            })()}
           </div>
-        )}
+
+          {/* Cuaca Race */}
+          <div>
+            <div className="text-xs font-semibold text-gray-500 mb-3">🏁 Cuaca Kota Race</div>
+            {races.filter(r => r.city).length === 0 ? (
+              <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400 text-center">
+                Isi kota race di Race Management untuk melihat cuaca race.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {races.filter(r => r.city).map(race => {
+                  const wx = wxRaces[race.id]
+                  const isA = race.status === 'A'
+                  const accentDot = isA ? '#f59e0b' : '#3b82f6'
+                  const daysLeft = race.event_date ? Math.ceil((new Date(race.event_date).getTime() - Date.now()) / 86400000) : null
+                  return (
+                    <div key={race.id} className="border border-gray-200 rounded-xl p-4">
+                      {/* Header race */}
+                      <div className="flex items-start justify-between mb-3 gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accentDot }}></span>
+                            <span className="font-bold uppercase" style={{ fontSize: '0.62rem', color: accentDot, letterSpacing: '0.07em' }}>
+                              Race {race.status} · {daysLeft != null && daysLeft > 0 ? `${daysLeft} hari lagi` : daysLeft === 0 ? 'HARI INI' : 'Selesai'}
+                            </span>
+                          </div>
+                          <div className="text-sm font-extrabold text-gray-800">{race.name}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            📍 {race.city} · {race.event_date ? new Date(race.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                          </div>
+                        </div>
+                      </div>
+                      {!wx ? (
+                        <div className="text-xs text-gray-400">{wxLoading ? '⏳ Mengambil data cuaca...' : 'Tidak ada data cuaca.'}</div>
+                      ) : (() => {
+                        const temp = Number(wx.temp)
+                        const rh   = Number(wx.rh)
+                        const wind = Number(wx.wind)
+                        const uv   = Number(wx.uv)
+                        const code = Number(wx.code)
+                        const e    = (rh/100)*6.105*Math.exp(17.27*temp/(237.3+temp))
+                        const wbgt = parseFloat((0.567*temp + 0.393*e + 3.94).toFixed(1))
+                        const ws   = wxGetWBGTStatus(wbgt)
+                        const strat = wxStrategyText(temp, rh, uv, wind)
+                        const gear  = wxGearRecommendation(temp, rh, code)
+                        const wbgtBg = wbgt < 23 ? '#d1fae5' : wbgt < 28 ? '#fef3c7' : wbgt < 32 ? '#fed7aa' : '#fee2e2'
+                        const wbgtTxt = wbgt < 23 ? '#065f46' : wbgt < 28 ? '#78350f' : wbgt < 32 ? '#9a3412' : '#7f1d1d'
+                        return (
+                          <>
+                            <div className="text-xs text-gray-600 mb-3">{wxConditionLabel(code)} · Terasa {temp}°C</div>
+                            <div className="grid grid-cols-4 gap-1.5 mb-3">
+                              {[
+                                { icon: '🌡️', val: `${temp}°C`,  label: 'Suhu',       bg: '#eff6ff', color: '#1e40af' },
+                                { icon: '💧', val: `${rh}%`,     label: 'Humidity',   bg: '#f0fdf4', color: '#065f46' },
+                                { icon: '💨', val: `${wind}`,    label: 'Angin km/h', bg: '#f5f3ff', color: '#5b21b6' },
+                                { icon: '☀️', val: `${uv}`,      label: 'UV Index',   bg: '#fefce8', color: '#713f12' },
+                              ].map(t => (
+                                <div key={t.label} style={{ background: t.bg }} className="rounded-lg p-2 text-center">
+                                  <div className="text-sm mb-0.5">{t.icon}</div>
+                                  <div className="text-xs font-extrabold" style={{ color: t.color }}>{t.val}</div>
+                                  <div className="text-gray-500 uppercase mt-0.5" style={{ fontSize: '0.58rem' }}>{t.label}</div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="rounded-lg px-3 py-2.5 mb-3" style={{ background: wbgtBg }}>
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-xs font-bold uppercase" style={{ color: wbgtTxt }}>WBGT Index</span>
+                                <span className="text-sm font-extrabold" style={{ color: wbgtTxt }}>{wbgt}°C — {ws.label}</span>
+                              </div>
+                              <div className="h-1.5 rounded-full" style={{ background: 'rgba(0,0,0,0.08)' }}>
+                                <div className="h-full rounded-full" style={{ width: `${ws.pct}%`, background: ws.color }} />
+                              </div>
+                            </div>
+                            {strat.length > 0 && (
+                              <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 mb-3 space-y-1">
+                                {strat.map((s, i) => <div key={i} className="text-xs text-gray-700">{s}</div>)}
+                              </div>
+                            )}
+                            {(gear.required.length > 0 || gear.recommended.length > 0 || gear.optional.length > 0) && (
+                              <div className="bg-gray-50 rounded-lg px-3 py-2.5 space-y-2">
+                                {gear.required.length > 0 && (
+                                  <div>
+                                    <div className="font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>⚠️ Wajib</div>
+                                    <div className="flex flex-wrap gap-1">{gear.required.map(g => <span key={g} className="text-xs px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">{g}</span>)}</div>
+                                  </div>
+                                )}
+                                {gear.recommended.length > 0 && (
+                                  <div>
+                                    <div className="font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>✅ Disarankan</div>
+                                    <div className="flex flex-wrap gap-1">{gear.recommended.map(g => <span key={g} className="text-xs px-2 py-0.5 rounded-full font-semibold bg-green-100 text-green-700">{g}</span>)}</div>
+                                  </div>
+                                )}
+                                {gear.optional.length > 0 && (
+                                  <div>
+                                    <div className="font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>💡 Opsional</div>
+                                    <div className="flex flex-wrap gap-1">{gear.optional.map(g => <span key={g} className="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">{g}</span>)}</div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div className="text-right mt-2" style={{ fontSize: '0.62rem', color: '#9ca3af' }}>Cuaca saat ini · bukan forecast race day</div>
+                          </>
+                        )
+                      })()}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </section>
 
-      {/* ── HEAT STRESS INDEX ── */}
+            {/* ── HEAT STRESS INDEX ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">🌡️ Heat Stress Index</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
