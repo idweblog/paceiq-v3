@@ -47,6 +47,7 @@ interface Race {
   status: string
   target_finish: string | null
   distance_km: number | null
+  city: string | null
 }
 
 interface TrainingSession {
@@ -280,11 +281,80 @@ export default function ProfilPage() {
   const [editTtSaving, setEditTtSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [hsiState, setHsiState] = useState({ temp: 30.8, rh: 58 })
+  const [wxTraining, setWxTraining] = useState<Record<string,number|string> | null>(null)
+  const [wxRaces, setWxRaces] = useState<Record<string, Record<string,number|string> | null>>({})
+  const [wxLoading, setWxLoading] = useState(false)
 
   useEffect(() => {
     cancelledRef.current = false
     return () => { cancelledRef.current = true }
   }, [])
+
+  async function fetchWeather(city: string): Promise<Record<string,number|string> | null> {
+    const cacheKey = `wx_${city}`
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      const { data, ts } = JSON.parse(cached)
+      if (Date.now() - ts < 3600000) return data
+    }
+    try {
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=id`)
+      const geoData = await geoRes.json()
+      if (!geoData.results?.length) return null
+      const { latitude, longitude } = geoData.results[0]
+      const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,uv_index,weather_code&timezone=auto`)
+      const wxData = await wxRes.json()
+      const c = wxData.current
+      const data = {
+        temp: c.temperature_2m,
+        rh: c.relative_humidity_2m,
+        wind: c.wind_speed_10m,
+        uv: c.uv_index,
+        code: c.weather_code,
+        city,
+      }
+      localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }))
+      return data
+    } catch { return null }
+  }
+
+  function wxConditionLabel(code: number): string {
+    if (code === 0) return 'Cerah'
+    if (code <= 3) return 'Berawan Sebagian'
+    if (code <= 48) return 'Berkabut'
+    if (code <= 67) return 'Hujan'
+    if (code <= 77) return 'Salju'
+    if (code <= 82) return 'Hujan Deras'
+    return 'Badai'
+  }
+
+  function calcWbgt(temp: number, rh: number): number {
+    const e = (rh / 100) * 6.105 * Math.exp(17.27 * temp / (237.3 + temp))
+    return parseFloat((0.567 * temp + 0.393 * e + 3.94).toFixed(1))
+  }
+
+  function wbgtStatus(wbgt: number): { label: string; color: string; cls: string } {
+    if (wbgt < 20) return { label: 'Aman', color: '#10b981', cls: 'bg-green-100 text-green-700' }
+    if (wbgt < 24) return { label: 'Rendah', color: '#22c55e', cls: 'bg-green-50 text-green-600' }
+    if (wbgt < 28) return { label: 'Sedang — Waspada', color: '#f59e0b', cls: 'bg-yellow-100 text-yellow-700' }
+    if (wbgt < 32) return { label: 'Panas — Kurangi Intensitas', color: '#ef4444', cls: 'bg-red-100 text-red-700' }
+    return { label: 'Berbahaya', color: '#7f1d1d', cls: 'bg-red-200 text-red-900' }
+  }
+
+  async function loadWeather() {
+    if (!settings.domisili) return
+    setWxLoading(true)
+    const trainWx = await fetchWeather(settings.domisili)
+    if (!cancelledRef.current) setWxTraining(trainWx)
+    const raceWxMap: Record<string, Record<string,number|string> | null> = {}
+    for (const race of races) {
+      if (race.city) {
+        raceWxMap[race.id] = await fetchWeather(race.city)
+      }
+    }
+    if (!cancelledRef.current) setWxRaces(raceWxMap)
+    setWxLoading(false)
+  }
 
   useEffect(() => {
     if (!athleteId) return
@@ -305,7 +375,7 @@ export default function ProfilPage() {
           .select('hr_type,hr_value,recorded_date')
           .eq('athlete_id', athleteId as string).order('recorded_date', { ascending: false }).limit(20),
         supabase.from('races')
-          .select('id,name,event_type,event_date,status,target_finish,distance_km')
+          .select('id,name,event_type,event_date,status,target_finish,distance_km,city')
           .eq('athlete_id', athleteId as string)
           .neq('status', 'done')
           .order('event_date', { ascending: true }),
@@ -332,6 +402,12 @@ export default function ProfilPage() {
     load()
     return () => { cancelled = true }
   }, [athleteId])
+
+  // Load cuaca setelah settings dan races tersedia
+  useEffect(() => {
+    if (settings.domisili) loadWeather()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings.domisili, races.length])
 
   // ─── Derived ─────────────────────────────────────────────────────────────
 
@@ -1112,6 +1188,114 @@ export default function ProfilPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+      </section>
+
+      {/* ── CUACA ── */}
+      <section className="bg-white rounded-xl shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-indigo-100">
+          <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest">🌤️ Cuaca Latihan & Race</div>
+          <button onClick={loadWeather} disabled={wxLoading}
+            className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors">
+            {wxLoading ? '⏳ Memuat...' : '🔄 Refresh'}
+          </button>
+        </div>
+
+        {!settings.domisili ? (
+          <div className="p-4 bg-gray-50 rounded-xl text-sm text-gray-400 text-center">
+            Isi domisili di Edit Profil untuk melihat cuaca latihan.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Cuaca Latihan */}
+            <div className="bg-gray-50 rounded-xl p-4">
+              <div className="text-xs font-semibold text-gray-500 mb-3">🏃 Cuaca Latihan — {settings.domisili}</div>
+              {!wxTraining ? (
+                <div className="text-xs text-gray-400">{wxLoading ? 'Mengambil data cuaca...' : 'Tidak ada data cuaca.'}</div>
+              ) : (() => {
+                const temp = Number(wxTraining.temp)
+                const rh = Number(wxTraining.rh)
+                const wbgt = calcWbgt(temp, rh)
+                const wst = wbgtStatus(wbgt)
+                return (
+                  <>
+                    <div className="text-sm font-semibold text-gray-700 mb-3">{wxConditionLabel(Number(wxTraining.code))}</div>
+                    <div className="grid grid-cols-4 gap-2 mb-3">
+                      {[
+                        { label: 'Suhu', val: `${temp}°C` },
+                        { label: 'Humidity', val: `${rh}%` },
+                        { label: 'Angin km/h', val: `${wxTraining.wind}` },
+                        { label: 'UV Index', val: `${wxTraining.uv}` },
+                      ].map(f => (
+                        <div key={f.label} className="text-center bg-white rounded-lg p-2">
+                          <div className="text-xs text-gray-400">{f.label}</div>
+                          <div className="text-sm font-bold text-gray-700">{f.val}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className={`text-xs font-bold px-3 py-2 rounded-lg ${wst.cls} mb-2`}>
+                      WBGT Index: {wbgt}°C — {wst.label}
+                    </div>
+                    {wbgt >= 28 && (
+                      <div className="text-xs text-orange-600 bg-orange-50 rounded-lg p-2">
+                        ⚠️ WBGT tinggi — kurangi intensitas 1 zona, prioritaskan HR bukan pace.
+                      </div>
+                    )}
+                    <button onClick={() => setHsiState({ temp, rh })}
+                      className="mt-2 text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors">
+                      🔁 Sync ke HSI Calculator
+                    </button>
+                  </>
+                )
+              })()}
+            </div>
+
+            {/* Cuaca Race */}
+            <div className="space-y-3">
+              {races.filter(r => r.city).length === 0 ? (
+                <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-400 text-center">
+                  Isi kota race di Race Management untuk melihat cuaca race.
+                </div>
+              ) : races.filter(r => r.city).map(race => {
+                const wx = wxRaces[race.id]
+                const statusBadge = race.status === 'A' ? '🏆' : race.status === 'B' ? '🏁' : '📅'
+                return (
+                  <div key={race.id} className="bg-gray-50 rounded-xl p-4">
+                    <div className="text-xs font-semibold text-gray-500 mb-2">{statusBadge} {race.name} — {race.city}</div>
+                    {!wx ? (
+                      <div className="text-xs text-gray-400">{wxLoading ? 'Mengambil data cuaca...' : 'Tidak ada data cuaca.'}</div>
+                    ) : (() => {
+                      const temp = Number(wx.temp)
+                      const rh = Number(wx.rh)
+                      const wbgt = calcWbgt(temp, rh)
+                      const wst = wbgtStatus(wbgt)
+                      return (
+                        <>
+                          <div className="text-xs font-medium text-gray-600 mb-2">{wxConditionLabel(Number(wx.code))} · {temp}°C</div>
+                          <div className="grid grid-cols-4 gap-1 mb-2">
+                            {[
+                              { label: 'Suhu', val: `${temp}°C` },
+                              { label: 'Humidity', val: `${rh}%` },
+                              { label: 'Angin', val: `${wx.wind}` },
+                              { label: 'UV', val: `${wx.uv}` },
+                            ].map(f => (
+                              <div key={f.label} className="text-center bg-white rounded-lg p-1.5">
+                                <div className="text-xs text-gray-400">{f.label}</div>
+                                <div className="text-xs font-bold text-gray-700">{f.val}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className={`text-xs font-bold px-2 py-1.5 rounded-lg ${wst.cls}`}>
+                            WBGT: {wbgt}°C — {wst.label}
+                          </div>
+                        </>
+                      )
+                    })()}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </section>
