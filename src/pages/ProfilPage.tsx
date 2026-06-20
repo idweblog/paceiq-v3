@@ -322,7 +322,6 @@ export default function ProfilPage() {
   const taStr = calcTrainingAge(settings.start_training_date)
   const vdotRel = getVdotReliability(settings.start_training_date)
   const predHmSec = latestTt ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 21097.5) : null
-  const pred10kSec = latestTt ? predictTime(latestTt.distance_km * 1000, latestTt.finish_time_sec, 10000) : null
   const easyPaceStr = vdot ? easyPaceFromVdot(vdot) : null
   const ef = calcEF(sessions)
   const pes = calcPES(sessions)
@@ -614,45 +613,57 @@ export default function ProfilPage() {
       {/* ── DATA PERFORMA ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Data Performa</div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-0 divide-y md:divide-y-0 md:divide-x divide-gray-100">
-          <div className="space-y-3 md:pr-6 pb-4 md:pb-0">
-            {[
-              { label: 'Time Trial Aktif', val: latestTt ? `${latestTt.distance_km ?? '—'} km — ${fmtTime(latestTt.finish_time_sec)}` : '—', note: latestTt ? new Date(latestTt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Tambahkan TT via tombol di bawah' },
-              { label: 'Pace TT', val: latestTt && latestTt.distance_km ? secToPace(Math.round(latestTt.finish_time_sec / latestTt.distance_km)) : '—', note: 'Avg pace per km' },
-              { label: 'Predicted HM', val: predHmSec ? fmtTime(Math.round(predHmSec)) : '—', note: 'Riegel formula' },
-              { label: 'Predicted 10K', val: pred10kSec ? fmtTime(Math.round(pred10kSec)) : '—', note: 'Riegel formula' },
-              { label: 'Magic Mile', val: latestTt && latestTt.distance_km ? magicMilePace(latestTt) : '—', note: 'Per km (Galloway)' },
-            ].map(f => (
-              <div key={f.label} className="flex justify-between items-start">
-                <div><div className="text-xs font-medium text-gray-500">{f.label}</div><div className="text-xs italic text-gray-400">{f.note}</div></div>
-                <div className="text-sm font-semibold text-gray-800">{f.val}</div>
-              </div>
-            ))}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Time Trial Aktif</div>
+            <div className="text-lg font-extrabold text-gray-900">{latestTt ? fmtTime(latestTt.finish_time_sec) : '—'}</div>
+            {latestTt && <div className="text-xs text-gray-400 mt-1">{latestTt.distance_km ? `${latestTt.distance_km} km` : ''} · {new Date(latestTt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
           </div>
-          <div className="space-y-3 md:pl-6 pt-4 md:pt-0">
-            <div className="flex justify-between items-start">
-              <div><div className="text-xs text-gray-400">VDOT</div><div className="text-xs text-gray-300">{vdotRel.note}</div></div>
-              <div className="text-right">
-                <div className="text-sm font-semibold text-gray-800">{vdot?.toFixed(1) ?? '—'}</div>
-                {vdot && <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-semibold">{vdotRel.icon} {vdotRel.label}</span>}
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Pace TT</div>
+            <div className="text-lg font-extrabold text-gray-900">{latestTt && latestTt.distance_km ? `${secToPace(Math.round(latestTt.finish_time_sec / latestTt.distance_km))}/km` : '—'}</div>
+            <div className="text-xs text-gray-400 mt-1">Avg pace per km</div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Magic Mile</div>
+            <div className="text-lg font-extrabold text-gray-900">{latestTt && latestTt.distance_km ? `${magicMilePace(latestTt)}/km` : '—'}</div>
+            <div className="text-xs text-gray-400 mt-1">Per km (Galloway)</div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Easy Run Pace</div>
+            <div className="text-lg font-extrabold text-gray-900">{easyPaceStr ? `${easyPaceStr}/km` : '—'}</div>
+            <div className="text-xs text-gray-400 mt-1">Dari VDOT terbaru</div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">VDOT</div>
+            <div className="text-lg font-extrabold text-gray-900">{vdot?.toFixed(1) ?? '—'}</div>
+            {vdot && (
+              <div className="mt-1">
+                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-semibold">{vdotRel.icon} {vdotRel.label}</span>
+                <div className="text-xs italic text-gray-400 mt-1 leading-tight">{vdotRel.note}</div>
               </div>
+            )}
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">LTHR</div>
+            <div className="text-lg font-extrabold text-gray-900">{lthrRef ? `${lthrRef} bpm` : '—'}</div>
+            <div className="text-xs text-gray-400 mt-1">{lthrFromTt ? 'Dari Time Trial' : 'Joe Friel reference'}</div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 col-span-2">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Long Run Terakhir</div>
+            <div className="text-base font-extrabold text-gray-900">{lrStr}</div>
+            <div className="text-xs text-gray-400 mt-1">Sesi ≥10 km atau ≥90 menit</div>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-4 col-span-2">
+            <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Status Cedera</div>
+            <div className="text-lg font-extrabold" style={{ color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' }}>
+              {settings.cedera === 'Tidak ada' ? '✅ Tidak Ada' : `⚠️ ${settings.cedera ?? '—'}`}
             </div>
-            {[
-              { label: 'Easy Run Pace', val: easyPaceStr ? `${easyPaceStr}/km` : '—', note: 'Dari VDOT terbaru' },
-              { label: 'Long Run Terakhir', val: lrStr, note: 'Sesi ≥10 km atau ≥90 menit' },
-              { label: 'LTHR', val: lthrRef ? `${lthrRef} bpm` : '—', note: lthrFromTt ? 'Dari Time Trial' : 'Joe Friel reference' },
-              { label: 'Status Cedera', val: settings.cedera ?? '—', note: '', color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' },
-            ].map(f => (
-              <div key={f.label} className="flex justify-between items-start">
-                <div><div className="text-xs font-medium text-gray-500">{f.label}</div><div className="text-xs italic text-gray-400">{f.note}</div></div>
-                <div className="text-base font-bold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
-              </div>
-            ))}
           </div>
         </div>
       </section>
 
-      {/* ── PREDICTED HM ── */}
+            {/* ── PREDICTED HM ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Predicted HM</div>
         <div className="mb-4">
