@@ -682,10 +682,10 @@ export default function ProfilPage() {
         {/* 4 Card Prediksi */}
         {latestTt && latestTt.distance_km ? (() => {
           const preds = [
-            { label: 'Full Marathon', dist: 42195, emoji: '🏅', color: '#6366f1' },
-            { label: 'Half Marathon', dist: 21097.5, emoji: '🏃', color: '#3b82f6' },
-            { label: '10K', dist: 10000, emoji: '⚡', color: '#10b981' },
             { label: '5K', dist: 5000, emoji: '🚀', color: '#f59e0b' },
+            { label: '10K', dist: 10000, emoji: '⚡', color: '#10b981' },
+            { label: 'Half Marathon', dist: 21097.5, emoji: '🏃', color: '#3b82f6' },
+            { label: 'Full Marathon', dist: 42195, emoji: '🏅', color: '#6366f1' },
           ]
           return (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
