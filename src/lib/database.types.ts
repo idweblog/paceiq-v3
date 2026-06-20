@@ -1167,7 +1167,7 @@ export type Database = {
           distance_km: number
           finish_time_sec: number
           hr_avg: number | null
-          hr_last_half: number | null
+          hr_partial_avg: number | null
           id: string
           lthr_calculated: number | null
           notes: string | null
@@ -1181,7 +1181,7 @@ export type Database = {
           distance_km: number
           finish_time_sec: number
           hr_avg?: number | null
-          hr_last_half?: number | null
+          hr_partial_avg?: number | null
           id?: string
           lthr_calculated?: number | null
           notes?: string | null
@@ -1195,7 +1195,7 @@ export type Database = {
           distance_km?: number
           finish_time_sec?: number
           hr_avg?: number | null
-          hr_last_half?: number | null
+          hr_partial_avg?: number | null
           id?: string
           lthr_calculated?: number | null
           notes?: string | null
@@ -1286,6 +1286,7 @@ export type Database = {
           tsb: number
         }[]
       }
+      get_my_group_athlete_ids: { Args: never; Returns: string[] }
       get_registration_policy: { Args: never; Returns: string }
       has_role: { Args: { role_name: string }; Returns: boolean }
       register_athlete:

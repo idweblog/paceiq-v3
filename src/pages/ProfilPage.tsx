@@ -25,7 +25,7 @@ interface TtEntry {
   finish_time_sec: number
   tt_type: string | null
   hr_avg: number | null
-  hr_last_half: number | null
+  hr_partial_avg: number | null
   lthr_calculated: number | null
   vdot: number | null
   notes: string | null
@@ -210,15 +210,13 @@ function calcHSI(temp: number, rh: number) {
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const TT_TYPES = [
-  { value: '8min',  label: '8 Menit (→ LTHR 5K)',   hint: 'LTHR = HR avg × 0.952' },
-  { value: '20min', label: '20 Menit (→ LTHR 10K)',  hint: 'LTHR = HR avg × 0.971' },
-  { value: '30min', label: '30 Menit (→ LTHR HM)',   hint: 'LTHR = HR avg menit 11–30' },
-  { value: '45min', label: '45 Menit (→ LTHR FM)',   hint: 'LTHR = HR avg × 0.987' },
-  { value: '60min', label: '60 Menit (→ LTHR Ultra)',hint: 'LTHR = HR avg menit 31–60' },
-  { value: '5K',    label: '5K Race',                hint: 'VDOT only, no LTHR' },
-  { value: '10K',   label: '10K Race',               hint: 'VDOT only, no LTHR' },
-  { value: 'HM',    label: 'Half Marathon',          hint: 'VDOT only, no LTHR' },
-  { value: 'FM',    label: 'Full Marathon',          hint: 'VDOT only, no LTHR' },
+  { value: '8min',      label: '8 Menit',  race: 'Race 5K',         hint: 'LTHR = HR avg × 0.952',            partialLabel: null },
+  { value: '15min-5k',  label: '15 Menit', race: 'Race 5K',         hint: 'LTHR = HR avg menit 4–15 × 0.962', partialLabel: 'Avg HR Menit 4–15 (bpm)' },
+  { value: '15min-10k', label: '15 Menit', race: 'Race 10K',        hint: 'LTHR = HR avg menit 4–15 × 0.978', partialLabel: 'Avg HR Menit 4–15 (bpm)' },
+  { value: '20min',     label: '20 Menit', race: 'Race 10K',        hint: 'LTHR = HR avg × 0.971',            partialLabel: null },
+  { value: '30min',     label: '30 Menit', race: 'Race HM & FM',    hint: 'LTHR = HR avg menit 11–30',        partialLabel: 'Avg HR Menit 11–30 (bpm)' },
+  { value: '45min',     label: '45 Menit', race: 'Race FM & Ultra', hint: 'LTHR = HR avg × 0.987',            partialLabel: null },
+  { value: '60min',     label: '60 Menit', race: 'Race FM & Ultra', hint: 'LTHR = HR avg menit 31–60',        partialLabel: 'Avg HR Menit 31–60 (bpm)' },
 ]
 
 const TT_DISTANCES: Record<string, number> = {
@@ -258,7 +256,7 @@ export default function ProfilPage() {
   const [ttForm, setTtForm] = useState({
     tt_date: new Date().toISOString().split('T')[0],
     tt_type: '5K', distance_km: '5.0', finish_time: '',
-    hr_avg: '', hr_last_half: '', notes: '',
+    hr_avg: '', hr_partial_avg: '', notes: '',
   })
   const [ttSaving, setTtSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -279,7 +277,7 @@ export default function ProfilPage() {
           .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date')
           .eq('athlete_id', athleteId as string).maybeSingle(),
         supabase.from('tt_history')
-          .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_last_half,lthr_calculated,vdot,notes')
+          .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_partial_avg,lthr_calculated,vdot,notes')
           .eq('athlete_id', athleteId as string).order('tt_date', { ascending: false }),
         supabase.from('training_sessions')
           .select('session_date,session_type,pace_avg_min,pace_avg_sec,hr_avg,trimp,distance_km,duration_sec')
@@ -346,8 +344,7 @@ export default function ProfilPage() {
     setTtForm(p => ({ ...p, tt_type: val, distance_km: dist > 0 ? dist.toString() : '' }))
   }
 
-  const needsHrLastHalf = ttForm.tt_type === '30min' || ttForm.tt_type === '60min'
-  const needsDistance = !['8min','20min','30min','45min','60min'].includes(ttForm.tt_type)
+  const needsPartial = TT_TYPES.find(t => t.value === ttForm.tt_type)?.partialLabel ?? null
 
   // ─── Handlers ────────────────────────────────────────────────────────────
 
@@ -424,7 +421,7 @@ export default function ProfilPage() {
     const lthrCalc = calcLthrFromTT(
       ttForm.tt_type,
       ttForm.hr_avg ? parseInt(ttForm.hr_avg) : null,
-      ttForm.hr_last_half ? parseInt(ttForm.hr_last_half) : null,
+      ttForm.hr_partial_avg ? parseInt(ttForm.hr_partial_avg) : null,
     )
     const vdotVal = distKm > 0 ? calcVdot(distKm * 1000, finishSec) : null
     setTtSaving(true)
@@ -435,7 +432,7 @@ export default function ProfilPage() {
       distance_km: distKm > 0 ? distKm : 0,
       finish_time_sec: finishSec,
       hr_avg: ttForm.hr_avg ? parseInt(ttForm.hr_avg) : null,
-      hr_last_half: ttForm.hr_last_half ? parseInt(ttForm.hr_last_half) : null,
+      hr_partial_avg: ttForm.hr_partial_avg ? parseInt(ttForm.hr_partial_avg) : null,
       lthr_calculated: lthrCalc,
       vdot: vdotVal,
       notes: ttForm.notes || null,
@@ -451,10 +448,10 @@ export default function ProfilPage() {
       )
     }
 
-    setTtForm({ tt_date: new Date().toISOString().split('T')[0], tt_type: '5K', distance_km: '5.0', finish_time: '', hr_avg: '', hr_last_half: '', notes: '' })
+    setTtForm({ tt_date: new Date().toISOString().split('T')[0], tt_type: '5K', distance_km: '5.0', finish_time: '', hr_avg: '', hr_partial_avg: '', notes: '' })
     setShowTtForm(false)
     const { data } = await supabase.from('tt_history')
-      .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_last_half,lthr_calculated,vdot,notes')
+      .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_partial_avg,lthr_calculated,vdot,notes')
       .eq('athlete_id', athleteId as string).order('tt_date', { ascending: false })
     if (data) setTtList(data)
   }
@@ -681,9 +678,18 @@ export default function ProfilPage() {
           </button>
         </div>
 
-        {showTtForm && (
+        {showTtForm && (() => {
+          const activeTtType = TT_TYPES.find(t => t.value === ttForm.tt_type)
+          const distKm = parseFloat(ttForm.distance_km || '0')
+          const finishSec = parseTimeToSec(ttForm.finish_time)
+          const hrAvgVal = ttForm.hr_avg ? parseInt(ttForm.hr_avg) : null
+          const hrPartialVal = ttForm.hr_partial_avg ? parseInt(ttForm.hr_partial_avg) : null
+          const previewPace = (distKm > 0 && finishSec) ? secToPace(Math.round(finishSec / distKm)) : null
+          const previewVdot = (distKm > 0 && finishSec) ? calcVdot(distKm * 1000, finishSec) : null
+          const previewLthr = calcLthrFromTT(ttForm.tt_type, hrAvgVal, hrPartialVal)
+          return (
           <div className="mb-5 p-4 bg-gray-50 rounded-lg">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Tanggal</label>
                 <input type="date" value={ttForm.tt_date} onChange={e => setTtForm(p => ({ ...p, tt_date: e.target.value }))}
@@ -693,51 +699,68 @@ export default function ProfilPage() {
                 <label className="block text-xs text-gray-500 mb-1">Jenis Time Trial</label>
                 <select value={ttForm.tt_type} onChange={e => onTtTypeChange(e.target.value)}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                  {TT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                  {TT_TYPES.map(t => (
+                    <option key={t.value} value={t.value}>{t.label} — {t.race}</option>
+                  ))}
                 </select>
-                <div className="text-xs text-indigo-500 mt-1">{TT_TYPES.find(t => t.value === ttForm.tt_type)?.hint}</div>
+                {activeTtType && (
+                  <div className="flex gap-3 mt-1">
+                    <span className="text-xs text-indigo-500">{activeTtType.hint}</span>
+                    <span className="text-xs font-semibold text-green-600">📍 {activeTtType.race}</span>
+                  </div>
+                )}
               </div>
-              {needsDistance && (
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">Jarak (km)</label>
-                  <input type="number" value={ttForm.distance_km} onChange={e => setTtForm(p => ({ ...p, distance_km: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                </div>
-              )}
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Waktu Finish (MM:SS atau HH:MM:SS)</label>
-                <input type="text" value={ttForm.finish_time} placeholder={needsDistance ? '31:10' : '20:00'}
+                <label className="block text-xs text-gray-500 mb-1">Jarak (km)</label>
+                <input type="number" step="0.01" value={ttForm.distance_km} placeholder="5.0"
+                  onChange={e => setTtForm(p => ({ ...p, distance_km: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Total Waktu (MM:SS atau HH:MM:SS)</label>
+                <input type="text" value={ttForm.finish_time} placeholder="20:00"
                   onChange={e => setTtForm(p => ({ ...p, finish_time: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">HR Avg (bpm)</label>
-                <input type="number" value={ttForm.hr_avg} placeholder="165" onChange={e => setTtForm(p => ({ ...p, hr_avg: e.target.value }))}
+                <label className="block text-xs text-gray-500 mb-1">Avg HR (bpm)</label>
+                <input type="number" value={ttForm.hr_avg} placeholder="165"
+                  onChange={e => setTtForm(p => ({ ...p, hr_avg: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
               </div>
-              {needsHrLastHalf && (
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">
-                    HR Avg {ttForm.tt_type === '30min' ? 'Menit 11–30' : 'Menit 31–60'} (bpm)
-                  </label>
-                  <input type="number" value={ttForm.hr_last_half} placeholder="172"
-                    onChange={e => setTtForm(p => ({ ...p, hr_last_half: e.target.value }))}
+              {needsPartial && (
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-xs text-gray-500 mb-1">{needsPartial}</label>
+                  <input type="number" value={ttForm.hr_partial_avg} placeholder="172"
+                    onChange={e => setTtForm(p => ({ ...p, hr_partial_avg: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                 </div>
               )}
-              <div className="col-span-2 md:col-span-3">
-                <label className="block text-xs text-gray-500 mb-1">Catatan</label>
-                <input type="text" value={ttForm.notes} placeholder="Kondisi, cuaca, rute..."
-                  onChange={e => setTtForm(p => ({ ...p, notes: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            </div>
+
+            {/* Preview Real-time */}
+            <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+              <div className="text-center">
+                <div className="text-xs text-gray-400 mb-1">Avg Pace</div>
+                <div className="text-lg font-extrabold text-indigo-700">{previewPace ? `${previewPace}/km` : '—'}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-gray-400 mb-1">VDOT</div>
+                <div className="text-lg font-extrabold text-indigo-700">{previewVdot ?? '—'}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xs text-gray-400 mb-1">LTHR</div>
+                <div className="text-lg font-extrabold text-red-600">{previewLthr ? `${previewLthr} bpm` : '—'}</div>
               </div>
             </div>
+
             <button onClick={saveTt} disabled={ttSaving}
               className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
               {ttSaving ? 'Menyimpan...' : 'Simpan TT'}
             </button>
           </div>
-        )}
+          )
+        })()}
 
         {ttList.length === 0 ? (
           <EmptyState title="Belum ada time trial" description="Input TT untuk menghitung VDOT dan LTHR otomatis." />
