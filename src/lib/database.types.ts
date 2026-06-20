@@ -910,6 +910,7 @@ export type Database = {
         Row: {
           actual_finish: string | null
           athlete_id: string
+          city: string | null
           created_at: string | null
           distance_km: number | null
           event_date: string | null
@@ -920,6 +921,7 @@ export type Database = {
           slug: string
           status: string
           target_finish: string | null
+          target_pace: string | null
           target_pace_min: number | null
           target_pace_sec: number | null
           updated_at: string | null
@@ -927,6 +929,7 @@ export type Database = {
         Insert: {
           actual_finish?: string | null
           athlete_id: string
+          city?: string | null
           created_at?: string | null
           distance_km?: number | null
           event_date?: string | null
@@ -937,6 +940,7 @@ export type Database = {
           slug: string
           status?: string
           target_finish?: string | null
+          target_pace?: string | null
           target_pace_min?: number | null
           target_pace_sec?: number | null
           updated_at?: string | null
@@ -944,6 +948,7 @@ export type Database = {
         Update: {
           actual_finish?: string | null
           athlete_id?: string
+          city?: string | null
           created_at?: string | null
           distance_km?: number | null
           event_date?: string | null
@@ -954,6 +959,7 @@ export type Database = {
           slug?: string
           status?: string
           target_finish?: string | null
+          target_pace?: string | null
           target_pace_min?: number | null
           target_pace_sec?: number | null
           updated_at?: string | null
