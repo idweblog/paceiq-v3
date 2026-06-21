@@ -81,7 +81,7 @@ const HR_ZONES: HrZone[] = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AthleteInfo {
   id: string; lthr: number | null; vcr: number | null  // m/s dari TT 30 menit
-  maxhr: number | null; rhr: number | null
+  maxhr: number | null; rhr: number | null; domisili: string | null
 }
 interface PaceZoneAdj {
   id: string; zone_key: string
@@ -110,6 +110,7 @@ export default function PaceZonesPage() {
   const [heatMode, setHeatMode]       = useState(false)
   const [weather, setWeather]         = useState<WeatherCache | null>(null)
   const [weatherLoading, setWeatherLoading] = useState(false)
+  const [weatherError, setWeatherError]     = useState('')
   const [loading, setLoading]         = useState(true)
   // Inline edit: key = zone_key
   const [editMap, setEditMap]         = useState<Record<string, EditState>>({})
@@ -142,7 +143,7 @@ export default function PaceZonesPage() {
 
       // Athlete settings
       const { data: settings } = await supabase
-        .from('athlete_settings').select('max_hr, resting_hr')
+        .from('athlete_settings').select('max_hr, resting_hr, domisili')
         .eq('athlete_id', myId as string).single()
 
       // TT history
@@ -166,6 +167,7 @@ export default function PaceZonesPage() {
           vcr,
           maxhr: (settings as any)?.max_hr ?? null,
           rhr: (settings as any)?.resting_hr ?? null,
+          domisili: (settings as any)?.domisili ?? null,
         })
         setTtHistory(rows as TtHistoryRow[])
       }
@@ -192,34 +194,74 @@ export default function PaceZonesPage() {
 
   // ── Weather ────────────────────────────────────────────────────────────────
   async function fetchWeather() {
-    const cacheKey = 'paceiq_weather_wbgt'
+    const domisili = athleteInfo?.domisili
+    if (!domisili) {
+      console.warn('[PaceIQ] Domisili belum diset di Profil — Heat Mode tidak dapat fetch cuaca')
+      return
+    }
+
+    const cacheKey = `paceiq_weather_wbgt_${domisili.toLowerCase().replace(/\s+/g, '_')}`
     const cached = localStorage.getItem(cacheKey)
     if (cached) {
-      const parsed: WeatherCache = JSON.parse(cached)
-      if (Date.now() - parsed.fetched_at < 30 * 60 * 1000) { setWeather(parsed); return }
+      try {
+        const parsed: WeatherCache = JSON.parse(cached)
+        if (Date.now() - parsed.fetched_at < 30 * 60 * 1000) {
+          setWeather(parsed)
+          return
+        }
+      } catch { localStorage.removeItem(cacheKey) }
     }
+
     setWeatherLoading(true)
     try {
-      const geo = await fetch('https://ipapi.co/json/').then(r => r.json())
-      const lat = geo.latitude ?? -5.14, lon = geo.longitude ?? 119.43
-      const wx = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&wind_speed_unit=ms`
-      ).then(r => r.json())
+      // Step 1: Geocode nama kota dari domisili via Open-Meteo Geocoding API
+      const geoRes = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(domisili)}&count=1&language=id&format=json`,
+        { signal: AbortSignal.timeout(8000) }
+      )
+      if (!geoRes.ok) throw new Error(`Geocoding error: ${geoRes.status}`)
+      const geoData = await geoRes.json()
+      const loc = geoData.results?.[0]
+      if (!loc) throw new Error(`Kota "${domisili}" tidak ditemukan`)
+
+      const lat = loc.latitude
+      const lon = loc.longitude
+      const cityName = loc.name
+
+      // Step 2: Fetch cuaca dari koordinat kota
+      const wxRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m&wind_speed_unit=ms&timezone=auto`,
+        { signal: AbortSignal.timeout(8000) }
+      )
+      if (!wxRes.ok) throw new Error(`Weather error: ${wxRes.status}`)
+      const wx = await wxRes.json()
+
       const temp = wx.current?.temperature_2m ?? 30
       const rh   = wx.current?.relative_humidity_2m ?? 70
       const ws   = wx.current?.wind_speed_10m ?? 2
+
+      // WBGT Simplified (Liljegren approximation)
       const Tw = temp * Math.atan(0.151977 * Math.sqrt(rh + 8.313659))
              + Math.atan(temp + rh) - Math.atan(rh - 1.676331)
              + 0.00391838 * rh ** 1.5 * Math.atan(0.023101 * rh) - 4.686035
       const wbgt = Math.round((0.7 * Tw + 0.2 * temp + 0.1 * (temp - ws * 0.5)) * 10) / 10
+
       const data: WeatherCache = { wbgt, temp, humidity: rh, fetched_at: Date.now() }
       localStorage.setItem(cacheKey, JSON.stringify(data))
       setWeather(data)
-    } catch { /* silently fail */ }
-    finally { setWeatherLoading(false) }
+      console.info(`[PaceIQ] Weather fetched for ${cityName}: WBGT ${wbgt}°C, Temp ${temp}°C, RH ${rh}%`)
+    } catch (err) {
+      console.error('[PaceIQ] fetchWeather error:', err)
+      setWeatherError(String(err))
+    } finally {
+      setWeatherLoading(false)
+    }
   }
 
-  useEffect(() => { if (heatMode && !weather) fetchWeather() }, [heatMode])
+  useEffect(() => {
+    if (heatMode && !weather && athleteInfo) fetchWeather()
+    if (!heatMode) { setWeather(null); setWeatherError('') }
+  }, [heatMode, athleteInfo])
 
   // ── Pace calculation ──────────────────────────────────────────────────────
   function calcZonePaces(vcr: number) {
@@ -356,12 +398,23 @@ export default function PaceZonesPage() {
           {maxhr && <span className="inline-flex items-center gap-1.5 bg-gray-50 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200">↑ MaxHR: {maxhr} bpm</span>}
           {vcr && <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-200">⚡ VCR: {vcr} m/s</span>}
         </div>
-        <button onClick={() => setHeatMode(m => !m)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${heatMode ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400 hover:text-amber-600'}`}>
-          🌡️ Heat Mode {heatMode ? 'ON' : 'OFF'}
-          {heatMode && wbgt != null && <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${wbgtBadge?.cls}`}>WBGT {wbgt}°C</span>}
-          {heatMode && weatherLoading && <span className="text-xs opacity-70">loading...</span>}
-        </button>
+        <div className="flex flex-col items-end gap-1">
+          <button onClick={() => setHeatMode(m => !m)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${heatMode ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400 hover:text-amber-600'}`}>
+            🌡️ Heat Mode {heatMode ? 'ON' : 'OFF'}
+            {heatMode && wbgt != null && <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${wbgtBadge?.cls}`}>WBGT {wbgt}°C — {athleteInfo?.domisili}</span>}
+            {heatMode && weatherLoading && <span className="text-xs opacity-70">Mengambil cuaca {athleteInfo?.domisili}...</span>}
+          </button>
+          {heatMode && weatherError && (
+            <span className="text-xs text-red-500">
+              {weatherError.includes('tidak ditemukan')
+                ? `Kota "${athleteInfo?.domisili}" tidak ditemukan. Update domisili di Profil.`
+                : !athleteInfo?.domisili
+                ? 'Set domisili di menu Profil untuk mengaktifkan Heat Mode.'
+                : 'Gagal mengambil data cuaca. Cek koneksi internet.'}
+            </span>
+          )}
+        </div>
       </div>
 
       {(!lthr || !vcr) && (
