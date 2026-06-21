@@ -920,7 +920,7 @@ export default function ProfilPage() {
               ].map(f => (
                 <div key={f.label} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                   <div>
-                    <div className="text-xs font-semibold text-gray-500">{f.label}</div>
+                    <div className="text-sm font-bold text-gray-800">{f.label}</div>
                     <div className="text-xs text-gray-400">{f.sub}</div>
                   </div>
                   <div className="text-lg font-extrabold" style={{ color: f.color }}>{f.val}</div>
@@ -974,7 +974,7 @@ export default function ProfilPage() {
                 ].map(f => (
                   <div key={f.label} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                     <div>
-                      <div className="text-xs font-semibold text-gray-500">{f.label}</div>
+                      <div className="text-sm font-bold text-gray-800">{f.label}</div>
                       <div className="text-xs text-gray-400">{f.sub}</div>
                     </div>
                     <div className="text-base font-extrabold" style={{ color: f.color }}>{f.val}</div>
@@ -1127,7 +1127,7 @@ export default function ProfilPage() {
               <thead>
                 <tr className="text-xs text-gray-400 border-b border-gray-100">
                   {['Tanggal','Jenis TT','Waktu','Pace','Pred. HM','VDOT','Magic Mile','LTHR',''].map(h => (
-                    <th key={h} className="text-left py-2 pr-3 font-medium whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left py-2 pr-3 font-bold text-gray-900 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
