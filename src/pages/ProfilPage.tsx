@@ -764,27 +764,27 @@ export default function ProfilPage() {
         <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Data Performa</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Time Trial Aktif</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">Time Trial Aktif</div>
             <div className="text-sm font-bold text-gray-800">{latestTt ? fmtTime(latestTt.finish_time_sec) : '—'}</div>
             {latestTt && <div className="text-xs text-gray-400 mt-0.5">{latestTt.distance_km ? `${latestTt.distance_km} km` : ''} · {new Date(latestTt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Pace TT</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">Pace TT</div>
             <div className="text-sm font-bold text-gray-800">{latestTt && latestTt.distance_km ? `${secToPace(Math.round(latestTt.finish_time_sec / latestTt.distance_km))}/km` : '—'}</div>
             <div className="text-xs text-gray-400 mt-0.5">Avg pace per km</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Magic Mile</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">Magic Mile</div>
             <div className="text-sm font-bold text-gray-800">{latestTt && latestTt.distance_km ? `${magicMilePace(latestTt)}/km` : '—'}</div>
             <div className="text-xs text-gray-400 mt-0.5">Per km (Galloway)</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Easy Run Pace</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">Easy Run Pace</div>
             <div className="text-sm font-bold text-gray-800">{easyPaceStr ? `${easyPaceStr}/km` : '—'}</div>
             <div className="text-xs text-gray-400 mt-0.5">Dari VDOT terbaru</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">VDOT</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">VDOT</div>
             <div className="text-sm font-bold text-gray-800">{vdot?.toFixed(1) ?? '—'}</div>
             {vdot && (
               <div className="mt-1">
@@ -794,17 +794,17 @@ export default function ProfilPage() {
             )}
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">LTHR</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">LTHR</div>
             <div className="text-sm font-bold text-gray-800">{lthrRef ? `${lthrRef} bpm` : '—'}</div>
             <div className="text-xs text-gray-400 mt-0.5">{lthrFromTt ? 'Dari Time Trial' : 'Joe Friel reference'}</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4 col-span-2">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Long Run Terakhir</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">Long Run Terakhir</div>
             <div className="text-sm font-bold text-gray-800">{lrStr}</div>
             <div className="text-xs text-gray-400 mt-0.5">Sesi ≥10 km atau ≥90 menit</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4 col-span-2">
-            <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Status Cedera</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">Status Cedera</div>
             <div className="text-lg font-extrabold" style={{ color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' }}>
               {settings.cedera === 'Tidak ada' ? '✅ Tidak Ada' : `⚠️ ${settings.cedera ?? '—'}`}
             </div>
@@ -833,7 +833,7 @@ export default function ProfilPage() {
                 return (
                   <div key={p.label} className="rounded-xl p-4 text-center" style={{ background: p.color + '12', border: `1.5px solid ${p.color}30` }}>
                     <div className="text-xl mb-1">{p.emoji}</div>
-                    <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">{p.label}</div>
+                    <div className="text-xs font-medium text-gray-500 uppercase mb-2">{p.label}</div>
                     <div className="text-xl font-extrabold" style={{ color: p.color }}>{fmtTime(sec)}</div>
                     <div className="text-xs text-gray-400 mt-0.5">{pacePerKm}/km</div>
                   </div>
