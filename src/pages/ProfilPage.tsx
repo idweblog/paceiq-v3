@@ -1255,7 +1255,7 @@ export default function ProfilPage() {
           {/* ── Cuaca Latihan ── */}
           <div className="border border-gray-200 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-xs font-semibold text-gray-500">🏃 Cuaca Latihan Hari Ini</div>
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">🏃 Cuaca Latihan Hari Ini</div>
             </div>
 
             {!settings.domisili ? (
@@ -1364,7 +1364,7 @@ export default function ProfilPage() {
 
           {/* ── Cuaca Race ── */}
           <div>
-            <div className="text-xs font-semibold text-gray-500 mb-3">🏁 Cuaca Kota Race</div>
+            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">🏁 Cuaca Kota Race</div>
             {races.filter(r => r.city).length === 0 ? (
               <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400 text-center border border-gray-200">
                 Isi kota race di Race Management untuk melihat cuaca race.
