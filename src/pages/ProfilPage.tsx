@@ -211,6 +211,15 @@ function calcPES(sessions: TrainingSession[]) {
   return { pes, label, color, msg, phrNorm, teNorm, rhrNorm, z12Norm }
 }
 
+const WX_CONDITION_MAP: Record<number, string> = {
+  0:'☀️ Cerah', 1:'🌤️ Cerah Berawan', 2:'⛅ Berawan Sebagian', 3:'☁️ Mendung',
+  45:'🌫️ Berkabut', 48:'🌫️ Kabut Beku', 51:'🌦️ Gerimis Ringan', 53:'🌦️ Gerimis', 55:'🌧️ Gerimis Lebat',
+  61:'🌧️ Hujan Ringan', 63:'🌧️ Hujan', 65:'🌧️ Hujan Lebat',
+  71:'🌨️ Salju Ringan', 73:'🌨️ Salju', 75:'🌨️ Salju Lebat',
+  80:'🌦️ Hujan Lokal', 81:'🌧️ Hujan Lokal', 82:'⛈️ Hujan Lebat',
+  95:'⛈️ Badai', 96:'⛈️ Badai + Hujan Es', 99:'⛈️ Badai Kuat'
+}
+
 function wxGearRecommendation(temp: number, rh: number, code: number) {
   const isRain = code >= 51
   const isHot  = temp >= 28
@@ -341,55 +350,54 @@ export default function ProfilPage() {
     return () => { cancelledRef.current = true }
   }, [])
 
-  async function fetchWeather(city: string): Promise<Record<string,number|string> | null> {
-    const cacheKey = `wx_${city}`
-    const cached = localStorage.getItem(cacheKey)
-    if (cached) {
-      const { data, ts } = JSON.parse(cached)
-      if (Date.now() - ts < 3600000) return data
+  async function fetchWeather(city: string, forceRefresh = false): Promise<Record<string,number|string> | null> {
+    const cacheKey = `wx_v3_${city.toLowerCase().trim()}`
+    if (!forceRefresh) {
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        const { data, ts } = JSON.parse(cached)
+        if (Date.now() - ts < 3600000) return data
+      }
+    } else {
+      localStorage.removeItem(cacheKey)
     }
     try {
-      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=id`)
+      const geoRes = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=id&format=json`)
       const geoData = await geoRes.json()
       if (!geoData.results?.length) return null
-      const { latitude, longitude } = geoData.results[0]
-      const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,uv_index,weather_code&timezone=auto`)
+      const { latitude, longitude, name, country } = geoData.results[0]
+      const wxRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,uv_index&timezone=auto`)
       const wxData = await wxRes.json()
       const c = wxData.current
-      const data = {
-        temp: c.temperature_2m,
+      const data: Record<string, number|string> = {
+        temp: Math.round(c.temperature_2m * 10) / 10,
         rh: c.relative_humidity_2m,
-        wind: c.wind_speed_10m,
+        feelsLike: Math.round(c.apparent_temperature * 10) / 10,
+        wind: Math.round(c.wind_speed_10m),
         uv: c.uv_index,
         code: c.weather_code,
-        city,
+        condition: WX_CONDITION_MAP[c.weather_code] ?? '🌡️ Tidak diketahui',
+        cityName: name,
+        country: country ?? '',
       }
       localStorage.setItem(cacheKey, JSON.stringify({ data, ts: Date.now() }))
       return data
     } catch { return null }
   }
 
-  function wxConditionLabel(code: number): string {
-    if (code === 0) return 'Cerah'
-    if (code <= 3) return 'Berawan Sebagian'
-    if (code <= 48) return 'Berkabut'
-    if (code <= 67) return 'Hujan'
-    if (code <= 77) return 'Salju'
-    if (code <= 82) return 'Hujan Deras'
-    return 'Badai'
-  }
 
 
 
-  async function loadWeather() {
+
+  async function loadWeather(forceRefresh = false) {
     if (!settings.domisili) return
     setWxLoading(true)
-    const trainWx = await fetchWeather(settings.domisili)
+    const trainWx = await fetchWeather(settings.domisili, forceRefresh)
     if (!cancelledRef.current) setWxTraining(trainWx)
     const raceWxMap: Record<string, Record<string,number|string> | null> = {}
     for (const race of races) {
       if (race.city) {
-        raceWxMap[race.id] = await fetchWeather(race.city)
+        raceWxMap[race.id] = await fetchWeather(race.city, forceRefresh)
       }
     }
     if (!cancelledRef.current) setWxRaces(raceWxMap)
@@ -1236,214 +1244,218 @@ export default function ProfilPage() {
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between mb-4 pb-2 border-b border-indigo-100">
           <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest">🌤️ Cuaca Latihan & Race</div>
-          <button onClick={loadWeather} disabled={wxLoading}
-            className="text-xs px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors flex items-center gap-1">
+          <button onClick={() => loadWeather(true)} disabled={wxLoading}
+            className="text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+            style={{ background: '#ede9fe', color: '#4f46e5' }}>
             {wxLoading ? '⏳ Memuat...' : '🔄 Refresh'}
           </button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {/* Cuaca Latihan */}
-          <div>
-            <div className="text-xs font-semibold text-gray-500 mb-3">🏃 Cuaca Latihan Hari Ini</div>
-            {!settings.domisili ? (
-              <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400 text-center">Isi domisili di Edit Profil.</div>
-            ) : !wxTraining ? (
-              <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400">{wxLoading ? '⏳ Mengambil data cuaca...' : 'Tidak ada data cuaca.'}</div>
-            ) : (() => {
-              const temp = Number(wxTraining.temp)
-              const rh   = Number(wxTraining.rh)
-              const wind = Number(wxTraining.wind)
-              const uv   = Number(wxTraining.uv)
-              const code = Number(wxTraining.code)
-              const e    = (rh/100)*6.105*Math.exp(17.27*temp/(237.3+temp))
-              const wbgt = parseFloat((0.567*temp + 0.393*e + 3.94).toFixed(1))
-              const ws   = wxGetWBGTStatus(wbgt)
-              const strat = wxStrategyText(temp, rh, uv, wind)
-              const gear  = wxGearRecommendation(temp, rh, code)
-              const wbgtBg = wbgt < 23 ? '#d1fae5' : wbgt < 28 ? '#fef3c7' : wbgt < 32 ? '#fed7aa' : '#fee2e2'
-              const wbgtTxt = wbgt < 23 ? '#065f46' : wbgt < 28 ? '#78350f' : wbgt < 32 ? '#9a3412' : '#7f1d1d'
-              return (
+
+          {/* ── Cuaca Latihan ── */}
+          <div className="rounded-xl overflow-hidden" style={{ background: 'linear-gradient(135deg,#1e1b4b,#3730a3)' }}>
+            <div className="p-4">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-3">
                 <div>
-                  {/* Kondisi */}
-                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                    <div>
-                      <div className="text-base font-bold text-gray-800">{wxConditionLabel(code)}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">📍 {settings.domisili} · Terasa {temp}°C</div>
-                    </div>
-                  </div>
-                  {/* Metric tiles */}
-                  <div className="grid grid-cols-4 gap-2 mb-3">
-                    {[
-                      { icon: '🌡️', val: `${temp}°C`,  label: 'Suhu',       bg: '#eff6ff', color: '#1e40af' },
-                      { icon: '💧', val: `${rh}%`,     label: 'Humidity',   bg: '#f0fdf4', color: '#065f46' },
-                      { icon: '💨', val: `${wind}`,    label: 'Angin km/h', bg: '#f5f3ff', color: '#5b21b6' },
-                      { icon: '☀️', val: `${uv}`,      label: 'UV Index',   bg: '#fefce8', color: '#713f12' },
-                    ].map(t => (
-                      <div key={t.label} style={{ background: t.bg }} className="rounded-xl p-2.5 text-center">
-                        <div className="text-base mb-1">{t.icon}</div>
-                        <div className="text-sm font-extrabold" style={{ color: t.color }}>{t.val}</div>
-                        <div className="text-xs text-gray-500 uppercase mt-0.5" style={{ fontSize: '0.6rem' }}>{t.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* WBGT bar */}
-                  <div className="rounded-xl px-4 py-3 mb-3" style={{ background: wbgtBg }}>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <span className="text-xs font-bold uppercase" style={{ color: wbgtTxt }}>WBGT Index</span>
-                      <span className="text-sm font-extrabold" style={{ color: wbgtTxt }}>{wbgt}°C — {ws.label}</span>
-                    </div>
-                    <div className="h-1.5 rounded-full" style={{ background: 'rgba(0,0,0,0.08)' }}>
-                      <div className="h-full rounded-full transition-all" style={{ width: `${ws.pct}%`, background: ws.color }} />
-                    </div>
-                  </div>
-                  {/* Advisory */}
-                  {strat.length > 0 && (
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-3 space-y-1">
-                      {strat.map((s, i) => <div key={i} className="text-xs text-gray-700">{s}</div>)}
-                    </div>
-                  )}
-                  {/* Gear */}
-                  {(gear.required.length > 0 || gear.recommended.length > 0 || gear.optional.length > 0) && (
-                    <div className="bg-gray-50 rounded-xl px-4 py-3 mb-3 space-y-2">
-                      {gear.required.length > 0 && (
-                        <div>
-                          <div className="text-xs font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>⚠️ Wajib</div>
-                          <div className="flex flex-wrap gap-1">{gear.required.map(g => <span key={g} className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">{g}</span>)}</div>
-                        </div>
-                      )}
-                      {gear.recommended.length > 0 && (
-                        <div>
-                          <div className="text-xs font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>✅ Disarankan</div>
-                          <div className="flex flex-wrap gap-1">{gear.recommended.map(g => <span key={g} className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-green-100 text-green-700">{g}</span>)}</div>
-                        </div>
-                      )}
-                      {gear.optional.length > 0 && (
-                        <div>
-                          <div className="text-xs font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>💡 Opsional</div>
-                          <div className="flex flex-wrap gap-1">{gear.optional.map(g => <span key={g} className="text-xs px-2.5 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">{g}</span>)}</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <button onClick={() => setHsiState({ temp, rh })}
-                    className="text-xs px-3 py-1.5 rounded-lg transition-colors"
-                    style={{ background: '#ede9fe', color: '#4f46e5' }}>
-                    🔁 Sync ke HSI Calculator
-                  </button>
+                  <div className="font-bold uppercase tracking-widest" style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.5)' }}>🏃 Cuaca Latihan Hari Ini</div>
+                  <div className="font-bold text-white mt-0.5" style={{ fontSize: '0.88rem' }}>{settings.domisili ?? '—'}</div>
                 </div>
-              )
-            })()}
+              </div>
+
+              {!settings.domisili ? (
+                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.55)', padding: '12px 0' }}>Isi domisili di Edit Profil.</div>
+              ) : !wxTraining ? (
+                <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.55)', padding: '12px 0' }}>{wxLoading ? '⏳ Mengambil data cuaca...' : 'Klik Refresh untuk memuat cuaca.'}</div>
+              ) : (() => {
+                const temp = Number(wxTraining.temp)
+                const rh   = Number(wxTraining.rh)
+                const wind = Number(wxTraining.wind)
+                const uv   = Number(wxTraining.uv)
+                const code = Number(wxTraining.code)
+                const feelsLike = Number(wxTraining.feelsLike)
+                const condition = String(wxTraining.condition ?? WX_CONDITION_MAP[code] ?? '🌡️')
+                const cityName  = String(wxTraining.cityName ?? settings.domisili)
+                const country   = String(wxTraining.country ?? '')
+                const e    = (rh/100)*6.105*Math.exp(17.27*temp/(237.3+temp))
+                const wbgt = parseFloat((0.567*temp + 0.393*e + 3.94).toFixed(1))
+                const ws   = wxGetWBGTStatus(wbgt)
+                const strat = wxStrategyText(temp, rh, uv, wind)
+                const gear  = wxGearRecommendation(temp, rh, code)
+                return (
+                  <>
+                    <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.75)', marginBottom: '8px' }}>
+                      {condition} · 📍 {cityName}{country ? `, ${country}` : ''} · Terasa {feelsLike}°C
+                    </div>
+                    {/* Metric tiles */}
+                    <div className="grid grid-cols-4 gap-2 mb-3">
+                      {[
+                        { icon: '🌡️', val: `${temp}°C`,  label: 'Suhu' },
+                        { icon: '💧', val: `${rh}%`,     label: 'Humidity' },
+                        { icon: '💨', val: `${wind}`,    label: 'Angin km/h' },
+                        { icon: '☀️', val: `${uv}`,      label: 'UV Index' },
+                      ].map(t => (
+                        <div key={t.label} className="rounded-lg text-center" style={{ background: 'rgba(255,255,255,0.1)', padding: '8px 10px' }}>
+                          <div style={{ fontSize: '1rem', marginBottom: '2px' }}>{t.icon}</div>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 800, color: 'white' }}>{t.val}</div>
+                          <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginTop: '1px' }}>{t.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {/* WBGT */}
+                    <div className="flex items-center gap-2 mb-1">
+                      <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>WBGT</span>
+                      <div className="flex-1 rounded-full" style={{ height: '5px', background: 'rgba(255,255,255,0.12)' }}>
+                        <div className="rounded-full" style={{ height: '100%', width: `${ws.pct}%`, background: ws.color, transition: 'width 0.5s' }} />
+                      </div>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 800, color: ws.color, whiteSpace: 'nowrap' }}>{wbgt}°C — {ws.label}</span>
+                    </div>
+                    {/* Advisory */}
+                    {strat.length > 0 && (
+                      <div className="rounded-lg mt-2" style={{ background: 'rgba(255,255,255,0.08)', padding: '8px 10px', fontSize: '0.72rem', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
+                        {strat.map((s, i) => <div key={i}>{s}</div>)}
+                      </div>
+                    )}
+                    {/* Gear */}
+                    {(gear.required.length > 0 || gear.recommended.length > 0 || gear.optional.length > 0) && (
+                      <div className="mt-2 space-y-1.5">
+                        {gear.required.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>⚠️ Wajib</div>
+                            <div className="flex flex-wrap gap-1">{gear.required.map(g => <span key={g} style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: 600, background: '#fee2e2', color: '#991b1b' }}>{g}</span>)}</div>
+                          </div>
+                        )}
+                        {gear.recommended.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>✅ Disarankan</div>
+                            <div className="flex flex-wrap gap-1">{gear.recommended.map(g => <span key={g} style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: 600, background: '#d1fae5', color: '#065f46' }}>{g}</span>)}</div>
+                          </div>
+                        )}
+                        {gear.optional.length > 0 && (
+                          <div>
+                            <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>💡 Opsional</div>
+                            <div className="flex flex-wrap gap-1">{gear.optional.map(g => <span key={g} style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: 600, background: '#f3f4f6', color: '#374151' }}>{g}</span>)}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <button onClick={() => setHsiState({ temp, rh })}
+                      className="mt-3 flex items-center gap-1"
+                      style={{ fontSize: '0.7rem', padding: '5px 12px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.12)', color: 'white', cursor: 'pointer' }}>
+                      🔁 Sync ke HSI Calculator
+                    </button>
+                    <div style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.3)', textAlign: 'right', marginTop: '6px' }}>Data cuaca saat ini · bukan forecast</div>
+                  </>
+                )
+              })()}
+            </div>
           </div>
 
-          {/* Cuaca Race */}
-          <div>
-            <div className="text-xs font-semibold text-gray-500 mb-3">🏁 Cuaca Kota Race</div>
+          {/* ── Cuaca Race ── */}
+          <div className="space-y-3">
+            <div className="text-xs font-semibold text-gray-500">🏁 Cuaca Kota Race</div>
             {races.filter(r => r.city).length === 0 ? (
               <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400 text-center">
                 Isi kota race di Race Management untuk melihat cuaca race.
               </div>
-            ) : (
-              <div className="space-y-4">
-                {races.filter(r => r.city).map(race => {
-                  const wx = wxRaces[race.id]
-                  const isA = race.status === 'A'
-                  const accentDot = isA ? '#f59e0b' : '#3b82f6'
-                  const daysLeft = race.event_date ? Math.ceil((new Date(race.event_date).getTime() - Date.now()) / 86400000) : null
-                  return (
-                    <div key={race.id} className="border border-gray-200 rounded-xl p-4">
-                      {/* Header race */}
-                      <div className="flex items-start justify-between mb-3 gap-2">
-                        <div>
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accentDot }}></span>
-                            <span className="font-bold uppercase" style={{ fontSize: '0.62rem', color: accentDot, letterSpacing: '0.07em' }}>
-                              Race {race.status} · {daysLeft != null && daysLeft > 0 ? `${daysLeft} hari lagi` : daysLeft === 0 ? 'HARI INI' : 'Selesai'}
-                            </span>
-                          </div>
-                          <div className="text-sm font-extrabold text-gray-800">{race.name}</div>
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            📍 {race.city} · {race.event_date ? new Date(race.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
-                          </div>
+            ) : races.filter(r => r.city).map(race => {
+              const wx = wxRaces[race.id]
+              const isA = race.status === 'A'
+              const accentDot  = isA ? '#f59e0b' : '#3b82f6'
+              const daysLeft = race.event_date ? Math.ceil((new Date(race.event_date).getTime() - Date.now()) / 86400000) : null
+              return (
+                <div key={race.id} className="rounded-xl overflow-hidden" style={{ background: 'linear-gradient(135deg,#064e3b,#065f46)' }}>
+                  <div className="p-4">
+                    {/* Header race */}
+                    <div className="flex items-start gap-2 mb-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: accentDot }}></span>
+                          <span className="font-bold uppercase" style={{ fontSize: '0.62rem', color: accentDot, letterSpacing: '0.07em' }}>
+                            Race {race.status} · {daysLeft != null && daysLeft > 0 ? `${daysLeft} hari lagi` : daysLeft === 0 ? 'HARI INI' : 'Selesai'}
+                          </span>
+                        </div>
+                        <div className="font-extrabold text-white" style={{ fontSize: '0.95rem' }}>{race.name}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.6)', marginTop: '2px' }}>
+                          📍 {race.city} · {race.event_date ? new Date(race.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
                         </div>
                       </div>
-                      {!wx ? (
-                        <div className="text-xs text-gray-400">{wxLoading ? '⏳ Mengambil data cuaca...' : 'Tidak ada data cuaca.'}</div>
-                      ) : (() => {
-                        const temp = Number(wx.temp)
-                        const rh   = Number(wx.rh)
-                        const wind = Number(wx.wind)
-                        const uv   = Number(wx.uv)
-                        const code = Number(wx.code)
-                        const e    = (rh/100)*6.105*Math.exp(17.27*temp/(237.3+temp))
-                        const wbgt = parseFloat((0.567*temp + 0.393*e + 3.94).toFixed(1))
-                        const ws   = wxGetWBGTStatus(wbgt)
-                        const strat = wxStrategyText(temp, rh, uv, wind)
-                        const gear  = wxGearRecommendation(temp, rh, code)
-                        const wbgtBg = wbgt < 23 ? '#d1fae5' : wbgt < 28 ? '#fef3c7' : wbgt < 32 ? '#fed7aa' : '#fee2e2'
-                        const wbgtTxt = wbgt < 23 ? '#065f46' : wbgt < 28 ? '#78350f' : wbgt < 32 ? '#9a3412' : '#7f1d1d'
-                        return (
-                          <>
-                            <div className="text-xs text-gray-600 mb-3">{wxConditionLabel(code)} · Terasa {temp}°C</div>
-                            <div className="grid grid-cols-4 gap-1.5 mb-3">
-                              {[
-                                { icon: '🌡️', val: `${temp}°C`,  label: 'Suhu',       bg: '#eff6ff', color: '#1e40af' },
-                                { icon: '💧', val: `${rh}%`,     label: 'Humidity',   bg: '#f0fdf4', color: '#065f46' },
-                                { icon: '💨', val: `${wind}`,    label: 'Angin km/h', bg: '#f5f3ff', color: '#5b21b6' },
-                                { icon: '☀️', val: `${uv}`,      label: 'UV Index',   bg: '#fefce8', color: '#713f12' },
-                              ].map(t => (
-                                <div key={t.label} style={{ background: t.bg }} className="rounded-lg p-2 text-center">
-                                  <div className="text-sm mb-0.5">{t.icon}</div>
-                                  <div className="text-xs font-extrabold" style={{ color: t.color }}>{t.val}</div>
-                                  <div className="text-gray-500 uppercase mt-0.5" style={{ fontSize: '0.58rem' }}>{t.label}</div>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="rounded-lg px-3 py-2.5 mb-3" style={{ background: wbgtBg }}>
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="text-xs font-bold uppercase" style={{ color: wbgtTxt }}>WBGT Index</span>
-                                <span className="text-sm font-extrabold" style={{ color: wbgtTxt }}>{wbgt}°C — {ws.label}</span>
-                              </div>
-                              <div className="h-1.5 rounded-full" style={{ background: 'rgba(0,0,0,0.08)' }}>
-                                <div className="h-full rounded-full" style={{ width: `${ws.pct}%`, background: ws.color }} />
-                              </div>
-                            </div>
-                            {strat.length > 0 && (
-                              <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 mb-3 space-y-1">
-                                {strat.map((s, i) => <div key={i} className="text-xs text-gray-700">{s}</div>)}
-                              </div>
-                            )}
-                            {(gear.required.length > 0 || gear.recommended.length > 0 || gear.optional.length > 0) && (
-                              <div className="bg-gray-50 rounded-lg px-3 py-2.5 space-y-2">
-                                {gear.required.length > 0 && (
-                                  <div>
-                                    <div className="font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>⚠️ Wajib</div>
-                                    <div className="flex flex-wrap gap-1">{gear.required.map(g => <span key={g} className="text-xs px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">{g}</span>)}</div>
-                                  </div>
-                                )}
-                                {gear.recommended.length > 0 && (
-                                  <div>
-                                    <div className="font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>✅ Disarankan</div>
-                                    <div className="flex flex-wrap gap-1">{gear.recommended.map(g => <span key={g} className="text-xs px-2 py-0.5 rounded-full font-semibold bg-green-100 text-green-700">{g}</span>)}</div>
-                                  </div>
-                                )}
-                                {gear.optional.length > 0 && (
-                                  <div>
-                                    <div className="font-bold text-gray-400 uppercase mb-1" style={{ fontSize: '0.6rem' }}>💡 Opsional</div>
-                                    <div className="flex flex-wrap gap-1">{gear.optional.map(g => <span key={g} className="text-xs px-2 py-0.5 rounded-full font-semibold bg-blue-100 text-blue-700">{g}</span>)}</div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            <div className="text-right mt-2" style={{ fontSize: '0.62rem', color: '#9ca3af' }}>Cuaca saat ini · bukan forecast race day</div>
-                          </>
-                        )
-                      })()}
                     </div>
-                  )
-                })}
-              </div>
-            )}
+                    {!wx ? (
+                      <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.55)' }}>{wxLoading ? '⏳ Mengambil data cuaca...' : 'Klik Refresh untuk memuat cuaca.'}</div>
+                    ) : (() => {
+                      const temp = Number(wx.temp)
+                      const rh   = Number(wx.rh)
+                      const wind = Number(wx.wind)
+                      const uv   = Number(wx.uv)
+                      const code = Number(wx.code)
+                      const feelsLike = Number(wx.feelsLike)
+                      const condition = String(wx.condition ?? WX_CONDITION_MAP[code] ?? '🌡️')
+                      const e    = (rh/100)*6.105*Math.exp(17.27*temp/(237.3+temp))
+                      const wbgt = parseFloat((0.567*temp + 0.393*e + 3.94).toFixed(1))
+                      const ws   = wxGetWBGTStatus(wbgt)
+                      const strat = wxStrategyText(temp, rh, uv, wind)
+                      const gear  = wxGearRecommendation(temp, rh, code)
+                      return (
+                        <>
+                          <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.75)', marginBottom: '10px' }}>{condition} · Terasa {feelsLike}°C</div>
+                          <div className="grid grid-cols-4 gap-2 mb-3">
+                            {[
+                              { icon: '🌡️', val: `${temp}°C`,  label: 'Suhu' },
+                              { icon: '💧', val: `${rh}%`,     label: 'Humidity' },
+                              { icon: '💨', val: `${wind}`,    label: 'Angin km/h' },
+                              { icon: '☀️', val: `${uv}`,      label: 'UV Index' },
+                            ].map(t => (
+                              <div key={t.label} className="rounded-lg text-center" style={{ background: 'rgba(255,255,255,0.1)', padding: '8px' }}>
+                                <div style={{ fontSize: '0.9rem', marginBottom: '2px' }}>{t.icon}</div>
+                                <div style={{ fontSize: '0.88rem', fontWeight: 800, color: 'white' }}>{t.val}</div>
+                                <div style={{ fontSize: '0.58rem', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginTop: '1px' }}>{t.label}</div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.6)', whiteSpace: 'nowrap' }}>WBGT</span>
+                            <div className="flex-1 rounded-full" style={{ height: '5px', background: 'rgba(255,255,255,0.12)' }}>
+                              <div className="rounded-full" style={{ height: '100%', width: `${ws.pct}%`, background: ws.color }} />
+                            </div>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 800, color: ws.color, whiteSpace: 'nowrap' }}>{wbgt}°C — {ws.label}</span>
+                          </div>
+                          {strat.length > 0 && (
+                            <div className="rounded-lg mb-2" style={{ background: 'rgba(255,255,255,0.08)', padding: '8px 10px', fontSize: '0.72rem', color: 'rgba(255,255,255,0.8)', lineHeight: 1.6 }}>
+                              {strat.map((s, i) => <div key={i}>{s}</div>)}
+                            </div>
+                          )}
+                          {(gear.required.length > 0 || gear.recommended.length > 0 || gear.optional.length > 0) && (
+                            <div className="rounded-lg space-y-1.5" style={{ background: 'rgba(255,255,255,0.06)', padding: '10px 12px' }}>
+                              {gear.required.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>⚠️ Wajib</div>
+                                  <div className="flex flex-wrap gap-1">{gear.required.map(g => <span key={g} style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: 600, background: '#fee2e2', color: '#991b1b' }}>{g}</span>)}</div>
+                                </div>
+                              )}
+                              {gear.recommended.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>✅ Disarankan</div>
+                                  <div className="flex flex-wrap gap-1">{gear.recommended.map(g => <span key={g} style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: 600, background: '#d1fae5', color: '#065f46' }}>{g}</span>)}</div>
+                                </div>
+                              )}
+                              {gear.optional.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>💡 Opsional</div>
+                                  <div className="flex flex-wrap gap-1">{gear.optional.map(g => <span key={g} style={{ fontSize: '0.72rem', padding: '3px 10px', borderRadius: '20px', fontWeight: 600, background: '#f3f4f6', color: '#374151' }}>{g}</span>)}</div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          <div style={{ fontSize: '0.62rem', color: 'rgba(255,255,255,0.3)', textAlign: 'right', marginTop: '8px' }}>Cuaca saat ini · bukan forecast race day</div>
+                        </>
+                      )
+                    })()}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
