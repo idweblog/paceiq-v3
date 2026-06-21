@@ -833,7 +833,7 @@ export default function ProfilPage() {
                 return (
                   <div key={p.label} className="rounded-xl p-4 text-center" style={{ background: p.color + '12', border: `1.5px solid ${p.color}30` }}>
                     <div className="text-xl mb-1">{p.emoji}</div>
-                    <div className="text-xs font-medium text-gray-500 uppercase mb-2">{p.label}</div>
+                    <div className="text-sm font-bold text-gray-600 uppercase mb-2">{p.label}</div>
                     <div className="text-xl font-extrabold" style={{ color: p.color }}>{fmtTime(sec)}</div>
                     <div className="text-xs text-gray-400 mt-0.5">{pacePerKm}/km</div>
                   </div>
