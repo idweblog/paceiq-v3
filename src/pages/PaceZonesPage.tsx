@@ -235,14 +235,21 @@ export default function PaceZonesPage() {
       if (!myId || cancelledRef.current) return
       myIdRef.current = myId as string
 
-      // 2. Roles
-      const { data: rolesData } = await supabase
+      // 2. Roles — dua query terpisah (tanpa join, hindari FK issue)
+      const { data: arData } = await supabase
         .from('athlete_roles')
-        .select('roles(name)')
+        .select('role_id')
         .eq('athlete_id', myId as string)
-      if (!cancelledRef.current && rolesData) {
-        const roles = (rolesData as any[]).map(r => r.roles?.name).filter(Boolean)
-        setMyRoles(roles)
+      if (!cancelledRef.current && arData && (arData as any[]).length > 0) {
+        const roleIds = (arData as any[]).map((r: any) => r.role_id)
+        const { data: rData } = await supabase
+          .from('roles')
+          .select('name')
+          .in('id', roleIds)
+        if (!cancelledRef.current && rData) {
+          const roles = (rData as any[]).map((r: any) => r.name).filter(Boolean)
+          setMyRoles(roles)
+        }
       }
 
       const effectiveId = targetId ?? (myId as string)
