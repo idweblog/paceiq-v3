@@ -1,274 +1,548 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { useAthlete } from '../hooks/useAthlete'
-import { PageHeader } from '../components/ui/PageHeader'
-import { EmptyState } from '../components/ui/EmptyState'
 
-interface NutritionLog {
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface NutritionSection {
+  key: string
+  defaultTitle: string
+  icon: string
+  color: string
+  bgColor: string
+  borderColor: string
+  defaultContent: string
+}
+
+interface NutritionRow {
   id: string
-  log_date: string
-  pre_run_meal: string | null
-  during_run_fuel: string | null
-  post_run_meal: string | null
-  hydration_ml: number | null
-  electrolytes: string | null
-  notes: string | null
+  section_key: string
+  title: string | null
+  content: string | null
+  updated_at: string
 }
 
-const emptyForm = {
-  log_date: new Date().toISOString().split('T')[0],
-  pre_run_meal: '',
-  during_run_fuel: '',
-  post_run_meal: '',
-  hydration_ml: '',
-  electrolytes: '',
-  notes: '',
-}
+// ─── Default content (dari v2.11) ─────────────────────────────────────────────
+const SECTIONS: NutritionSection[] = [
+  {
+    key: 'daily',
+    defaultTitle: 'Daily Nutrition (Non-LR Days)',
+    icon: '🍽️',
+    color: '#4f46e5',
+    bgColor: '#eef2ff',
+    borderColor: '#c7d2fe',
+    defaultContent: `## 🍽️ Daily Nutrition (Non-LR Days)
 
-const RACE_DAY_GUIDE = [
-  { time: 'H-2 & H-1', tip: 'Karbohidrat loading: nasi, pasta, roti. Hindari makanan baru atau tinggi serat.' },
-  { time: '3–4 jam sebelum start', tip: 'Sarapan ringan: nasi + telur, roti + selai kacang. 500–750ml air.' },
-  { time: '1 jam sebelum start', tip: 'Gel atau pisang jika dibutuhkan. Sip air kecil-kecil.' },
-  { time: 'Setiap 45–60 menit', tip: 'Gel 1 sachet (25g carbs). Minum di water station, jangan tunggu haus.' },
-  { time: 'Post-race 30 menit', tip: '3:1 carbs:protein ratio. Cokelat susu, recovery shake, atau nasi + ayam.' },
+**Karbohidrat** — 4–5 g/kg = 275–345 g/hari
+Sumber: Nasi, kentang, oats, ubi, roti gandum, buah
+
+**Protein** — 1.6–1.8 g/kg = 110–125 g/hari
+Sumber: Ikan, ayam, telur, tahu/tempe, susu
+
+**Lemak** — 0.8–1.0 g/kg = 55–70 g/hari
+Sumber: Alpukat, kacang, minyak zaitun, ikan berlemak
+
+**Hidrasi** — 35–40 ml/kg = 2.5–3 L/hari
+Sumber: Air, kuah sayur, buah`
+  },
+  {
+    key: 'post',
+    defaultTitle: 'Post-Workout Recovery',
+    icon: '💪',
+    color: '#059669',
+    bgColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+    defaultContent: `## 💪 Post-Workout Recovery (within 30 min)
+
+**Formula 1:1:3** (per 0.3 kg BB):
+- ~20g protein
+- 150–300 mg sodium replenish
+- ~60–80g carb (jika sesi >90 menit)
+
+**Pilihan Praktis:**
+- Chocolate milk 300 ml + 1 pisang ✅
+- Smoothie: susu + pisang + 1 scoop whey + madu ✅
+- Nasi 1 centong + 2 telur + sayur + 1 gelas air kelapa ✅`
+  },
+  {
+    key: 'pre',
+    defaultTitle: 'Pre-Workout Fueling',
+    icon: '⚡',
+    color: '#d97706',
+    bgColor: '#fffbeb',
+    borderColor: '#fde68a',
+    defaultContent: `## ⚡ Pre-Workout Fueling
+
+**Easy run pagi**
+H-2 jam: Pisang + roti tawar (ringan)
+H-30 menit: Air 200 ml
+
+**Easy run sore**
+H-2 jam: Snack 100–150 kcal (kurma 3 buah)
+H-30 menit: Air 200 ml + sip elektrolit
+
+**LR / Quality Session**
+H-2 jam: Sarapan 300–400 kcal (oats + pisang + selai kacang + susu)
+H-30 menit: Pisang + air 300 ml`
+  },
+  {
+    key: 'during',
+    defaultTitle: 'During Workout Fueling',
+    icon: '💧',
+    color: '#0284c7',
+    bgColor: '#f0f9ff',
+    borderColor: '#bae6fd',
+    defaultContent: `## 💧 During Workout Fueling
+
+**< 60 menit**
+Carb: Tidak perlu
+Hidrasi: 250–400 ml air saja
+
+**60–90 menit**
+Carb: Optional 15–20g carb (sip elektrolit ber-karbo)
+Hidrasi: 400–600 ml elektrolit
+
+**90–120 menit**
+Carb: 30g carb/jam (1 gel atau pisang kecil)
+Hidrasi: 600–800 ml elektrolit
+
+**> 120 menit (LR W10+)**
+Carb: 40–60g carb/jam
+Hidrasi: 800–1000 ml elektrolit`
+  },
+  {
+    key: 'raceweek',
+    defaultTitle: 'Race Week Fueling Protocol',
+    icon: '🏁',
+    color: '#dc2626',
+    bgColor: '#fef2f2',
+    borderColor: '#fecaca',
+    defaultContent: `## 🏁 Race Week Fueling Protocol
+
+**H-7 sampai H-3**
+Karbohidrat normal (4–5 g/kg). Hidrasi tinggi.
+⚠️ HINDARI: makanan baru, alkohol, makanan pedas/berlemak.
+
+**H-2 (Carb Loading Light)**
+Karbohidrat 6–7 g/kg = 415–485g.
+Sumber: nasi, pasta, kentang. Protein moderat, lemak rendah, serat MODERAT.
+
+**H-1 (Race Eve)**
+Lunch: pasta/nasi besar + protein lean.
+Dinner (sebelum jam 19:00): nasi + ayam/ikan + sayur (no kacang-kacangan, no spicy).
+Hidrasi 3 L total — terakhir minum besar 2 jam sebelum tidur.
+
+**Race Day Morning (H-3 jam)**
+Sarapan 400–500 kcal: oats + pisang + madu + sedikit kopi (jika biasa).
+500 ml air + sachet elektrolit.
+H-30 menit: 1 pisang + 200 ml air.
+
+**During Race (HM 21.1 km)**
+- Km 5: 100 ml elektrolit di water station
+- Km 8: 1 gel (~25g carb) + 100 ml air
+- Km 12: 100 ml elektrolit
+- Km 16: 1 gel + 100 ml air
+- Km 19: 100 ml air (jika butuh)
+
+> 🚨 GOLDEN RULE: Jangan coba gel/produk baru di race day. Test semua fueling products mulai W7+ saat LR meningkat durasinya.`
+  }
 ]
 
-const TRAINING_GUIDE = [
-  { time: '2–3 jam sebelum easy run', tip: 'Makanan normal. Tidak perlu loading untuk sesi < 60 menit.' },
-  { time: 'Sebelum long run (> 90 mnt)', tip: 'Sarapan karbohidrat 2–3 jam sebelumnya. Gel di km 10–12.' },
-  { time: 'Selama interval/tempo', tip: 'Cukup air. Gel tidak diperlukan untuk sesi < 75 menit.' },
-  { time: 'Post-run (< 30 menit)', tip: 'Recovery window: protein 20–30g + karbohidrat. Penting untuk adaptasi.' },
-]
+// ─── Markdown renderer (dari v2.11, ported ke React) ─────────────────────────
+function parseMarkdown(text: string): string {
+  if (!text) return ''
 
-const RECOVERY_GUIDE = [
-  { time: 'Hari pertama post-race', tip: 'Fokus anti-inflamasi: salmon, blueberry, kunyit, jahe. Hindari alkohol.' },
-  { time: 'Hidrasi', tip: 'Monitor warna urin — target kuning muda. Elektrolit minimal 24 jam post-race.' },
-  { time: 'Hari 2–4', tip: 'Protein tinggi untuk repair otot: 1.6–2.0g/kg berat badan per hari.' },
-  { time: 'Suplemen opsional', tip: 'Magnesium (cramp prevention), Omega-3 (anti-inflamasi), Vitamin C+D.' },
-]
+  const esc = (s: string) => s
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
-export default function NutritionPage() {
-  const { athlete } = useAthlete()
-  const athleteId = athlete?.id
+  // Code blocks
+  text = text.replace(/```([\s\S]*?)```/g, (_, code) =>
+    `\x00CODEBLOCK\x00${esc(code).trim()}\x00ENDCODE\x00`
+  )
+  // Inline code
+  text = text.replace(/`([^`]+)`/g, (_, code) =>
+    `<code style="background:#f3f4f6;padding:1px 6px;border-radius:4px;font-family:monospace;font-size:0.78rem;color:#4f46e5">${esc(code)}</code>`
+  )
 
-  const [logs, setLogs] = useState<NutritionLog[]>([])
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'log' | 'raceday' | 'training' | 'recovery'>('log')
-  const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState(emptyForm)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const lines = text.split('\n')
+  let html = ''
+  let inList = false
+  let inTable = false
+  let tableRows: string[] = []
 
-  useEffect(() => {
-    if (!athleteId) return
-    let cancelled = false
+  function flushTable() {
+    if (!tableRows.length) return
+    const parseRow = (row: string) => row.split('|').slice(1, -1).map(c => c.trim())
+    const header = parseRow(tableRows[0])
+    const body = tableRows.slice(2)
+    html += `<div style="overflow-x:auto;margin:8px 0 12px">
+      <table style="width:100%;border-collapse:collapse;font-size:0.8rem">
+        <thead><tr>${header.map(h =>
+          `<th style="background:#eef2ff;color:#4338ca;font-weight:700;padding:6px 10px;text-align:left;border:1px solid #e5e7eb;white-space:nowrap">${h}</th>`
+        ).join('')}</tr></thead>
+        <tbody>${body.map((row, ri) => {
+          const cells = parseRow(row)
+          const bg = ri % 2 === 0 ? 'white' : '#f9fafb'
+          return `<tr style="background:${bg}">${cells.map(c =>
+            `<td style="padding:5px 10px;border:1px solid #e5e7eb;line-height:1.5">${c}</td>`
+          ).join('')}</tr>`
+        }).join('')}</tbody>
+      </table></div>`
+    tableRows = []
+    inTable = false
+  }
 
-    async function load() {
-      setLoading(true)
-      const { data, error: err } = await supabase
-        .from('nutrition_log')
-        .select('id, log_date, pre_run_meal, during_run_fuel, post_run_meal, hydration_ml, electrolytes, notes')
-        .eq('athlete_id', athleteId!)
-        .order('log_date', { ascending: false })
-        .limit(30)
-      if (!cancelled) {
-        if (err) console.error('[PaceIQ] nutrition_log:', err.message)
-        if (data) setLogs(data)
-        setLoading(false)
-      }
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i]
+
+    if (/^\s*\|/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false }
+      inTable = true
+      tableRows.push(line)
+      continue
+    }
+    if (inTable) flushTable()
+
+    line = esc(line)
+    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    line = line.replace(/\*(.+?)\*/g, '<em>$1</em>')
+
+    if (/^##\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false }
+      html += `<div style="font-size:0.875rem;font-weight:700;color:#1f2937;margin:10px 0 3px">${line.replace(/^##\s+/, '')}</div>`
+      continue
     }
 
-    load()
-    return () => { cancelled = true }
-  }, [athleteId])
+    if (/^&gt;\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false }
+      html += `<div style="background:#eff6ff;border-left:3px solid #4f46e5;border-radius:0 6px 6px 0;padding:8px 12px;margin:8px 0;font-size:0.8rem;color:#1e40af;line-height:1.6">${line.replace(/^&gt;\s+/, '')}</div>`
+      continue
+    }
 
-  async function reloadLogs() {
-    if (!athleteId) return
-    const { data, error: err } = await supabase
-      .from('nutrition_log')
-      .select('id, log_date, pre_run_meal, during_run_fuel, post_run_meal, hydration_ml, electrolytes, notes')
-      .eq('athlete_id', athleteId!)
-      .order('log_date', { ascending: false })
-      .limit(30)
-    if (err) console.error('[PaceIQ] nutrition_log:', err.message)
-    if (data) setLogs(data)
+    if (/^-\s+/.test(line)) {
+      if (!inList) { html += '<ul style="margin:2px 0 2px 16px;line-height:1.6;font-size:0.83rem;color:#374151">'; inList = true }
+      html += `<li style="margin-bottom:1px">${line.replace(/^-\s+/, '')}</li>`
+      continue
+    }
+
+    if (inList) { html += '</ul>'; inList = false }
+
+    if (line.trim() === '') {
+      html += '<div style="margin-bottom:8px"></div>'
+      continue
+    }
+
+    if (line.includes('\x00CODEBLOCK\x00')) {
+      const parts = line.split('\x00CODEBLOCK\x00')
+      parts.forEach((part, pi) => {
+        if (pi % 2 === 0) {
+          if (part) html += `<div style="font-size:0.83rem;color:#374151;line-height:1.6">${part}</div>`
+        } else {
+          const code = part.replace('\x00ENDCODE\x00', '')
+          html += `<pre style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:10px 14px;margin:8px 0 12px;overflow-x:auto;font-family:monospace;font-size:0.78rem;color:#1f2937;line-height:1.7;white-space:pre-wrap">${code}</pre>`
+        }
+      })
+      continue
+    }
+
+    html += `<div style="font-size:0.83rem;color:#374151;line-height:1.6;margin-bottom:1px">${line}</div>`
   }
 
-  async function handleSubmit() {
-    if (!athleteId) return
-    setError(null)
+  if (inList) html += '</ul>'
+  if (inTable) flushTable()
+  return html
+}
+
+// ─── Panduan Format ───────────────────────────────────────────────────────────
+const FORMAT_GUIDE = [
+  { syntax: '## Judul', result: 'Heading tebal' },
+  { syntax: '**teks**', result: 'Teks tebal' },
+  { syntax: '*teks*', result: 'Teks miring' },
+  { syntax: '- item', result: 'Bullet list' },
+  { syntax: '> catatan', result: 'Callout biru' },
+  { syntax: '`kode`', result: 'Inline code' },
+]
+
+// ─── Component ────────────────────────────────────────────────────────────────
+export default function NutritionPage() {
+  const [rows, setRows]           = useState<NutritionRow[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [editKey, setEditKey]     = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editContent, setEditContent] = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [toast, setToast]         = useState('')
+  const [myRoles, setMyRoles]     = useState<string[]>([])
+  const cancelledRef              = useRef(false)
+
+  const canEdit = myRoles.includes('coach') || myRoles.includes('admin') || myRoles.includes('athlete')
+
+  // ── Load ──────────────────────────────────────────────────────────────────
+  const loadData = useCallback(async () => {
+    cancelledRef.current = false
+    setLoading(true)
+    try {
+      const { data: myId } = await supabase.rpc('get_my_athlete_id')
+      if (!myId || cancelledRef.current) return
+
+      // Roles
+      const { data: arData } = await supabase
+        .from('athlete_roles').select('role_id').eq('athlete_id', myId as string)
+      if (!cancelledRef.current && arData && (arData as any[]).length > 0) {
+        const roleIds = (arData as any[]).map((r: any) => r.role_id)
+        const { data: rData } = await supabase.from('roles').select('name').in('id', roleIds)
+        if (!cancelledRef.current && rData)
+          setMyRoles((rData as any[]).map((r: any) => r.name).filter(Boolean))
+      }
+
+      const { data } = await supabase
+        .from('nutrition')
+        .select('id, section_key, title, content, updated_at')
+        .eq('athlete_id', myId as string)
+      if (!cancelledRef.current) setRows((data ?? []) as NutritionRow[])
+    } finally {
+      if (!cancelledRef.current) setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadData()
+    return () => { cancelledRef.current = true }
+  }, [loadData])
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function getRow(key: string): NutritionRow | null {
+    return rows.find(r => r.section_key === key) ?? null
+  }
+  function getContent(key: string): string {
+    return getRow(key)?.content ?? SECTIONS.find(s => s.key === key)?.defaultContent ?? ''
+  }
+  function getTitle(key: string): string {
+    return getRow(key)?.title ?? SECTIONS.find(s => s.key === key)?.defaultTitle ?? ''
+  }
+  function isCustom(key: string): boolean {
+    return getRow(key) != null
+  }
+
+  function showToast(msg: string) {
+    setToast(msg)
+    setTimeout(() => setToast(''), 3000)
+  }
+
+  // ── Edit handlers ─────────────────────────────────────────────────────────
+  function startEdit(key: string) {
+    setEditKey(key)
+    setEditTitle(getTitle(key))
+    setEditContent(getContent(key))
+  }
+  function cancelEdit() {
+    setEditKey(null)
+  }
+
+  async function saveSection() {
+    if (!editKey) return
     setSaving(true)
-    const { error: err } = await supabase.from('nutrition_log').insert({
-      athlete_id: athleteId,
-      log_date: form.log_date,
-      pre_run_meal: form.pre_run_meal || null,
-      during_run_fuel: form.during_run_fuel || null,
-      post_run_meal: form.post_run_meal || null,
-      hydration_ml: form.hydration_ml ? parseInt(form.hydration_ml) : null,
-      electrolytes: form.electrolytes || null,
-      notes: form.notes || null,
-    })
-    setSaving(false)
-    if (err) { setError(err.message); return }
-    setForm(emptyForm)
-    setShowForm(false)
-    await reloadLogs()
+    try {
+      const { data: myId } = await supabase.rpc('get_my_athlete_id')
+      if (!myId) throw new Error('Athlete ID tidak ditemukan')
+
+      const sec    = SECTIONS.find(s => s.key === editKey)!
+      const titleToSave = editTitle.trim() || sec.defaultTitle
+      const existing = getRow(editKey)
+
+      if (existing) {
+        await supabase.from('nutrition')
+          .update({ title: titleToSave, content: editContent, updated_at: new Date().toISOString() })
+          .eq('id', existing.id)
+      } else {
+        await supabase.from('nutrition')
+          .insert({ athlete_id: myId as string, section_key: editKey, title: titleToSave, content: editContent })
+      }
+      await loadData()
+      setEditKey(null)
+      showToast('✓ Konten berhasil disimpan')
+    } catch {
+      showToast('✗ Gagal menyimpan')
+    } finally {
+      setSaving(false)
+    }
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('Hapus log ini?')) return
-    const { error: err } = await supabase.from('nutrition_log').delete().eq('id', id)
-    if (err) { console.error('[PaceIQ] delete nutrition:', err.message); return }
-    await reloadLogs()
+  async function resetSection(key: string) {
+    if (!confirm('Reset ke konten default? Perubahan yang disimpan akan hilang.')) return
+    const existing = getRow(key)
+    if (!existing) return
+    try {
+      await supabase.from('nutrition').delete().eq('id', existing.id)
+      await loadData()
+      if (editKey === key) setEditKey(null)
+      showToast('✓ Konten direset ke default')
+    } catch {
+      showToast('✗ Gagal mereset')
+    }
   }
 
-  const inputCls = "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-  const labelCls = "block text-xs text-gray-500 mb-1"
-
-  const tabs = [
-    { key: 'log',      label: '📋 Log Nutrisi' },
-    { key: 'raceday',  label: '🏁 Race Day' },
-    { key: 'training', label: '🏃 Training' },
-    { key: 'recovery', label: '💚 Recovery' },
-  ]
-
+  // ─── Render ───────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="p-6">
-        <PageHeader title="Nutrition & Fueling" subtitle="Log nutrisi dan strategi fueling" />
-        <p className="text-gray-400 text-sm">Memuat data...</p>
+      <div className="flex items-center justify-center h-64 text-gray-400 text-sm">
+        Memuat data nutrisi...
       </div>
     )
   }
 
   return (
-    <div className="p-6 max-w-4xl">
-      <PageHeader
-        title="Nutrition & Fueling"
-        subtitle="Log nutrisi dan strategi fueling"
-        action={
-          activeTab === 'log' ? (
-            <button onClick={() => { setShowForm(v => !v); setError(null) }}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-              {showForm ? 'Batal' : '+ Tambah Log'}
-            </button>
-          ) : undefined
-        }
-      />
+    <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-6">
 
-      <div className="flex gap-2 mb-6 flex-wrap">
-        {tabs.map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key as typeof activeTab)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              activeTab === t.key ? 'bg-indigo-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-indigo-300'
-            }`}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'log' && (
-        <>
-          {showForm && (
-            <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Log Nutrisi Baru</h3>
-              {error && <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">{error}</div>}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className={labelCls}>Tanggal</label>
-                  <input type="date" value={form.log_date} className={inputCls}
-                    onChange={e => setForm(p => ({ ...p, log_date: e.target.value }))} />
-                </div>
-                <div>
-                  <label className={labelCls}>Hidrasi Total (ml)</label>
-                  <input type="number" value={form.hydration_ml} placeholder="2500" className={inputCls}
-                    onChange={e => setForm(p => ({ ...p, hydration_ml: e.target.value }))} />
-                </div>
-                <div className="col-span-2">
-                  <label className={labelCls}>Pre-run / Sarapan</label>
-                  <input type="text" value={form.pre_run_meal} placeholder="Nasi + telur + pisang" className={inputCls}
-                    onChange={e => setForm(p => ({ ...p, pre_run_meal: e.target.value }))} />
-                </div>
-                <div className="col-span-2">
-                  <label className={labelCls}>During Run (gel, buah, dll)</label>
-                  <input type="text" value={form.during_run_fuel} placeholder="GU Gel km 10, GU Gel km 17" className={inputCls}
-                    onChange={e => setForm(p => ({ ...p, during_run_fuel: e.target.value }))} />
-                </div>
-                <div className="col-span-2">
-                  <label className={labelCls}>Post-run / Recovery Meal</label>
-                  <input type="text" value={form.post_run_meal} placeholder="Nasi + ayam + sayur + susu cokelat" className={inputCls}
-                    onChange={e => setForm(p => ({ ...p, post_run_meal: e.target.value }))} />
-                </div>
-                <div className="col-span-2">
-                  <label className={labelCls}>Elektrolit</label>
-                  <input type="text" value={form.electrolytes} placeholder="Pocari 500ml, Salt tab 2x" className={inputCls}
-                    onChange={e => setForm(p => ({ ...p, electrolytes: e.target.value }))} />
-                </div>
-                <div className="col-span-2">
-                  <label className={labelCls}>Catatan</label>
-                  <textarea value={form.notes} rows={2} className={inputCls}
-                    placeholder="GI issues, energi rendah di km 15, dll..."
-                    onChange={e => setForm(p => ({ ...p, notes: e.target.value }))} />
-                </div>
-              </div>
-              <div className="mt-4 flex gap-3">
-                <button onClick={handleSubmit} disabled={saving}
-                  className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors">
-                  {saving ? 'Menyimpan...' : 'Simpan'}
-                </button>
-                <button onClick={() => setShowForm(false)}
-                  className="px-5 py-2 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors">
-                  Batal
-                </button>
-              </div>
-            </div>
-          )}
-
-          {logs.length === 0 ? (
-            <EmptyState title="Belum ada log nutrisi" description="Mulai tracking nutrisi harianmu." />
-          ) : (
-            <div className="space-y-3">
-              {logs.map(log => (
-                <div key={log.id} className="bg-white rounded-xl shadow-sm p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold text-gray-700 mb-2">
-                        {new Date(log.log_date).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-                        {log.hydration_ml && <span className="ml-3 text-xs text-blue-500 font-normal">💧 {log.hydration_ml} ml</span>}
-                      </p>
-                      <div className="space-y-1 text-xs text-gray-500">
-                        {log.pre_run_meal && <p><span className="font-medium text-gray-600">Pre:</span> {log.pre_run_meal}</p>}
-                        {log.during_run_fuel && <p><span className="font-medium text-gray-600">During:</span> {log.during_run_fuel}</p>}
-                        {log.post_run_meal && <p><span className="font-medium text-gray-600">Post:</span> {log.post_run_meal}</p>}
-                        {log.electrolytes && <p><span className="font-medium text-gray-600">Elektrolit:</span> {log.electrolytes}</p>}
-                        {log.notes && <p className="italic text-gray-400">{log.notes}</p>}
-                      </div>
-                    </div>
-                    <button onClick={() => handleDelete(log.id)}
-                      className="text-xs text-red-400 hover:text-red-600 ml-4 shrink-0 transition-colors">
-                      Hapus
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {(activeTab === 'raceday' || activeTab === 'training' || activeTab === 'recovery') && (
-        <div className="space-y-3">
-          {(activeTab === 'raceday' ? RACE_DAY_GUIDE : activeTab === 'training' ? TRAINING_GUIDE : RECOVERY_GUIDE).map((item, i) => (
-            <div key={i} className="bg-white rounded-xl shadow-sm p-4">
-              <p className="text-xs font-semibold text-indigo-600 mb-1">{item.time}</p>
-              <p className="text-sm text-gray-600">{item.tip}</p>
-            </div>
-          ))}
-          <p className="text-xs text-gray-400 text-center pt-2">
-            Panduan bersifat umum — sesuaikan dengan kondisi, berat badan, dan intensitas latihan.
-          </p>
+      {/* ── Toast ── */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 bg-gray-800 text-white text-sm px-4 py-2.5 rounded-lg shadow-lg">
+          {toast}
         </div>
       )}
+
+      {/* ── Panduan Format ── */}
+      <div className="bg-white rounded-xl shadow-sm p-5">
+        <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">
+          Panduan Format
+        </h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {FORMAT_GUIDE.map(g => (
+            <div key={g.syntax} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+              <code className="text-xs font-mono text-indigo-600 block mb-1">{g.syntax}</code>
+              <div className="text-xs text-gray-500">{g.result}</div>
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 mt-3">
+          Konten setiap seksi mendukung format Markdown ringan. Klik <strong>Edit</strong> untuk mengubah konten dan judul seksi.
+        </p>
+      </div>
+
+      {/* ── Sections ── */}
+      {SECTIONS.map(sec => {
+        const isEditing  = editKey === sec.key
+        const custom     = isCustom(sec.key)
+        const lastUpdate = getRow(sec.key)?.updated_at
+
+        return (
+          <div key={sec.key} className="bg-white rounded-xl shadow-sm overflow-hidden">
+
+            {/* Section header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"
+              style={{ borderLeftWidth: 4, borderLeftColor: sec.color, borderLeftStyle: 'solid' }}>
+              <div className="flex items-center gap-3">
+                <span className="text-xl">{sec.icon}</span>
+                <div>
+                  <h2 className="font-gsans text-xl text-indigo-700 uppercase">
+                    {getTitle(sec.key)}
+                  </h2>
+                  {custom && lastUpdate && (
+                    <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                      Diubah {new Date(lastUpdate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              {canEdit && !isEditing && (
+                <div className="flex items-center gap-2">
+                  {custom && (
+                    <button
+                      onClick={() => resetSection(sec.key)}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      Reset
+                    </button>
+                  )}
+                  <button
+                    onClick={() => startEdit(sec.key)}
+                    className="text-xs px-3 py-1.5 rounded-lg border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 transition-colors font-medium"
+                  >
+                    ✏️ Edit
+                  </button>
+                </div>
+              )}
+
+              {canEdit && isEditing && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={cancelEdit}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors"
+                  >
+                    Batal
+                  </button>
+                  {custom && (
+                    <button
+                      onClick={() => resetSection(sec.key)}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      Reset
+                    </button>
+                  )}
+                  <button
+                    onClick={saveSection}
+                    disabled={saving}
+                    className="text-xs px-4 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors font-medium"
+                  >
+                    {saving ? 'Menyimpan...' : 'Simpan'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Content area */}
+            <div className="p-5">
+              {isEditing ? (
+                <div className="space-y-3">
+                  {/* Title input */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase mb-1 block">
+                      Judul Seksi
+                    </label>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      placeholder={sec.defaultTitle}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-indigo-400"
+                    />
+                  </div>
+                  {/* Content textarea */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 uppercase mb-1 block">
+                      Konten (Markdown)
+                    </label>
+                    <textarea
+                      value={editContent}
+                      onChange={e => setEditContent(e.target.value)}
+                      rows={16}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 font-mono focus:outline-none focus:border-indigo-400 resize-y"
+                      placeholder="Tulis konten dengan format Markdown..."
+                    />
+                  </div>
+                  {/* Live preview */}
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 uppercase mb-2">Preview</div>
+                    <div
+                      className="bg-gray-50 rounded-lg p-4 border border-gray-100 min-h-[80px]"
+                      dangerouslySetInnerHTML={{ __html: parseMarkdown(editContent) }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="min-h-[60px]"
+                  dangerouslySetInnerHTML={{ __html: parseMarkdown(getContent(sec.key)) }}
+                />
+              )}
+            </div>
+
+          </div>
+        )
+      })}
+
     </div>
   )
 }

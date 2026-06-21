@@ -494,6 +494,41 @@ export type Database = {
           },
         ]
       }
+      nutrition: {
+        Row: {
+          athlete_id: string
+          content: string | null
+          id: string
+          section_key: string
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          athlete_id: string
+          content?: string | null
+          id?: string
+          section_key: string
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          athlete_id?: string
+          content?: string | null
+          id?: string
+          section_key?: string
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       nutrition_log: {
         Row: {
           athlete_id: string
