@@ -701,7 +701,7 @@ export default function ProfilPage() {
             { label: 'Status Cedera', val: settings.cedera ?? '—', color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' },
           ].map(f => (
             <div key={f.label} className="bg-gray-50 rounded-lg p-3">
-              <div className="text-xs font-medium text-gray-500 mb-1">{f.label}</div>
+              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{f.label}</div>
               <div className="text-base font-bold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
             </div>
           ))}
@@ -765,27 +765,27 @@ export default function ProfilPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-50 rounded-xl p-4">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Time Trial Aktif</div>
-            <div className="text-lg font-bold text-gray-700">{latestTt ? fmtTime(latestTt.finish_time_sec) : '—'}</div>
-            {latestTt && <div className="text-xs text-gray-400 mt-1">{latestTt.distance_km ? `${latestTt.distance_km} km` : ''} · {new Date(latestTt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
+            <div className="text-sm font-bold text-gray-800">{latestTt ? fmtTime(latestTt.finish_time_sec) : '—'}</div>
+            {latestTt && <div className="text-xs text-gray-400 mt-0.5">{latestTt.distance_km ? `${latestTt.distance_km} km` : ''} · {new Date(latestTt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Pace TT</div>
-            <div className="text-lg font-bold text-gray-700">{latestTt && latestTt.distance_km ? `${secToPace(Math.round(latestTt.finish_time_sec / latestTt.distance_km))}/km` : '—'}</div>
-            <div className="text-xs text-gray-400 mt-1">Avg pace per km</div>
+            <div className="text-sm font-bold text-gray-800">{latestTt && latestTt.distance_km ? `${secToPace(Math.round(latestTt.finish_time_sec / latestTt.distance_km))}/km` : '—'}</div>
+            <div className="text-xs text-gray-400 mt-0.5">Avg pace per km</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Magic Mile</div>
-            <div className="text-lg font-bold text-gray-700">{latestTt && latestTt.distance_km ? `${magicMilePace(latestTt)}/km` : '—'}</div>
-            <div className="text-xs text-gray-400 mt-1">Per km (Galloway)</div>
+            <div className="text-sm font-bold text-gray-800">{latestTt && latestTt.distance_km ? `${magicMilePace(latestTt)}/km` : '—'}</div>
+            <div className="text-xs text-gray-400 mt-0.5">Per km (Galloway)</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Easy Run Pace</div>
-            <div className="text-lg font-bold text-gray-700">{easyPaceStr ? `${easyPaceStr}/km` : '—'}</div>
-            <div className="text-xs text-gray-400 mt-1">Dari VDOT terbaru</div>
+            <div className="text-sm font-bold text-gray-800">{easyPaceStr ? `${easyPaceStr}/km` : '—'}</div>
+            <div className="text-xs text-gray-400 mt-0.5">Dari VDOT terbaru</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">VDOT</div>
-            <div className="text-lg font-bold text-gray-700">{vdot?.toFixed(1) ?? '—'}</div>
+            <div className="text-sm font-bold text-gray-800">{vdot?.toFixed(1) ?? '—'}</div>
             {vdot && (
               <div className="mt-1">
                 <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-semibold">{vdotRel.icon} {vdotRel.label}</span>
@@ -795,13 +795,13 @@ export default function ProfilPage() {
           </div>
           <div className="bg-gray-50 rounded-xl p-4">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">LTHR</div>
-            <div className="text-lg font-bold text-gray-700">{lthrRef ? `${lthrRef} bpm` : '—'}</div>
-            <div className="text-xs text-gray-400 mt-1">{lthrFromTt ? 'Dari Time Trial' : 'Joe Friel reference'}</div>
+            <div className="text-sm font-bold text-gray-800">{lthrRef ? `${lthrRef} bpm` : '—'}</div>
+            <div className="text-xs text-gray-400 mt-0.5">{lthrFromTt ? 'Dari Time Trial' : 'Joe Friel reference'}</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4 col-span-2">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Long Run Terakhir</div>
-            <div className="text-base font-bold text-gray-700">{lrStr}</div>
-            <div className="text-xs text-gray-400 mt-1">Sesi ≥10 km atau ≥90 menit</div>
+            <div className="text-sm font-bold text-gray-800">{lrStr}</div>
+            <div className="text-xs text-gray-400 mt-0.5">Sesi ≥10 km atau ≥90 menit</div>
           </div>
           <div className="bg-gray-50 rounded-xl p-4 col-span-2">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">Status Cedera</div>
@@ -835,7 +835,7 @@ export default function ProfilPage() {
                     <div className="text-xl mb-1">{p.emoji}</div>
                     <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">{p.label}</div>
                     <div className="text-xl font-extrabold" style={{ color: p.color }}>{fmtTime(sec)}</div>
-                    <div className="text-xs text-gray-400 mt-1">{pacePerKm}/km</div>
+                    <div className="text-xs text-gray-400 mt-0.5">{pacePerKm}/km</div>
                   </div>
                 )
               })}
@@ -888,7 +888,7 @@ export default function ProfilPage() {
                     <div className="h-2 bg-gray-200 rounded-full">
                       <div className="h-full rounded-full transition-all" style={{ width: `${prog}%`, background: bc }} />
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">Prediksi: <strong>{fmtTime(predSec)}</strong> vs Target: <strong>{race.target_finish}</strong></div>
+                    <div className="text-xs text-gray-400 mt-0.5">Prediksi: <strong>{fmtTime(predSec)}</strong> vs Target: <strong>{race.target_finish}</strong></div>
                   </div>
                 )
               })}
@@ -995,7 +995,7 @@ export default function ProfilPage() {
             {ef ? (
               <>
                 <div className="text-3xl font-extrabold" style={{ color: ef.color }}>{ef.current.toFixed(2)}</div>
-                <div className="text-xs text-gray-400 mt-1">EF = (1000/pace_sec)/avg_HR×100</div>
+                <div className="text-xs text-gray-400 mt-0.5">EF = (1000/pace_sec)/avg_HR×100</div>
                 <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: ef.color + '22', color: ef.color }}>{ef.label}</span>
                 <div className="text-xs text-gray-300 mt-1">Referensi Coggan &amp; Allen</div>
               </>
@@ -1006,7 +1006,7 @@ export default function ProfilPage() {
             {pes ? (
               <>
                 <div className="text-3xl font-extrabold" style={{ color: pes.color }}>{pes.pes}</div>
-                <div className="text-xs text-gray-400 mt-1">Performance Efficiency Score (0–100)</div>
+                <div className="text-xs text-gray-400 mt-0.5">Performance Efficiency Score (0–100)</div>
                 <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: pes.color + '22', color: pes.color }}>{pes.label}</span>
                 <div className="text-xs text-gray-500 mt-2 mb-3">{pes.msg}</div>
                 <div className="space-y-2">
@@ -1027,7 +1027,7 @@ export default function ProfilPage() {
       {/* ── TIME TRIAL HISTORY ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
-          <div className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Time Trial History</div>
+          <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest">Time Trial History</div>
           <button onClick={() => { setShowTtForm(v => !v); setError(null) }}
             className="text-xs px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
             {showTtForm ? 'Batal' : '+ Tambah TT'}
@@ -1098,15 +1098,15 @@ export default function ProfilPage() {
             {/* Preview Real-time */}
             <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
               <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 mb-1">Avg Pace</div>
+                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Avg Pace</div>
                 <div className="text-lg font-extrabold text-indigo-700">{previewPace ? `${previewPace}/km` : '—'}</div>
               </div>
               <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 mb-1">VDOT</div>
+                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">VDOT</div>
                 <div className="text-lg font-extrabold text-indigo-700">{previewVdot ?? '—'}</div>
               </div>
               <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 mb-1">LTHR</div>
+                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">LTHR</div>
                 <div className="text-lg font-extrabold text-red-600">{previewLthr ? `${previewLthr} bpm` : '—'}</div>
               </div>
             </div>
@@ -1212,15 +1212,15 @@ export default function ProfilPage() {
                           </div>
                           <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
                             <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 mb-1">Avg Pace</div>
+                              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Avg Pace</div>
                               <div className="text-base font-extrabold text-indigo-700">{editPreviewPace ? `${editPreviewPace}/km` : '—'}</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 mb-1">VDOT</div>
+                              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">VDOT</div>
                               <div className="text-base font-extrabold text-indigo-700">{editPreviewVdot ?? '—'}</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 mb-1">LTHR</div>
+                              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">LTHR</div>
                               <div className="text-base font-extrabold text-red-600">{editPreviewLthr ? `${editPreviewLthr} bpm` : '—'}</div>
                             </div>
                           </div>
