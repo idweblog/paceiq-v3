@@ -4,13 +4,11 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts'
 
-// ─── Jack Daniels Formula (dari v2.11) ───────────────────────────────────────
-function vfromVDOT(vdot: number, pct: number): number {
-  const a = 0.000104, b = 0.182258, c = -(4.60 + vdot * pct)
-  return (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a)
-}
-function vtoPaceSec(v: number): number {
-  return Math.round((1000 / v) * 60)
+// ─── VCR Pace Formula ────────────────────────────────────────────────────────
+// VCR (Velocity at Critical Race) = distance_m / finish_time_sec dari TT 30 menit
+// Pace zona = 1000 / (vcr × pct) / 60 → detik/km
+function vcrToPaceSec(vcr: number, pct: number): number {
+  return Math.round(1000 / (vcr * pct))
 }
 function fmtSec(sec: number | null): string {
   if (!sec || isNaN(sec)) return '—'
@@ -43,22 +41,25 @@ function heatPenalty(wbgt: number, zoneIdx: number): number {
 // ─── 9 Zona Pace Definition ──────────────────────────────────────────────────
 interface PaceZone {
   key: string; name: string
-  pctVo2Lo: number; pctVo2Hi: number
+  pctVcrLo: number; pctVcrHi: number   // % dari VCR (anchor = Aerobic Power 100%)
   pctLthrLo: number; pctLthrHi: number
   color: string; bgColor: string
-  rpe: string; desc: string; usage: string; danielsRef: string
+  rpe: string; desc: string; usage: string; ref: string
 }
 
+// % VCR dari tabel lapangan (Aulia et al.) — anchor 100% = Aerobic Power (TT 30 menit)
+// Sumber: analisis tabel Pace Chart Training HM, divalidasi vs literatur Billat 2001,
+//         Midgley et al. 2007, Seiler & Tønnessen 2009
 const PACE_ZONES: PaceZone[] = [
-  { key: 'recovery',       name: 'Recovery Run',                 pctVo2Lo: 0.55, pctVo2Hi: 0.60, pctLthrLo: 0,   pctLthrHi: 75,  color: '#6b7280', bgColor: '#f9fafb', rpe: '1–2', desc: 'Active recovery, capillary bed development',        usage: 'Warm-up, cool-down, recovery day',             danielsRef: 'Daniels E (bawah) — <75% LTHR' },
-  { key: 'longrun',        name: 'Long Run',                     pctVo2Lo: 0.62, pctVo2Hi: 0.65, pctLthrLo: 75,  pctLthrHi: 80,  color: '#10b981', bgColor: '#f0fdf4', rpe: '3–4', desc: 'Mitochondrial biogenesis, fat oxidation, aerobic base', usage: 'Long run (90–180 mnt), RWR sesi panjang',      danielsRef: 'Daniels E (tengah) — 75–80% LTHR' },
-  { key: 'easy',           name: 'Easy Run',                     pctVo2Lo: 0.65, pctVo2Hi: 0.74, pctLthrLo: 80,  pctLthrHi: 89,  color: '#22c55e', bgColor: '#f0fdf4', rpe: '4–5', desc: 'Aerobic base, meningkatkan stroke volume',            usage: 'Easy run harian, sesi konservatif',            danielsRef: 'Daniels E (atas) — 80–89% LTHR' },
-  { key: 'moderate',       name: 'Moderate / MD-1',              pctVo2Lo: 0.75, pctVo2Hi: 0.84, pctLthrLo: 83,  pctLthrHi: 87,  color: '#f59e0b', bgColor: '#fffbeb', rpe: '5–6', desc: 'Aerobic threshold bawah, race-simulation HM/FM',     usage: 'Marathon-pace run, medium-long run finish miles', danielsRef: 'Daniels M — 75–84% VO₂max' },
-  { key: 'tempo',          name: 'Tempo',                        pctVo2Lo: 0.83, pctVo2Hi: 0.88, pctLthrLo: 88,  pctLthrHi: 90,  color: '#f97316', bgColor: '#fff7ed', rpe: '6–7', desc: 'Lactate steady-state, aerobic threshold (AeT)',      usage: 'Tempo run 20–30 mnt, cruise interval',         danielsRef: 'Daniels T (bawah) — 83–88% VO₂max' },
-  { key: 'threshold',      name: 'Threshold',                    pctVo2Lo: 0.88, pctVo2Hi: 0.92, pctLthrLo: 91,  pctLthrHi: 94,  color: '#ef4444', bgColor: '#fef2f2', rpe: '7–8', desc: 'Lactate threshold (LT), anaerobic threshold',        usage: 'LT interval, sub-threshold reps 10–15 mnt',   danielsRef: 'Daniels T (atas) / Friel Z4 — 88–92% VO₂max' },
-  { key: 'suprathreshold', name: 'Aerobic Power / Supra-Threshold', pctVo2Lo: 0.92, pctVo2Hi: 0.97, pctLthrLo: 95, pctLthrHi: 99, color: '#8b5cf6', bgColor: '#f5f3ff', rpe: '8–9', desc: 'Antara threshold dan VO₂max, high aerobic power',   usage: '5K pace reps, supra-threshold interval',       danielsRef: 'Antara Daniels T–I — 92–97% VO₂max' },
-  { key: 'vo2max',         name: 'VO₂Max / Interval',            pctVo2Lo: 0.97, pctVo2Hi: 1.00, pctLthrLo: 100, pctLthrHi: 106, color: '#6366f1', bgColor: '#eef2ff', rpe: '9',   desc: 'VO₂max improvement, cardiac output maksimal',      usage: 'Track interval 3–5 mnt, 1200m/1600m reps',    danielsRef: 'Daniels I — 95–100% VO₂max' },
-  { key: 'anaerob',        name: 'Anaerob / Sprint',             pctVo2Lo: 1.00, pctVo2Hi: 1.10, pctLthrLo: 106, pctLthrHi: 999, color: '#dc2626', bgColor: '#fef2f2', rpe: '9–10', desc: 'Neuromuscular power, anaerobic capacity',           usage: 'Strides, 200–400m reps, sprint finish',        danielsRef: 'Daniels R — >100% VO₂max' },
+  { key: 'recovery',       name: 'Recovery Run',                    pctVcrLo: 0.64, pctVcrHi: 0.68, pctLthrLo: 0,   pctLthrHi: 75,  color: '#6b7280', bgColor: '#f9fafb', rpe: '1–2',  desc: 'Active recovery, capillary bed development',         usage: 'Warm-up, cool-down, recovery day',                ref: '64–68% VCR' },
+  { key: 'longrun',        name: 'Long Run',                        pctVcrLo: 0.69, pctVcrHi: 0.71, pctLthrLo: 75,  pctLthrHi: 80,  color: '#10b981', bgColor: '#f0fdf4', rpe: '3–4',  desc: 'Mitochondrial biogenesis, fat oxidation',             usage: 'Long run (90–180 mnt), RWR sesi panjang',         ref: '69–71% VCR' },
+  { key: 'easy',           name: 'Easy Run',                        pctVcrLo: 0.74, pctVcrHi: 0.76, pctLthrLo: 80,  pctLthrHi: 89,  color: '#22c55e', bgColor: '#f0fdf4', rpe: '4–5',  desc: 'Aerobic base, meningkatkan stroke volume',             usage: 'Easy run harian, sesi konservatif',                ref: '74–76% VCR' },
+  { key: 'moderate',       name: 'Moderate / MD-1',                 pctVcrLo: 0.83, pctVcrHi: 0.85, pctLthrLo: 83,  pctLthrHi: 87,  color: '#f59e0b', bgColor: '#fffbeb', rpe: '5–6',  desc: 'Aerobic threshold bawah, race-simulation HM/FM',      usage: 'Marathon-pace run, medium-long run finish miles',   ref: '83–85% VCR' },
+  { key: 'tempo',          name: 'Tempo',                           pctVcrLo: 0.88, pctVcrHi: 0.90, pctLthrLo: 88,  pctLthrHi: 90,  color: '#f97316', bgColor: '#fff7ed', rpe: '6–7',  desc: 'Lactate steady-state, aerobic threshold (AeT)',        usage: 'Tempo run 20–30 mnt, cruise interval',             ref: '88–90% VCR' },
+  { key: 'threshold',      name: 'Threshold',                       pctVcrLo: 0.92, pctVcrHi: 0.94, pctLthrLo: 91,  pctLthrHi: 94,  color: '#ef4444', bgColor: '#fef2f2', rpe: '7–8',  desc: 'Lactate threshold (LT), anaerobic threshold',          usage: 'LT interval, sub-threshold reps 10–15 mnt',        ref: '92–94% VCR' },
+  { key: 'suprathreshold', name: 'Aerobic Power / Supra-Threshold', pctVcrLo: 1.00, pctVcrHi: 1.02, pctLthrLo: 95,  pctLthrHi: 99,  color: '#8b5cf6', bgColor: '#f5f3ff', rpe: '8–9',  desc: 'Anchor VCR 100% — pace TT 30 menit',                usage: '5K pace reps, supra-threshold interval',            ref: '100–102% VCR — ANCHOR' },
+  { key: 'vo2max',         name: 'VO₂Max / Interval',            pctVcrLo: 1.03, pctVcrHi: 1.05, pctLthrLo: 100, pctLthrHi: 106, color: '#6366f1', bgColor: '#eef2ff', rpe: '9',         desc: 'VO₂max improvement, cardiac output maksimal',       usage: 'Track interval 3–5 mnt, 1200m/1600m reps',         ref: '103–105% VCR' },
+  { key: 'anaerob',        name: 'Anaerob / Sprint',                pctVcrLo: 1.09, pctVcrHi: 1.15, pctLthrLo: 106, pctLthrHi: 999, color: '#dc2626', bgColor: '#fef2f2', rpe: '9–10', desc: 'Neuromuscular power, anaerobic capacity',              usage: 'Strides, 200–400m reps, sprint finish',             ref: '109–115% VCR' },
 ]
 
 // ─── HR Zones (Joe Friel 7-zone — Run) ───────────────────────────────────────
@@ -79,7 +80,7 @@ const HR_ZONES: HrZone[] = [
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface AthleteInfo {
-  id: string; lthr: number | null; vdot: number | null
+  id: string; lthr: number | null; vcr: number | null  // m/s dari TT 30 menit
   maxhr: number | null; rhr: number | null
 }
 interface PaceZoneAdj {
@@ -90,6 +91,7 @@ interface PaceZoneAdj {
 interface TtHistoryRow {
   id: string; tt_date: string; vdot: number | null
   lthr_calculated: number | null; tt_type: string | null
+  distance_km: number | null; finish_time_sec: number | null
 }
 interface WeatherCache {
   wbgt: number; temp: number; humidity: number; fetched_at: number
@@ -145,18 +147,23 @@ export default function PaceZonesPage() {
 
       // TT history
       const { data: latestTT } = await supabase
-        .from('tt_history').select('id, tt_date, vdot, lthr_calculated, tt_type')
+        .from('tt_history').select('id, tt_date, vdot, lthr_calculated, tt_type, distance_km, finish_time_sec')
         .eq('athlete_id', myId as string).order('tt_date', { ascending: false }).limit(10)
 
       if (!cancelledRef.current) {
         const rows = (latestTT ?? []) as any[]
+        // VCR: dari TT terbaru yang punya distance_km dan finish_time_sec
+        // VCR (m/s) = distance_m / finish_time_sec
+        const latestWithData = rows.find(t => t.distance_km != null && t.finish_time_sec != null)
+        const vcr = latestWithData
+          ? Math.round((latestWithData.distance_km * 1000 / latestWithData.finish_time_sec) * 1000) / 1000
+          : null
+        // LTHR: dari TT manapun yang punya lthr_calculated
         const withLthr = rows.find(t => t.lthr_calculated != null)
-        const withVdot = rows.find(t => t.vdot != null)
-        const best = withLthr ?? withVdot ?? rows[0] ?? null
         setAthleteInfo({
           id: myId as string,
-          lthr: best?.lthr_calculated ?? null,
-          vdot: best?.vdot ?? null,
+          lthr: withLthr?.lthr_calculated ?? null,
+          vcr,
           maxhr: (settings as any)?.max_hr ?? null,
           rhr: (settings as any)?.resting_hr ?? null,
         })
@@ -215,10 +222,11 @@ export default function PaceZonesPage() {
   useEffect(() => { if (heatMode && !weather) fetchWeather() }, [heatMode])
 
   // ── Pace calculation ──────────────────────────────────────────────────────
-  function calcZonePaces(vdot: number) {
+  function calcZonePaces(vcr: number) {
+    // VCR dalam m/s, pace = 1000 / (vcr * pct) detik/km
     return PACE_ZONES.map(z => ({
-      loSec: vtoPaceSec(vfromVDOT(vdot, z.pctVo2Lo)),
-      hiSec: vtoPaceSec(vfromVDOT(vdot, z.pctVo2Hi))
+      loSec: vcrToPaceSec(vcr, z.pctVcrLo),
+      hiSec: vcrToPaceSec(vcr, z.pctVcrHi)
     }))
   }
 
@@ -327,10 +335,10 @@ export default function PaceZonesPage() {
   }
 
   const lthr      = athleteInfo?.lthr ?? null
-  const vdot      = athleteInfo?.vdot ?? null
+  const vcr       = athleteInfo?.vcr ?? null
   const maxhr     = athleteInfo?.maxhr ?? (lthr ? Math.round(lthr / 0.88) : null)
   const rhr       = athleteInfo?.rhr ?? 55
-  const zonePaces = vdot ? calcZonePaces(vdot) : null
+  const zonePaces = vcr ? calcZonePaces(vcr) : null
   const wbgt      = weather?.wbgt ?? null
   const wbgtBadge = wbgt == null ? null
     : wbgt >= 35 ? { label: 'EXTREME',   cls: 'bg-red-700 text-white' }
@@ -346,7 +354,7 @@ export default function PaceZonesPage() {
         <div className="flex items-center gap-3 flex-wrap">
           {lthr && <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-indigo-200">❤️ LTHR: {lthr} bpm</span>}
           {maxhr && <span className="inline-flex items-center gap-1.5 bg-gray-50 text-gray-600 text-xs font-semibold px-3 py-1.5 rounded-full border border-gray-200">↑ MaxHR: {maxhr} bpm</span>}
-          {vdot && <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-200">⚡ VDOT: {vdot}</span>}
+          {vcr && <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-emerald-200">⚡ VCR: {vcr} m/s</span>}
         </div>
         <button onClick={() => setHeatMode(m => !m)}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border transition-all ${heatMode ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-300 hover:border-amber-400 hover:text-amber-600'}`}>
@@ -356,10 +364,10 @@ export default function PaceZonesPage() {
         </button>
       </div>
 
-      {(!lthr || !vdot) && (
+      {(!lthr || !vcr) && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
-          ⚠️ {!lthr && !vdot ? 'LTHR dan VDOT belum tersedia.' : !lthr ? 'LTHR belum tersedia.' : 'VDOT belum tersedia.'}
-          {' '}Tambahkan Time Trial di menu <strong>Profil</strong> untuk mengaktifkan kalkulasi zona.
+          ⚠️ {!lthr && !vcr ? 'LTHR dan VCR belum tersedia.' : !lthr ? 'LTHR belum tersedia.' : 'VCR belum tersedia (perlu TT 30 menit).'}
+          {' '}Tambahkan Time Trial 30 menit di menu <strong>Profil</strong> untuk mengaktifkan kalkulasi zona.
         </div>
       )}
 
@@ -415,16 +423,16 @@ export default function PaceZonesPage() {
       <div className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between mb-4 border-b border-indigo-100 pb-2">
           <h2 className="font-gsans text-xl text-indigo-700 uppercase">Pace Chart — 9 Training Zones</h2>
-          {vdot && <span className="text-xs text-gray-400">Daniels' Running Formula (Ed.3) + Friel LTHR Hybrid · VDOT {vdot}</span>}
+          {vcr && <span className="text-xs text-gray-400">% VCR (Critical Race Velocity) · Anchor 100% = {fmtSec(vcrToPaceSec(vcr, 1.0))} min/km · VCR {vcr} m/s</span>}
         </div>
 
         {isCoachOrAdmin && (
           <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-2 mb-4 text-xs text-indigo-600 flex items-center gap-2">
-            ✏️ Klik ikon pensil pada baris zona untuk melakukan adjustment pace manual.
+            ✏️ Klik ikon pensil pada baris zona untuk melakukan adjustment pace manual. Pace default dihitung dari VCR athlete.
           </div>
         )}
 
-        {vdot && lthr ? (
+        {vcr && lthr ? (
           <>
             {heatMode && wbgt != null && wbgt >= 28 && (
               <div className={`rounded-lg px-4 py-2 mb-4 text-sm font-medium flex items-center gap-2 ${wbgt >= 35 ? 'bg-red-100 text-red-700' : wbgt >= 32 ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -438,7 +446,7 @@ export default function PaceZonesPage() {
                   <tr className="bg-gray-50">
                     <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase w-6">No.</th>
                     <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase">Zona</th>
-                    <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">% VO₂max</th>
+                    <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">% VCR</th>
                     <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">HR Range</th>
                     <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">RPE</th>
                     <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">Pace (min/km)</th>
@@ -477,7 +485,7 @@ export default function PaceZonesPage() {
                         const avgOff = Math.round((loOff + hiOff) / 2)
                         const pctOff = Math.round((avgOff / ((defaultPaces.loSec + defaultPaces.hiSec) / 2)) * 100)
                         const sign = avgOff >= 0 ? '+' : ''
-                        previewText = `${sign}${avgOff}s avg · ${sign}${pctOff}% dari default VDOT`
+                        previewText = `${sign}${avgOff}s avg · ${sign}${pctOff}% dari default VCR`
                       }
                     }
 
@@ -489,12 +497,12 @@ export default function PaceZonesPage() {
                             <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: z.color }} />
                             <div>
                               <div className="text-sm font-bold text-gray-800">{z.name}</div>
-                              <div className="text-xs text-gray-400">{z.danielsRef}</div>
+                              <div className="text-xs text-gray-400">{z.ref}</div>
                             </div>
                           </div>
                         </td>
                         <td className="px-3 py-3 text-center text-xs font-medium text-gray-600">
-                          {Math.round(z.pctVo2Lo * 100)}–{Math.round(z.pctVo2Hi * 100)}%
+                          {Math.round(z.pctVcrLo * 100)}–{Math.round(z.pctVcrHi * 100)}%
                         </td>
                         <td className="px-3 py-3 text-center text-xs text-gray-600">{hrStr}</td>
                         <td className="px-3 py-3 text-center">
@@ -527,7 +535,7 @@ export default function PaceZonesPage() {
                                 <div className="text-xs text-red-500">{editState.error}</div>
                               )}
                               <div className="text-xs text-gray-400">
-                                Default: {fmtPaceRange(defaultPaces.loSec, defaultPaces.hiSec)}
+                                Default VCR: {fmtPaceRange(defaultPaces.loSec, defaultPaces.hiSec)}
                               </div>
                             </div>
                           ) : (
@@ -604,7 +612,7 @@ export default function PaceZonesPage() {
             </div>
           </>
         ) : (
-          <p className="text-sm text-gray-400">VDOT dan LTHR belum tersedia. Tambahkan Time Trial di menu Profil.</p>
+          <p className="text-sm text-gray-400">VCR dan LTHR belum tersedia. Tambahkan Time Trial 30 menit di menu Profil.</p>
         )}
       </div>
 
@@ -640,9 +648,9 @@ export default function PaceZonesPage() {
                 </thead>
                 <tbody>
                   {[...ttHistory].reverse().map(t => {
-                    const v = t.vdot
-                    const easySec  = v ? vtoPaceSec(vfromVDOT(v, 0.65)) : null
-                    const tempoSec = v ? vtoPaceSec(vfromVDOT(v, 0.86)) : null
+                    const v = (t.distance_km != null && t.finish_time_sec != null) ? Math.round((t.distance_km * 1000 / t.finish_time_sec) * 1000) / 1000 : null
+                    const easySec  = v ? vcrToPaceSec(v, 0.75) : null
+                    const tempoSec = v ? vcrToPaceSec(v, 0.89) : null
                     return (
                       <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50">
                         <td className="px-3 py-2 text-gray-700">{t.tt_date?.slice(0, 10)}</td>
