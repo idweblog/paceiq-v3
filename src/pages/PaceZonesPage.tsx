@@ -152,17 +152,21 @@ const PACE_ZONES: PaceZone[] = [
   }
 ]
 
-// ─── HR Zones (Joe Friel 5-zone) ─────────────────────────────────────────────
+// ─── HR Zones (Joe Friel 7-zone — Run) ────────────────────────────────────────────
+// Sumber: Joe Friel, TrainingPeaks “Quick Guide to Setting Zones”
+// https://www.trainingpeaks.com/learn/articles/joe-friel-s-quick-guide-to-setting-zones/
 interface HrZone {
   id: string; name: string; pctLo: number; pctHi: number
   rpe: string; desc: string; app: string; color: string
 }
 const HR_ZONES: HrZone[] = [
-  { id: 'z1', name: 'Z1 — Recovery',  pctLo: 0,   pctHi: 84,  rpe: '1–3', desc: 'Active recovery, capillary development',        app: 'Warm-up, Cool-down, Recovery run',   color: '#6b7280' },
-  { id: 'z2', name: 'Z2 — Aerobic',   pctLo: 85,  pctHi: 89,  rpe: '4–5', desc: 'Mitochondrial biogenesis, fat oxidation',       app: 'Easy run, Long Run (dominant)',      color: '#22c55e' },
-  { id: 'z3', name: 'Z3 — Tempo',     pctLo: 90,  pctHi: 94,  rpe: '6–7', desc: 'Aerobic threshold (AeT), lactate steady-state', app: 'Tempo run, LR finish miles',         color: '#f59e0b' },
-  { id: 'z4', name: 'Z4 — Sub-LT',    pctLo: 95,  pctHi: 99,  rpe: '7–8', desc: 'Lactate clearance, anaerobic threshold',        app: 'Cruise intervals, Sub-LT reps',      color: '#ef4444' },
-  { id: 'z5', name: 'Z5 — VO₂max+',  pctLo: 100, pctHi: 106, rpe: '9–10',desc: 'VO₂max improvement, neuromuscular power',       app: 'Track work, strides, VO2 intervals', color: '#8b5cf6' },
+  { id: 'z1',  name: 'Z1 — Recovery',        pctLo: 0,   pctHi: 84,  rpe: '1–2', desc: 'Active recovery, capillary development',        app: 'Warm-up, cool-down, easy recovery day',     color: '#9ca3af' },
+  { id: 'z2',  name: 'Z2 — Aerobic',         pctLo: 85,  pctHi: 89,  rpe: '3–4', desc: 'Aerobic base, mitochondrial biogenesis',         app: 'Easy run, long run (dominan)',               color: '#22c55e' },
+  { id: 'z3',  name: 'Z3 — Tempo',           pctLo: 90,  pctHi: 94,  rpe: '5–6', desc: 'Aerobic threshold (AeT), lactate steady-state',  app: 'Tempo run, LR finish miles',                color: '#84cc16' },
+  { id: 'z4',  name: 'Z4 — Sub-Threshold',   pctLo: 95,  pctHi: 99,  rpe: '6–7', desc: 'Lactate clearance, anaerobic threshold zone',    app: 'Cruise intervals, sub-LT reps',              color: '#f59e0b' },
+  { id: 'z5a', name: 'Z5a — Superthreshold', pctLo: 100, pctHi: 102, rpe: '8',   desc: 'Just above LTHR, anaerobic onset',               app: 'Short threshold intervals, 10K pace',        color: '#f97316' },
+  { id: 'z5b', name: 'Z5b — Aerobic Power',  pctLo: 103, pctHi: 106, rpe: '9',   desc: 'VO₂max stimulus, high aerobic power',           app: 'Track intervals 3–5 mnt, 5K pace',          color: '#ef4444' },
+  { id: 'z5c', name: 'Z5c — Anaerobic',      pctLo: 107, pctHi: 999, rpe: '9–10', desc: 'Anaerobic capacity, neuromuscular power',     app: 'Strides, 200–400m sprint, VO₂ short reps', color: '#8b5cf6' },
 ]
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -439,17 +443,23 @@ export default function PaceZonesPage() {
   // ── HR zone calc ──────────────────────────────────────────────────────────
   function calcHrRange(z: HrZone, lthr: number): string {
     if (z.pctLo === 0) return `< ${Math.round(lthr * 0.85)} bpm`
-    if (z.id === 'z5') return `≥ ${lthr} bpm`
+    if (z.pctHi === 999) return `≥ ${Math.round(lthr * z.pctLo / 100)} bpm`
     const lo = Math.round(lthr * z.pctLo / 100)
     const hi = Math.round(lthr * z.pctHi / 100)
     return `${lo}–${hi} bpm`
+  }
+
+  function calcPctStr(z: HrZone): string {
+    if (z.pctLo === 0) return '< 85% LTHR'
+    if (z.pctHi === 999) return `> ${z.pctLo - 1}% LTHR`
+    return `${z.pctLo}–${z.pctHi}% LTHR`
   }
 
   function currentZoneId(lthr: number, rhr: number): string {
     const estHR = Math.round(rhr * 1.15)
     for (const z of HR_ZONES) {
       const lo = z.pctLo === 0 ? 0 : Math.round(lthr * z.pctLo / 100)
-      const hi = z.id === 'z5' ? 9999 : Math.round(lthr * z.pctHi / 100)
+      const hi = z.pctHi === 999 ? 9999 : Math.round(lthr * z.pctHi / 100)
       if (estHR >= lo && estHR <= hi) return z.id
     }
     return 'z1'
@@ -540,7 +550,7 @@ export default function PaceZonesPage() {
       {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="bg-white rounded-xl shadow-sm p-5">
         <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">
-          HR Zones — Joe Friel LTHR Model
+          HR Zones — Joe Friel 7-Zone (Running)
         </h2>
 
         {lthr ? (
@@ -556,11 +566,11 @@ export default function PaceZonesPage() {
             </div>
 
             {/* Zone cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
               {HR_ZONES.map(z => {
                 const isActive = currentZoneId(lthr, rhr) === z.id
                 const hrRange  = calcHrRange(z, lthr)
-                const pctStr   = z.pctLo === 0 ? '< 85% LTHR' : z.id === 'z5' ? '≥ 100% LTHR' : `${z.pctLo}–${z.pctHi}% LTHR`
+                const pctStr   = calcPctStr(z)
                 return (
                   <div key={z.id}
                     className={`relative rounded-lg border-2 p-3 ${isActive ? 'shadow-md' : 'border-gray-200'}`}
@@ -582,7 +592,7 @@ export default function PaceZonesPage() {
             </div>
             <p className="text-xs text-gray-400 mt-3">
               * "Zona Saat Ini" diestimasi dari HRrest × 1.15 ({Math.round(rhr * 1.15)} bpm).
-              Sumber: Joe Friel, <em>The Triathlete's Training Bible</em>.
+              Sumber: Joe Friel, <em>Quick Guide to Setting Zones</em> — TrainingPeaks. Z5 dibagi 3 sub-zona: 5a (100–102%), 5b (103–106%), 5c (&gt;106%) LTHR.
             </p>
           </>
         ) : (
