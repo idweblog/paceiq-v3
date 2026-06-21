@@ -1166,8 +1166,8 @@ export default function ProfilPage() {
                         {tt.lthr_calculated ? <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{tt.lthr_calculated} bpm</span> : '—'}
                       </td>
                       <td className="py-2 whitespace-nowrap align-top">
-                        <button onClick={() => isEditing ? setEditTtId(null) : openEditTt(tt)} className="text-xs text-indigo-400 hover:text-indigo-600 mr-2">{isEditing ? 'Batal' : 'Edit'}</button>
-                        <button onClick={() => deleteTt(tt.id)} className="text-xs text-red-400 hover:text-red-600">Hapus</button>
+                        <button onClick={() => isEditing ? setEditTtId(null) : openEditTt(tt)} className="text-xs px-2 py-1 rounded-md border border-indigo-300 text-indigo-600 hover:bg-indigo-50 font-medium mr-1 transition-colors">{isEditing ? 'Batal' : 'Edit'}</button>
+                        <button onClick={() => deleteTt(tt.id)} className="text-xs px-2 py-1 rounded-md border border-red-300 text-red-500 hover:bg-red-50 font-medium transition-colors">Hapus</button>
                       </td>
                     </tr>
                     {isEditing && (
