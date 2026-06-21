@@ -1127,7 +1127,7 @@ export default function ProfilPage() {
               <thead>
                 <tr className="text-xs text-gray-400 border-b border-gray-100">
                   {['Tanggal','Jenis TT','Waktu','Pace','Pred. HM','VDOT','Magic Mile','LTHR',''].map(h => (
-                    <th key={h} className="text-left py-2 pr-3 font-bold text-gray-900 whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left py-2 pr-3 text-sm font-bold text-gray-900 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
