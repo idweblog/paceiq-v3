@@ -702,7 +702,7 @@ export default function ProfilPage() {
           ].map(f => (
             <div key={f.label} className="bg-gray-50 rounded-lg p-3">
               <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{f.label}</div>
-              <div className="text-base font-bold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
+              <div className="text-sm font-bold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
             </div>
           ))}
         </div>
