@@ -701,7 +701,7 @@ export default function ProfilPage() {
             { label: 'Status Cedera', val: settings.cedera ?? '—', color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' },
           ].map(f => (
             <div key={f.label} className="bg-gray-50 rounded-lg p-3">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{f.label}</div>
+              <div className="text-xs font-medium text-gray-500 uppercase mb-1">{f.label}</div>
               <div className="text-sm font-bold" style={{ color: (f as {color?: string}).color ?? '#1f2937' }}>{f.val}</div>
             </div>
           ))}
@@ -1098,15 +1098,15 @@ export default function ProfilPage() {
             {/* Preview Real-time */}
             <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
               <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Avg Pace</div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Avg Pace</div>
                 <div className="text-lg font-extrabold text-indigo-700">{previewPace ? `${previewPace}/km` : '—'}</div>
               </div>
               <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">VDOT</div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">VDOT</div>
                 <div className="text-lg font-extrabold text-indigo-700">{previewVdot ?? '—'}</div>
               </div>
               <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">LTHR</div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">LTHR</div>
                 <div className="text-lg font-extrabold text-red-600">{previewLthr ? `${previewLthr} bpm` : '—'}</div>
               </div>
             </div>
@@ -1212,15 +1212,15 @@ export default function ProfilPage() {
                           </div>
                           <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
                             <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Avg Pace</div>
+                              <div className="text-xs font-medium text-gray-500 uppercase mb-1">Avg Pace</div>
                               <div className="text-base font-extrabold text-indigo-700">{editPreviewPace ? `${editPreviewPace}/km` : '—'}</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">VDOT</div>
+                              <div className="text-xs font-medium text-gray-500 uppercase mb-1">VDOT</div>
                               <div className="text-base font-extrabold text-indigo-700">{editPreviewVdot ?? '—'}</div>
                             </div>
                             <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">LTHR</div>
+                              <div className="text-xs font-medium text-gray-500 uppercase mb-1">LTHR</div>
                               <div className="text-base font-extrabold text-red-600">{editPreviewLthr ? `${editPreviewLthr} bpm` : '—'}</div>
                             </div>
                           </div>
@@ -1255,7 +1255,7 @@ export default function ProfilPage() {
           {/* ── Cuaca Latihan ── */}
           <div className="border border-gray-200 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">🏃 Cuaca Latihan Hari Ini</div>
+              <div className="text-xs font-medium text-gray-500 uppercase mb-2">🏃 Cuaca Latihan Hari Ini</div>
             </div>
 
             {!settings.domisili ? (
@@ -1364,7 +1364,7 @@ export default function ProfilPage() {
 
           {/* ── Cuaca Race ── */}
           <div>
-            <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">🏁 Cuaca Kota Race</div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-3">🏁 Cuaca Kota Race</div>
             {races.filter(r => r.city).length === 0 ? (
               <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400 text-center border border-gray-200">
                 Isi kota race di Race Management untuk melihat cuaca race.
