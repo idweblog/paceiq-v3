@@ -25,7 +25,6 @@ function fmtPaceRange(loSec: number, hiSec: number): string {
 // Heat penalty dari v2.11
 function heatPenalty(wbgt: number, zoneIdx: number): number {
   if (!wbgt || wbgt < 23) return 0
-  // Zona intensitas rendah lebih terdampak heat
   const multipliers = [1.2, 1.1, 1.0, 0.9, 0.7, 0.6, 0.55, 0.5, 0.4]
   const mult = multipliers[zoneIdx] ?? 1.0
   let base = 0
@@ -36,14 +35,13 @@ function heatPenalty(wbgt: number, zoneIdx: number): number {
 }
 
 // ─── 9 Zona Pace Definition ──────────────────────────────────────────────────
-// Sumber: Jack Daniels' Running Formula (Ed.3) + Joe Friel LTHR mapping
 interface PaceZone {
   key: string
   name: string
-  pctVo2Lo: number   // % VO₂max lower bound
-  pctVo2Hi: number   // % VO₂max upper bound
-  pctLthrLo: number  // % LTHR lower
-  pctLthrHi: number  // % LTHR upper (0 = no lower bound, 999 = no upper bound)
+  pctVo2Lo: number
+  pctVo2Hi: number
+  pctLthrLo: number
+  pctLthrHi: number
   color: string
   bgColor: string
   rpe: string
@@ -160,11 +158,11 @@ interface HrZone {
   rpe: string; desc: string; app: string; color: string
 }
 const HR_ZONES: HrZone[] = [
-  { id: 'z1', name: 'Z1 — Recovery',    pctLo: 0,   pctHi: 84,  rpe: '1–3', desc: 'Active recovery, capillary development',        app: 'Warm-up, Cool-down, Recovery run',   color: '#6b7280' },
-  { id: 'z2', name: 'Z2 — Aerobic',     pctLo: 85,  pctHi: 89,  rpe: '4–5', desc: 'Mitochondrial biogenesis, fat oxidation',       app: 'Easy run, Long Run (dominant)',      color: '#22c55e' },
-  { id: 'z3', name: 'Z3 — Tempo',       pctLo: 90,  pctHi: 94,  rpe: '6–7', desc: 'Aerobic threshold (AeT), lactate steady-state', app: 'Tempo run, LR finish miles',         color: '#f59e0b' },
-  { id: 'z4', name: 'Z4 — Sub-LT',      pctLo: 95,  pctHi: 99,  rpe: '7–8', desc: 'Lactate clearance, anaerobic threshold',        app: 'Cruise intervals, Sub-LT reps',      color: '#ef4444' },
-  { id: 'z5', name: 'Z5 — VO₂max+',    pctLo: 100, pctHi: 106, rpe: '9–10',desc: 'VO₂max improvement, neuromuscular power',       app: 'Track work, strides, VO2 intervals', color: '#8b5cf6' },
+  { id: 'z1', name: 'Z1 — Recovery',  pctLo: 0,   pctHi: 84,  rpe: '1–3', desc: 'Active recovery, capillary development',        app: 'Warm-up, Cool-down, Recovery run',   color: '#6b7280' },
+  { id: 'z2', name: 'Z2 — Aerobic',   pctLo: 85,  pctHi: 89,  rpe: '4–5', desc: 'Mitochondrial biogenesis, fat oxidation',       app: 'Easy run, Long Run (dominant)',      color: '#22c55e' },
+  { id: 'z3', name: 'Z3 — Tempo',     pctLo: 90,  pctHi: 94,  rpe: '6–7', desc: 'Aerobic threshold (AeT), lactate steady-state', app: 'Tempo run, LR finish miles',         color: '#f59e0b' },
+  { id: 'z4', name: 'Z4 — Sub-LT',    pctLo: 95,  pctHi: 99,  rpe: '7–8', desc: 'Lactate clearance, anaerobic threshold',        app: 'Cruise intervals, Sub-LT reps',      color: '#ef4444' },
+  { id: 'z5', name: 'Z5 — VO₂max+',  pctLo: 100, pctHi: 106, rpe: '9–10',desc: 'VO₂max improvement, neuromuscular power',       app: 'Track work, strides, VO2 intervals', color: '#8b5cf6' },
 ]
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -179,8 +177,7 @@ interface AthleteInfo {
 interface PaceZoneAdjustment {
   id: string
   zone_key: string
-  pct_override: number | null
-  offset_sec: number | null
+  pct_override: number | null  // dipakai sebagai offset detik (integer)
   notes: string | null
   adjusted_at: string
   adjuster_name: string | null
@@ -188,7 +185,7 @@ interface PaceZoneAdjustment {
 
 interface TtHistoryRow {
   id: string
-  test_date: string
+  tt_date: string
   vdot: number | null
   lthr_calculated: number | null
   tt_type: string | null
@@ -212,16 +209,15 @@ export default function PaceZonesPage() {
   const [weatherLoading, setWeatherLoading] = useState(false)
   const [loading, setLoading]           = useState(true)
 
-  // Coach adjustment form
   const [adjForm, setAdjForm]     = useState<{ zone_key: string; offset_sec: string; notes: string }>({ zone_key: '', offset_sec: '0', notes: '' })
   const [adjSaving, setAdjSaving] = useState(false)
   const [adjMsg, setAdjMsg]       = useState('')
 
-  // Target athlete (coach view: bisa pilih athlete lain)
-  const [athleteList, setAthleteList]   = useState<{ id: string; name: string }[]>([])
+  const [athleteList, setAthleteList]       = useState<{ id: string; name: string }[]>([])
   const [targetAthleteId, setTargetAthleteId] = useState<string | null>(null)
 
   const cancelledRef = useRef(false)
+  const myIdRef      = useRef<string | null>(null)
 
   const isCoachOrAdmin = myRoles.includes('coach') || myRoles.includes('admin')
 
@@ -230,96 +226,115 @@ export default function PaceZonesPage() {
     cancelledRef.current = false
     setLoading(true)
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user || cancelledRef.current) return
+      // 1. Get my athlete ID once
+      const { data: myId } = await supabase.rpc('get_my_athlete_id')
+      if (!myId || cancelledRef.current) return
+      myIdRef.current = myId as string
 
-      // Roles
+      // 2. Roles
       const { data: rolesData } = await supabase
         .from('athlete_roles')
         .select('roles(name)')
-        .eq('athlete_id', (await supabase.rpc('get_my_athlete_id')).data)
+        .eq('athlete_id', myId as string)
       if (!cancelledRef.current && rolesData) {
-        const roles = rolesData.map((r: any) => r.roles?.name).filter(Boolean)
+        const roles = (rolesData as any[]).map(r => r.roles?.name).filter(Boolean)
         setMyRoles(roles)
       }
 
-      // My athlete ID
-      const { data: myId } = await supabase.rpc('get_my_athlete_id')
-      if (!myId || cancelledRef.current) return
+      const effectiveId = targetId ?? (myId as string)
 
-      const effectiveId = targetId ?? myId
-
-      // Athlete settings + LTHR dari TT terbaru
+      // 3. Athlete settings
       const { data: settings } = await supabase
         .from('athlete_settings')
-        .select('max_hr, rhr')
+        .select('max_hr, resting_hr')
         .eq('athlete_id', effectiveId)
         .single()
 
+      // 4. TT history — ambil semua, pilih terbaik
       const { data: latestTT } = await supabase
         .from('tt_history')
-        .select('id, test_date, vdot, lthr_calculated, tt_type')
+        .select('id, tt_date, vdot, lthr_calculated, tt_type')
         .eq('athlete_id', effectiveId)
-        .not('lthr_calculated', 'is', null)
-        .order('test_date', { ascending: false })
+        .order('tt_date', { ascending: false })
         .limit(10)
 
       if (!cancelledRef.current) {
-        const best = latestTT?.[0]
+        const rows = (latestTT ?? []) as any[]
+        const withLthr = rows.find(t => t.lthr_calculated != null)
+        const withVdot = rows.find(t => t.vdot != null)
+        const best = withLthr ?? withVdot ?? rows[0] ?? null
         setAthleteInfo({
           id: effectiveId,
           lthr: best?.lthr_calculated ?? null,
           vdot: best?.vdot ?? null,
-          maxhr: settings?.max_hr ?? null,
-          rhr: settings?.rhr ?? null,
+          maxhr: (settings as any)?.max_hr ?? null,
+          rhr: (settings as any)?.resting_hr ?? null,
         })
-        setTtHistory((latestTT ?? []) as TtHistoryRow[])
+        setTtHistory(rows as TtHistoryRow[])
       }
 
-      // Pace zone adjustments
+      // 5. Pace zone adjustments
       const { data: adjData } = await supabase
         .from('pace_zone_adjustments')
-        .select('id, zone_key, pct_override, offset_sec, notes, adjusted_at, adjusted_by_athlete_id')
+        .select('id, zone_key, pct_override, notes, adjusted_at, adjusted_by_athlete_id')
         .eq('athlete_id', effectiveId)
         .order('adjusted_at', { ascending: false })
 
       if (!cancelledRef.current && adjData) {
-        // Fetch adjuster names
-        const adjusterIds = [...new Set(adjData.map((a: any) => a.adjusted_by_athlete_id).filter(Boolean))]
+        const rows = adjData as any[]
+        const adjusterIds = [...new Set(rows.map(a => a.adjusted_by_athlete_id).filter(Boolean))]
         let nameMap: Record<string, string> = {}
         if (adjusterIds.length) {
           const { data: names } = await supabase
             .from('athletes')
             .select('id, name')
-            .in('id', adjusterIds)
-          names?.forEach((n: any) => { nameMap[n.id] = n.name })
+            .in('id', adjusterIds as string[])
+          ;(names as any[] ?? []).forEach(n => { nameMap[n.id] = n.name })
         }
-        setAdjustments(adjData.map((a: any) => ({
-          ...a,
+        setAdjustments(rows.map(a => ({
+          id: a.id,
+          zone_key: a.zone_key,
+          pct_override: a.pct_override,
+          notes: a.notes,
+          adjusted_at: a.adjusted_at,
           adjuster_name: nameMap[a.adjusted_by_athlete_id] ?? 'Coach'
         })))
       }
 
-      // Athlete list untuk coach
-      if (isCoachOrAdmin) {
-        const { data: groupMembers } = await supabase
-          .from('group_members')
-          .select('athletes(id, name)')
-          .eq('coach_athlete_id', myId)
-        if (!cancelledRef.current && groupMembers) {
-          const list = groupMembers.map((gm: any) => gm.athletes).filter(Boolean)
+
+      // 6. Athlete list untuk coach — via group_programs (coach_athlete_id)
+      const { data: gpData } = await supabase
+        .from("group_programs")
+        .select("id")
+        .eq("coach_athlete_id", myId as string)
+
+      if (!cancelledRef.current && gpData && (gpData as any[]).length > 0) {
+        const programIds = (gpData as any[]).map((g: any) => g.id)
+        const { data: memberData } = await supabase
+          .from("group_members")
+          .select("athlete_id, athletes(id, name)")
+          .in("group_id", programIds)
+          .eq("status", "active")
+        if (!cancelledRef.current && memberData) {
+          const seen = new Set<string>()
+          const list = (memberData as any[])
+            .map((m: any) => m.athletes)
+            .filter(Boolean)
+            .filter((a: any) => a.id !== myId)
+            .filter((a: any) => { if (seen.has(a.id)) return false; seen.add(a.id); return true })
           setAthleteList(list)
         }
       }
+
     } finally {
       if (!cancelledRef.current) setLoading(false)
     }
-  }, [isCoachOrAdmin])
+  }, [])
 
   useEffect(() => {
     loadData(targetAthleteId ?? undefined)
     return () => { cancelledRef.current = true }
-  }, [targetAthleteId])
+  }, [targetAthleteId, loadData])
 
   // ── Weather / WBGT ────────────────────────────────────────────────────────
   async function fetchWeather() {
@@ -343,7 +358,6 @@ export default function PaceZonesPage() {
       const temp = wx.current?.temperature_2m ?? 30
       const rh   = wx.current?.relative_humidity_2m ?? 70
       const ws   = wx.current?.wind_speed_10m ?? 2
-      // WBGT simplified: Tw = temp * atan(0.151977*(rh+8.313659)^0.5) + ...
       const Tw = temp * Math.atan(0.151977 * Math.sqrt(rh + 8.313659))
              + Math.atan(temp + rh)
              - Math.atan(rh - 1.676331)
@@ -372,30 +386,40 @@ export default function PaceZonesPage() {
     }))
   }
 
+  // pct_override dipakai sebagai offset detik (integer positif = lebih lambat)
   function getAdjOffset(zoneKey: string): number {
     const adj = adjustments.find(a => a.zone_key === zoneKey)
-    return adj?.offset_sec ?? 0
+    return adj?.pct_override ?? 0
   }
 
   // ── Coach save adjustment ─────────────────────────────────────────────────
   async function saveAdjustment() {
-    if (!adjForm.zone_key || !targetAthleteId) return
+    if (!adjForm.zone_key || !targetAthleteId || !myIdRef.current) return
     setAdjSaving(true)
     setAdjMsg('')
     try {
-      const { data: myId } = await supabase.rpc('get_my_athlete_id')
       const offset = parseInt(adjForm.offset_sec) || 0
-      // Upsert: jika sudah ada untuk zone ini, update
       const existing = adjustments.find(a => a.zone_key === adjForm.zone_key)
       if (existing) {
         await supabase
           .from('pace_zone_adjustments')
-          .update({ offset_sec: offset, notes: adjForm.notes, adjusted_at: new Date().toISOString(), adjusted_by_athlete_id: myId })
+          .update({
+            pct_override: offset,
+            notes: adjForm.notes,
+            adjusted_at: new Date().toISOString(),
+            adjusted_by_athlete_id: myIdRef.current
+          } as any)
           .eq('id', existing.id)
       } else {
         await supabase
           .from('pace_zone_adjustments')
-          .insert({ athlete_id: targetAthleteId, zone_key: adjForm.zone_key, offset_sec: offset, notes: adjForm.notes, adjusted_by_athlete_id: myId })
+          .insert({
+            athlete_id: targetAthleteId,
+            zone_key: adjForm.zone_key,
+            pct_override: offset,
+            notes: adjForm.notes,
+            adjusted_by_athlete_id: myIdRef.current
+          } as any)
       }
       setAdjMsg('✓ Adjustment tersimpan')
       setAdjForm({ zone_key: '', offset_sec: '0', notes: '' })
@@ -414,10 +438,10 @@ export default function PaceZonesPage() {
 
   // ── HR zone calc ──────────────────────────────────────────────────────────
   function calcHrRange(z: HrZone, lthr: number): string {
-    const lo = z.pctLo === 0 ? 0 : Math.round(lthr * z.pctLo / 100)
-    const hi = Math.round(lthr * z.pctHi / 100)
     if (z.pctLo === 0) return `< ${Math.round(lthr * 0.85)} bpm`
     if (z.id === 'z5') return `≥ ${lthr} bpm`
+    const lo = Math.round(lthr * z.pctLo / 100)
+    const hi = Math.round(lthr * z.pctHi / 100)
     return `${lo}–${hi} bpm`
   }
 
@@ -433,7 +457,7 @@ export default function PaceZonesPage() {
 
   // ── Chart data ────────────────────────────────────────────────────────────
   const chartData = [...ttHistory].reverse().map(t => ({
-    date: t.test_date?.slice(0, 10) ?? '',
+    date: t.tt_date?.slice(0, 10) ?? '',
     vdot: t.vdot ? Math.round(t.vdot * 100) / 100 : null,
     lthr: t.lthr_calculated,
     label: t.tt_type ?? ''
@@ -448,25 +472,25 @@ export default function PaceZonesPage() {
     )
   }
 
-  const lthr = athleteInfo?.lthr ?? null
-  const vdot = athleteInfo?.vdot ?? null
-  const maxhr = athleteInfo?.maxhr ?? (lthr ? Math.round(lthr / 0.88) : null)
-  const rhr   = athleteInfo?.rhr ?? 55
+  const lthr     = athleteInfo?.lthr ?? null
+  const vdot     = athleteInfo?.vdot ?? null
+  const maxhr    = athleteInfo?.maxhr ?? (lthr ? Math.round(lthr / 0.88) : null)
+  const rhr      = athleteInfo?.rhr ?? 55
   const zonePaces = vdot ? calcZonePaces(vdot) : null
 
   const wbgt = weather?.wbgt ?? null
   const wbgtBadge = wbgt == null ? null
-    : wbgt >= 35 ? { label: 'EXTREME', cls: 'bg-red-700 text-white' }
+    : wbgt >= 35 ? { label: 'EXTREME',   cls: 'bg-red-700 text-white' }
     : wbgt >= 32 ? { label: 'HIGH RISK', cls: 'bg-red-500 text-white' }
-    : wbgt >= 28 ? { label: 'CAUTION', cls: 'bg-amber-400 text-white' }
+    : wbgt >= 28 ? { label: 'CAUTION',   cls: 'bg-amber-400 text-white' }
     : { label: 'AMAN', cls: 'bg-green-500 text-white' }
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-6">
 
-      {/* ── Header badge ── */}
+      {/* ── Header badges ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
           {lthr && (
             <span className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1.5 rounded-full border border-indigo-200">
               ❤️ LTHR: {lthr} bpm
@@ -523,8 +547,9 @@ export default function PaceZonesPage() {
           <>
             {/* Visual bar */}
             <div className="flex rounded-lg overflow-hidden h-8 mb-4">
-              {HR_ZONES.map((z, i) => (
-                <div key={z.id} className="flex-1 flex items-center justify-center text-white text-xs font-bold" style={{ backgroundColor: z.color }}>
+              {HR_ZONES.map(z => (
+                <div key={z.id} className="flex-1 flex items-center justify-center text-white text-xs font-bold"
+                  style={{ backgroundColor: z.color }}>
                   {z.id.toUpperCase()}
                 </div>
               ))}
@@ -534,13 +559,14 @@ export default function PaceZonesPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {HR_ZONES.map(z => {
                 const isActive = currentZoneId(lthr, rhr) === z.id
-                const hrRange = calcHrRange(z, lthr)
-                const pctStr = z.pctLo === 0 ? '< 85% LTHR' : z.id === 'z5' ? '≥ 100% LTHR' : `${z.pctLo}–${z.pctHi}% LTHR`
+                const hrRange  = calcHrRange(z, lthr)
+                const pctStr   = z.pctLo === 0 ? '< 85% LTHR' : z.id === 'z5' ? '≥ 100% LTHR' : `${z.pctLo}–${z.pctHi}% LTHR`
                 return (
-                  <div key={z.id} className={`relative rounded-lg border-2 p-3 ${isActive ? 'shadow-md' : 'border-gray-200'}`}
+                  <div key={z.id}
+                    className={`relative rounded-lg border-2 p-3 ${isActive ? 'shadow-md' : 'border-gray-200'}`}
                     style={{ borderColor: isActive ? z.color : undefined, backgroundColor: isActive ? z.color + '10' : '#fafafa' }}>
                     {isActive && (
-                      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-white border text-xs font-bold px-2 py-0.5 rounded-full shadow-sm"
+                      <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-white border text-xs font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap"
                         style={{ color: z.color, borderColor: z.color }}>
                         📍 Zona Saat Ini
                       </div>
@@ -555,7 +581,8 @@ export default function PaceZonesPage() {
               })}
             </div>
             <p className="text-xs text-gray-400 mt-3">
-              * "Zona Saat Ini" diestimasi dari HRrest × 1.15 ({Math.round(rhr * 1.15)} bpm). Sumber: Joe Friel, <em>The Triathlete's Training Bible</em>.
+              * "Zona Saat Ini" diestimasi dari HRrest × 1.15 ({Math.round(rhr * 1.15)} bpm).
+              Sumber: Joe Friel, <em>The Triathlete's Training Bible</em>.
             </p>
           </>
         ) : (
@@ -573,7 +600,7 @@ export default function PaceZonesPage() {
           </h2>
           {vdot && (
             <span className="text-xs text-gray-400">
-              Sumber: Daniels' Running Formula (Ed.3) + Friel LTHR Hybrid · VDOT {vdot}
+              Daniels' Running Formula (Ed.3) + Friel LTHR Hybrid · VDOT {vdot}
             </span>
           )}
         </div>
@@ -583,9 +610,14 @@ export default function PaceZonesPage() {
             {/* Heat advisory strip */}
             {heatMode && wbgt != null && wbgt >= 28 && (
               <div className={`rounded-lg px-4 py-2 mb-4 text-sm font-medium flex items-center gap-2 ${
-                wbgt >= 35 ? 'bg-red-100 text-red-700' : wbgt >= 32 ? 'bg-orange-100 text-orange-700' : 'bg-amber-100 text-amber-700'
+                wbgt >= 35 ? 'bg-red-100 text-red-700'
+                : wbgt >= 32 ? 'bg-orange-100 text-orange-700'
+                : 'bg-amber-100 text-amber-700'
               }`}>
-                🌡️ WBGT {wbgt}°C — {wbgt >= 35 ? 'EXTREME: Tunda sesi kualitas. Risiko heat stroke tinggi.' : wbgt >= 32 ? 'HIGH RISK: Tambahkan 30–60 detik/km. Pantau HR ketat.' : 'CAUTION: Tambahkan 10–25 detik/km. Prioritaskan RPE, biarkan HR naik 1 zona.'}
+                🌡️ WBGT {wbgt}°C —{' '}
+                {wbgt >= 35 ? 'EXTREME: Tunda sesi kualitas. Risiko heat stroke tinggi.'
+                : wbgt >= 32 ? 'HIGH RISK: Tambahkan 30–60 detik/km. Pantau HR ketat.'
+                : 'CAUTION: Tambahkan 10–25 detik/km. Prioritaskan RPE, biarkan HR naik 1 zona.'}
               </div>
             )}
 
@@ -599,19 +631,23 @@ export default function PaceZonesPage() {
                     <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">HR Range</th>
                     <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">RPE</th>
                     <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">Pace (min/km)</th>
-                    {isCoachOrAdmin && <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">Adj. Coach</th>}
-                    {heatMode && wbgt != null && <th className="text-center px-3 py-2 text-xs font-medium text-amber-600 uppercase">Heat Adj.</th>}
+                    {isCoachOrAdmin && (
+                      <th className="text-center px-3 py-2 text-xs font-medium text-gray-500 uppercase">Adj. Coach</th>
+                    )}
+                    {heatMode && wbgt != null && (
+                      <th className="text-center px-3 py-2 text-xs font-medium text-amber-600 uppercase">Heat Adj.</th>
+                    )}
                     <th className="text-left px-3 py-2 text-xs font-medium text-gray-500 uppercase">Penggunaan</th>
                   </tr>
                 </thead>
                 <tbody>
                   {PACE_ZONES.map((z, i) => {
-                    const paces = zonePaces![i]
+                    const paces     = zonePaces![i]
                     const adjOffset = getAdjOffset(z.key)
-                    const heatOff = heatMode && wbgt != null ? heatPenalty(wbgt, i) : 0
-                    const adjLoSec = paces.loSec + adjOffset + heatOff
-                    const adjHiSec = paces.hiSec + adjOffset + heatOff
-                    const hasAdj = adjOffset !== 0
+                    const heatOff   = heatMode && wbgt != null ? heatPenalty(wbgt, i) : 0
+                    const adjLoSec  = paces.loSec + adjOffset + heatOff
+                    const adjHiSec  = paces.hiSec + adjOffset + heatOff
+                    const hasAdj    = adjOffset !== 0
                     const hrLo = z.pctLthrLo === 0 ? null : Math.round(lthr * z.pctLthrLo / 100)
                     const hrHi = z.pctLthrHi === 999 ? null : Math.round(lthr * z.pctLthrHi / 100)
                     const hrStr = hrLo == null ? `< ${Math.round(lthr * 0.75)} bpm`
@@ -629,14 +665,13 @@ export default function PaceZonesPage() {
                             </div>
                           </div>
                         </td>
-                        <td className="px-3 py-3 text-center">
-                          <span className="text-xs font-medium text-gray-600">
-                            {Math.round(z.pctVo2Lo * 100)}–{Math.round(z.pctVo2Hi * 100)}%
-                          </span>
+                        <td className="px-3 py-3 text-center text-xs font-medium text-gray-600">
+                          {Math.round(z.pctVo2Lo * 100)}–{Math.round(z.pctVo2Hi * 100)}%
                         </td>
                         <td className="px-3 py-3 text-center text-xs text-gray-600">{hrStr}</td>
                         <td className="px-3 py-3 text-center">
-                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ backgroundColor: z.bgColor, color: z.color }}>
+                          <span className="text-xs font-semibold px-1.5 py-0.5 rounded"
+                            style={{ backgroundColor: z.bgColor, color: z.color }}>
                             {z.rpe}
                           </span>
                         </td>
@@ -671,20 +706,21 @@ export default function PaceZonesPage() {
               </table>
             </div>
 
-            {/* Visual bar */}
+            {/* Visual gradient bar */}
             <div className="flex rounded-lg overflow-hidden h-5 mt-4 gap-px">
               {PACE_ZONES.map(z => (
-                <div key={z.key} className="flex-1 flex items-center justify-center"
-                  style={{ backgroundColor: z.color }} title={z.name} />
+                <div key={z.key} className="flex-1" style={{ backgroundColor: z.color }} title={z.name} />
               ))}
             </div>
-            <div className="flex justify-between text-xs text-gray-400 mt-1 px-0.5">
+            <div className="flex justify-between text-xs text-gray-400 mt-1">
               <span>← Lambat (Recovery)</span>
               <span>Cepat (Anaerob) →</span>
             </div>
           </>
         ) : (
-          <p className="text-sm text-gray-400">VDOT dan LTHR belum tersedia. Tambahkan Time Trial di menu Profil.</p>
+          <p className="text-sm text-gray-400">
+            VDOT dan LTHR belum tersedia. Tambahkan Time Trial di menu Profil.
+          </p>
         )}
       </div>
 
@@ -697,7 +733,6 @@ export default function PaceZonesPage() {
             Coach Adjustment
           </h2>
 
-          {/* Pilih athlete */}
           <div className="mb-5">
             <label className="text-xs font-medium text-gray-500 uppercase mb-1 block">Target Athlete</label>
             <select
@@ -714,7 +749,6 @@ export default function PaceZonesPage() {
 
           {targetAthleteId && (
             <>
-              {/* Form */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                 <div>
                   <label className="text-xs font-medium text-gray-500 uppercase mb-1 block">Zona</label>
@@ -762,13 +796,13 @@ export default function PaceZonesPage() {
                 {adjMsg && <span className="text-sm text-gray-500">{adjMsg}</span>}
               </div>
 
-              {/* Historis adjustment */}
               {adjustments.length > 0 && (
                 <div className="mt-5">
                   <div className="text-xs font-medium text-gray-500 uppercase mb-2">Historis Adjustment</div>
                   <div className="space-y-2">
                     {adjustments.map(a => {
-                      const zone = PACE_ZONES.find(z => z.key === a.zone_key)
+                      const zone   = PACE_ZONES.find(z => z.key === a.zone_key)
+                      const offset = a.pct_override ?? 0
                       return (
                         <div key={a.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
                           <div className="flex items-center gap-3">
@@ -776,13 +810,15 @@ export default function PaceZonesPage() {
                             <div>
                               <span className="text-sm font-bold text-gray-800">{zone?.name ?? a.zone_key}</span>
                               <span className="ml-2 text-xs font-semibold text-indigo-600">
-                                {(a.offset_sec ?? 0) > 0 ? '+' : ''}{a.offset_sec ?? 0}s/km
+                                {offset > 0 ? '+' : ''}{offset}s/km
                               </span>
                               {a.notes && <span className="ml-2 text-xs text-gray-400 italic">{a.notes}</span>}
                             </div>
                           </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs text-gray-400">{a.adjuster_name} · {a.adjusted_at?.slice(0, 10)}</span>
+                            <span className="text-xs text-gray-400">
+                              {a.adjuster_name} · {a.adjusted_at?.slice(0, 10)}
+                            </span>
                             <button
                               onClick={() => deleteAdjustment(a.id)}
                               className="text-xs text-red-500 border border-red-200 px-2 py-0.5 rounded hover:bg-red-50 transition-colors"
@@ -814,18 +850,18 @@ export default function PaceZonesPage() {
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={d => d.slice(5)} />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={(d: string) => d.slice(5)} />
                 <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11 }} width={36} />
                 <Tooltip
-                  formatter={(val: any, name: string) => [val, name === 'vdot' ? 'VDOT' : 'LTHR']}
-                  labelFormatter={l => `Tanggal: ${l}`}
+                  formatter={(val: any) => [String(val), 'VDOT']}
+                  labelFormatter={(l: any) => `Tanggal: ${l}`}
                   contentStyle={{ fontSize: 12 }}
                 />
-                <Line type="monotone" dataKey="vdot" stroke="#4f46e5" strokeWidth={2.5} dot={{ r: 4, fill: '#4f46e5' }} name="VDOT" connectNulls />
+                <Line type="monotone" dataKey="vdot" stroke="#4f46e5" strokeWidth={2.5}
+                  dot={{ r: 4, fill: '#4f46e5' }} name="VDOT" connectNulls />
               </LineChart>
             </ResponsiveContainer>
 
-            {/* Mini table */}
             <div className="mt-4 overflow-x-auto">
               <table className="w-full text-xs border-collapse">
                 <thead>
@@ -840,15 +876,17 @@ export default function PaceZonesPage() {
                 </thead>
                 <tbody>
                   {[...ttHistory].reverse().map(t => {
-                    const v = t.vdot
-                    const easySec = v ? vtoPaceSec(vfromVDOT(v, 0.65)) : null
+                    const v        = t.vdot
+                    const easySec  = v ? vtoPaceSec(vfromVDOT(v, 0.65)) : null
                     const tempoSec = v ? vtoPaceSec(vfromVDOT(v, 0.86)) : null
                     return (
                       <tr key={t.id} className="border-b border-gray-50 hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-700">{t.test_date?.slice(0, 10)}</td>
+                        <td className="px-3 py-2 text-gray-700">{t.tt_date?.slice(0, 10)}</td>
                         <td className="px-3 py-2 text-center text-gray-500">{t.tt_type ?? '—'}</td>
                         <td className="px-3 py-2 text-center font-bold text-indigo-700">{t.vdot ?? '—'}</td>
-                        <td className="px-3 py-2 text-center text-gray-600">{t.lthr_calculated ? `${t.lthr_calculated} bpm` : '—'}</td>
+                        <td className="px-3 py-2 text-center text-gray-600">
+                          {t.lthr_calculated ? `${t.lthr_calculated} bpm` : '—'}
+                        </td>
                         <td className="px-3 py-2 text-center text-gray-600">{fmtSec(easySec)}</td>
                         <td className="px-3 py-2 text-center text-gray-600">{fmtSec(tempoSec)}</td>
                       </tr>
@@ -864,7 +902,9 @@ export default function PaceZonesPage() {
             <div className="mt-2 font-semibold text-gray-600">VDOT saat ini: {chartData[0].vdot}</div>
           </div>
         ) : (
-          <p className="text-sm text-gray-400">Belum ada riwayat Time Trial. Tambahkan TT di menu Profil.</p>
+          <p className="text-sm text-gray-400">
+            Belum ada riwayat Time Trial. Tambahkan TT di menu Profil.
+          </p>
         )}
       </div>
 
