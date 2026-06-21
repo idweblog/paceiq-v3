@@ -1255,7 +1255,7 @@ export default function ProfilPage() {
           {/* ── Cuaca Latihan ── */}
           <div className="border border-gray-200 rounded-xl p-4">
             <div className="flex items-center justify-between mb-3">
-              <div className="text-xs font-medium text-gray-500 uppercase mb-2">🏃 Cuaca Latihan Hari Ini</div>
+              <div className="text-sm font-bold text-gray-900 mb-2">🏃 Cuaca Latihan Hari Ini</div>
             </div>
 
             {!settings.domisili ? (
@@ -1364,7 +1364,7 @@ export default function ProfilPage() {
 
           {/* ── Cuaca Race ── */}
           <div>
-            <div className="text-xs font-medium text-gray-500 uppercase mb-3">🏁 Cuaca Kota Race</div>
+            <div className="text-sm font-bold text-gray-900 mb-3">🏁 Cuaca Kota Race</div>
             {races.filter(r => r.city).length === 0 ? (
               <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400 text-center border border-gray-200">
                 Isi kota race di Race Management untuk melihat cuaca race.
@@ -1482,11 +1482,11 @@ export default function ProfilPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><label>Suhu (°C)</label><span className="font-semibold">{hsiState.temp}°C</span></div>
+              <div className="flex justify-between text-sm font-bold text-gray-800 mb-1"><label>Suhu (°C)</label><span className="font-semibold">{hsiState.temp}°C</span></div>
               <input type="range" min={15} max={45} step={0.5} value={hsiState.temp} onChange={e => setHsiState(s => ({ ...s, temp: parseFloat(e.target.value) }))} className="w-full accent-indigo-600" />
             </div>
             <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1"><label>Kelembaban (%)</label><span className="font-semibold">{hsiState.rh}%</span></div>
+              <div className="flex justify-between text-sm font-bold text-gray-800 mb-1"><label>Kelembaban (%)</label><span className="font-semibold">{hsiState.rh}%</span></div>
               <input type="range" min={20} max={100} step={1} value={hsiState.rh} onChange={e => setHsiState(s => ({ ...s, rh: parseInt(e.target.value) }))} className="w-full accent-indigo-600" />
             </div>
             <div className={`inline-block text-sm font-bold px-3 py-1 rounded-full ${hsi.cls === 'safe' ? 'bg-green-100 text-green-700' : hsi.cls === 'low' ? 'bg-yellow-100 text-yellow-700' : hsi.cls === 'mod' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
@@ -1495,14 +1495,14 @@ export default function ProfilPage() {
           </div>
           <div>
             <table className="w-full text-xs text-gray-600 mb-2">
-              <thead><tr className="text-gray-400 border-b border-gray-100"><th className="text-left py-1 pr-3">Zona</th><th className="text-right py-1">Penyesuaian Pace</th></tr></thead>
+              <thead><tr className="border-b border-gray-200"><th className="text-left py-2 pr-3 text-sm font-bold text-gray-900">Zona</th><th className="text-right py-2 text-sm font-bold text-gray-900">Penyesuaian Pace</th></tr></thead>
               <tbody>
                 {Object.entries(hsi.penalties).map(([zone, pen]) => {
                   const base = basePaces[zone] ?? null
                   return (
-                    <tr key={zone} className="border-b border-gray-50">
-                      <td className="py-1 pr-3">{zone}</td>
-                      <td className="py-1 text-right">+{pen} det/km → <strong>{base ? secToPace(base + pen) : '—'}</strong></td>
+                    <tr key={zone} className="border-b border-gray-100">
+                      <td className="py-2 pr-3 text-sm text-gray-700">{zone}</td>
+                      <td className="py-2 text-right text-sm text-gray-700">+{pen} det/km → <strong className="text-gray-900">{base ? secToPace(base + pen) : '—'}</strong></td>
                     </tr>
                   )
                 })}
