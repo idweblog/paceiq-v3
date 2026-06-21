@@ -991,7 +991,7 @@ export default function ProfilPage() {
         <div className="font-gsans text-xl text-indigo-700 uppercase mb-4 pb-2 border-b border-indigo-100">Efficiency &amp; Economy</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <div className="text-sm font-semibold text-gray-700 mb-2">⚡ Efficiency Factor (EF)</div>
+            <div className="text-lg font-bold text-gray-900 mb-2">⚡ Efficiency Factor (EF)</div>
             {ef ? (
               <>
                 <div className="text-3xl font-extrabold" style={{ color: ef.color }}>{ef.current.toFixed(2)}</div>
@@ -1002,7 +1002,7 @@ export default function ProfilPage() {
             ) : <p className="text-sm text-gray-400 mt-2">Belum ada sesi easy/LR dengan data HR &amp; pace.</p>}
           </div>
           <div>
-            <div className="text-sm font-semibold text-gray-700 mb-2">📊 Performance Efficiency Score</div>
+            <div className="text-lg font-bold text-gray-900 mb-2">📊 Performance Efficiency Score</div>
             {pes ? (
               <>
                 <div className="text-3xl font-extrabold" style={{ color: pes.color }}>{pes.pes}</div>
@@ -1126,15 +1126,14 @@ export default function ProfilPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-gray-400 border-b border-gray-100">
-                  {['Tanggal','Jenis TT','Waktu','Pace','Pred. HM','VDOT','Magic Mile','LTHR',''].map(h => (
-                    <th key={h} className="text-left py-2 pr-3 text-sm font-bold text-gray-900 whitespace-nowrap">{h}</th>
+                  {['Tanggal','Jenis TT','Waktu','Pace','VDOT','Magic Mile','LTHR',''].map(h => (
+                    <th key={h} className="text-left py-2 pr-3 text-sm font-bold text-gray-900 whitespace-nowrap align-top">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {ttList.map((tt, idx) => {
                   const isActive = idx === 0
-                  const predHm = tt.distance_km ? predictTime(tt.distance_km * 1000, tt.finish_time_sec, 21097.5) : null
                   const pace = tt.distance_km ? secToPace(Math.round(tt.finish_time_sec / tt.distance_km)) : '—'
                   const isEditing = editTtId === tt.id
                   const editType = TT_TYPES.find(t => t.value === editTtForm.tt_type)
@@ -1148,24 +1147,25 @@ export default function ProfilPage() {
                   const editNeedsPartial = editType?.partialLabel ?? null
                   return (
                     <>
-                    <tr key={tt.id} className={`border-b border-gray-50 ${isActive ? 'bg-blue-50' : ''} ${isEditing ? 'bg-yellow-50' : ''}`}>
-                      <td className="py-2 pr-3 text-xs text-gray-500 whitespace-nowrap">
-                        {new Date(tt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        {isActive && <div className="text-blue-600 font-bold text-xs">▶ Aktif</div>}
+                    <tr key={tt.id} className={`border-b border-gray-50 ${isEditing ? 'bg-yellow-50' : ''}`}>
+                      <td className="py-2 pr-3 whitespace-nowrap align-top">
+                        <div className="flex items-center gap-1.5">
+                          {isActive && <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0 mt-0.5"></span>}
+                          <span className="text-sm text-gray-700">{new Date(tt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                        </div>
                       </td>
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        <div className="text-xs font-semibold text-gray-700">{TT_TYPES.find(t => t.value === tt.tt_type)?.label ?? tt.tt_type ?? '—'}</div>
+                      <td className="py-2 pr-3 whitespace-nowrap align-top">
+                        <div className="text-sm font-semibold text-gray-700">{TT_TYPES.find(t => t.value === tt.tt_type)?.label ?? tt.tt_type ?? '—'}</div>
                         <div className="text-xs text-green-600">{TT_TYPES.find(t => t.value === tt.tt_type)?.race ?? ''}</div>
                       </td>
-                      <td className="py-2 pr-3 whitespace-nowrap text-sm">{fmtTime(tt.finish_time_sec)}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap text-sm">{pace}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap text-sm">{predHm ? fmtTime(Math.round(predHm)) : '—'}</td>
-                      <td className="py-2 pr-3 font-bold text-indigo-600 text-sm">{tt.vdot ?? '—'}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap text-sm">{tt.distance_km ? magicMilePace(tt) : '—'}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap">
+                      <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{fmtTime(tt.finish_time_sec)}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{pace}</td>
+                      <td className="py-2 pr-3 font-bold text-indigo-600 text-sm align-top">{tt.vdot ?? '—'}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{tt.distance_km ? magicMilePace(tt) : '—'}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap align-top">
                         {tt.lthr_calculated ? <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{tt.lthr_calculated} bpm</span> : '—'}
                       </td>
-                      <td className="py-2 whitespace-nowrap">
+                      <td className="py-2 whitespace-nowrap align-top">
                         <button onClick={() => isEditing ? setEditTtId(null) : openEditTt(tt)} className="text-xs text-indigo-400 hover:text-indigo-600 mr-2">{isEditing ? 'Batal' : 'Edit'}</button>
                         <button onClick={() => deleteTt(tt.id)} className="text-xs text-red-400 hover:text-red-600">Hapus</button>
                       </td>
