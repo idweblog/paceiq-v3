@@ -344,11 +344,18 @@ export default function ProfilPage() {
   const [wxTraining, setWxTraining] = useState<Record<string,number|string> | null>(null)
   const [wxRaces, setWxRaces] = useState<Record<string, Record<string,number|string> | null>>({})
   const [wxLoading, setWxLoading] = useState(false)
+  const [wxTimestamp, setWxTimestamp] = useState<string | null>(null)
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
 
   useEffect(() => {
     cancelledRef.current = false
     return () => { cancelledRef.current = true }
   }, [])
+
+  function showToast(msg: string) {
+    setToastMsg(msg)
+    setTimeout(() => setToastMsg(null), 3000)
+  }
 
   async function fetchWeather(city: string, forceRefresh = false): Promise<Record<string,number|string> | null> {
     const cacheKey = `wx_v3_${city.toLowerCase().trim()}`
@@ -402,6 +409,10 @@ export default function ProfilPage() {
     }
     if (!cancelledRef.current) setWxRaces(raceWxMap)
     setWxLoading(false)
+    const now = new Date()
+    const ts = now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }) + ' · ' + now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+    setWxTimestamp(ts)
+    if (forceRefresh) showToast('☁️ Cuaca diperbarui & HSI ter-update otomatis!')
   }
 
   useEffect(() => {
@@ -1297,6 +1308,7 @@ export default function ProfilPage() {
                       <div className="text-base font-bold text-gray-800">{condition}</div>
                       <div className="text-xs text-gray-500 mt-0.5">📍 {cityName}{country ? `, ${country}` : ''} · Terasa {feelsLike}°C</div>
                     </div>
+                    {wxTimestamp && <div className="text-xs text-gray-400">{wxTimestamp}</div>}
                   </div>
                   {/* Metric tiles */}
                   <div className="grid grid-cols-4 gap-2 mb-3">
@@ -1518,6 +1530,13 @@ export default function ProfilPage() {
         </div>
       </section>
 
+
+      {/* Toast notification */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-gray-900 text-white text-sm font-medium rounded-xl shadow-lg animate-fade-in">
+          ✅ {toastMsg}
+        </div>
+      )}
     </div>
   )
 }
