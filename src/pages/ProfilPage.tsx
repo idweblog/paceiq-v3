@@ -681,7 +681,7 @@ export default function ProfilPage() {
 
       {/* ── IDENTITAS ATLET ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Identitas Atlet</div>
+        <div className="font-bebas text-lg text-indigo-700 mb-4 pb-2 border-b border-indigo-100">Identitas Atlet</div>
         <div className="flex items-center gap-4 mb-5">
           <div className="w-14 h-14 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xl shrink-0">{initials}</div>
           <div>
@@ -761,7 +761,7 @@ export default function ProfilPage() {
 
       {/* ── DATA PERFORMA ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Data Performa</div>
+        <div className="font-bebas text-lg text-indigo-700 mb-4 pb-2 border-b border-indigo-100">Data Performa</div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-gray-50 rounded-xl p-4">
             <div className="text-xs font-medium text-gray-500 uppercase mb-2">Time Trial Aktif</div>
@@ -814,7 +814,7 @@ export default function ProfilPage() {
 
             {/* ── RACE PREDICTION ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Race Prediction</div>
+        <div className="font-bebas text-lg text-indigo-700 mb-4 pb-2 border-b border-indigo-100">Race Prediction</div>
         <p className="text-xs text-gray-400 mb-4">Prediksi berdasarkan Time Trial terbaru menggunakan formula Riegel (t₂ = t₁ × (d₂/d₁)^1.06)</p>
 
         {/* 4 Card Prediksi */}
@@ -899,7 +899,7 @@ export default function ProfilPage() {
 
             {/* ── FITNESS DASHBOARD ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Fitness Dashboard</div>
+        <div className="font-bebas text-lg text-indigo-700 mb-4 pb-2 border-b border-indigo-100">Fitness Dashboard</div>
         {!fitness ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex flex-col items-center justify-center p-8 bg-gray-50 rounded-xl">
@@ -988,7 +988,7 @@ export default function ProfilPage() {
 
       {/* ── EFFICIENCY & ECONOMY ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">Efficiency &amp; Economy</div>
+        <div className="font-bebas text-lg text-indigo-700 mb-4 pb-2 border-b border-indigo-100">Efficiency &amp; Economy</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <div className="text-sm font-semibold text-gray-700 mb-2">⚡ Efficiency Factor (EF)</div>
@@ -1478,7 +1478,7 @@ export default function ProfilPage() {
 
             {/* ── HEAT STRESS INDEX ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
-        <div className="text-sm font-bold text-indigo-700 uppercase tracking-widest mb-4 pb-2 border-b border-indigo-100">🌡️ Heat Stress Index</div>
+        <div className="font-bebas text-lg text-indigo-700 mb-4 pb-2 border-b border-indigo-100">🌡️ Heat Stress Index</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div>

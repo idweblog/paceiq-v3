@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+@layer utilities {
+  .font-bebas {
+    font-family: "Bebas Neue", sans-serif;
+    letter-spacing: 0.05em;
+  }
+}
+
 @layer base {
   html, body, * {
     font-family: "DM Sans", system-ui, -apple-system, sans-serif;
