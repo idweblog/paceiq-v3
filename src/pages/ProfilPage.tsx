@@ -16,6 +16,7 @@ interface AthleteSettings {
   birth_date: string | null
   cedera: string | null
   start_training_date: string | null
+  gender: string | null
 }
 
 interface TtEntry {
@@ -306,7 +307,8 @@ const TT_DISTANCES: Record<string, number> = {
 
 const emptySettings: AthleteSettings = {
   lthr: null, resting_hr: null, max_hr: null, weight_kg: null,
-  height_cm: null, domisili: null, birth_date: null, cedera: null, start_training_date: null,
+  height_cm: null, domisili: null, birth_date: null, cedera: null,
+  start_training_date: null, gender: null,
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -392,10 +394,6 @@ export default function ProfilPage() {
     } catch { return null }
   }
 
-
-
-
-
   async function loadWeather(forceRefresh = false) {
     if (!settings.domisili) return
     setWxLoading(true)
@@ -422,7 +420,7 @@ export default function ProfilPage() {
       setLoading(true)
       const [sRes, ttRes, sesRes, hrRes, lrRes, racesRes, fitRes] = await Promise.all([
         supabase.from('athlete_settings')
-          .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date')
+          .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date,gender')
           .eq('athlete_id', athleteId as string).maybeSingle(),
         supabase.from('tt_history')
           .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_partial_avg,lthr_calculated,vdot,notes')
@@ -446,7 +444,7 @@ export default function ProfilPage() {
           .order('session_date', { ascending: false }).limit(1),
       ])
       if (cancelled) return
-      if (sRes.data) setSettings(sRes.data as AthleteSettings)
+      if (sRes.data) setSettings(sRes.data as unknown as AthleteSettings)
       if (ttRes.data) setTtList(ttRes.data)
       if (sesRes.data) setSessions(sesRes.data)
       if (hrRes.data) setHrHistory(hrRes.data)
@@ -462,7 +460,6 @@ export default function ProfilPage() {
     return () => { cancelled = true }
   }, [athleteId])
 
-  // Load cuaca setelah settings dan races tersedia
   useEffect(() => {
     if (settings.domisili) loadWeather()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -500,8 +497,8 @@ export default function ProfilPage() {
     : '—'
 
   const initials = (athlete?.name ?? 'A').split(' ').map((w: string) => w[0]).slice(0, 2).join('').toUpperCase()
+  const genderLabel = settings.gender === 'female' ? 'Perempuan' : 'Laki-laki'
 
-  // TT form: auto-fill distance from tt_type
   function onTtTypeChange(val: string) {
     const dist = TT_DISTANCES[val] ?? 0
     setTtForm(p => ({ ...p, tt_type: val, distance_km: dist > 0 ? dist.toString() : '' }))
@@ -521,6 +518,7 @@ export default function ProfilPage() {
       domisili: settings.domisili ?? '',
       cedera: settings.cedera ?? 'Tidak ada',
       start_training_date: settings.start_training_date ?? '',
+      gender: settings.gender ?? 'male',
     })
     setEditMode(true)
     setPwMsg(null)
@@ -531,13 +529,11 @@ export default function ProfilPage() {
     setSaving(true); setError(null)
     const p = editForm
 
-    // Update athletes.name & whatsapp
     const { error: nameErr } = await supabase.from('athletes')
       .update({ name: p.name || athlete?.name, whatsapp: p.whatsapp || null })
       .eq('id', athleteId as string)
     if (nameErr) { setError(nameErr.message); setSaving(false); return }
 
-    // Update athlete_settings
     const payload = {
       athlete_id: athleteId,
       height_cm: p.height_cm ? parseInt(p.height_cm) : null,
@@ -546,6 +542,7 @@ export default function ProfilPage() {
       birth_date: p.birth_date || null,
       cedera: p.cedera || 'Tidak ada',
       start_training_date: p.start_training_date || null,
+      gender: p.gender || 'male',
       updated_at: new Date().toISOString(),
     }
     const { error: settErr } = await supabase.from('athlete_settings')
@@ -553,11 +550,10 @@ export default function ProfilPage() {
     setSaving(false)
     if (settErr) { setError(settErr.message); return }
     setEditMode(false)
-    // Reload settings
     const { data } = await supabase.from('athlete_settings')
-      .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date')
+      .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date,gender')
       .eq('athlete_id', athleteId as string).maybeSingle()
-    if (data) setSettings(data as AthleteSettings)
+    if (data) setSettings(data as unknown as AthleteSettings)
   }
 
   async function sendPasswordReset() {
@@ -602,15 +598,12 @@ export default function ProfilPage() {
     })
     setTtSaving(false)
     if (err) { setError(err.message); return }
-
-    // Mirror LTHR ke athlete_settings jika ada
     if (lthrCalc) {
       await supabase.from('athlete_settings').upsert(
         { athlete_id: athleteId, lthr: lthrCalc, updated_at: new Date().toISOString() },
         { onConflict: 'athlete_id' }
       )
     }
-
     setTtForm({ tt_date: new Date().toISOString().split('T')[0], tt_type: '5K', distance_km: '5.0', finish_time: '', hr_avg: '', hr_partial_avg: '', notes: '' })
     setShowTtForm(false)
     const { data } = await supabase.from('tt_history')
@@ -703,6 +696,7 @@ export default function ProfilPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { label: 'Usia', val: age ? `${age} tahun` : '—' },
+            { label: 'Jenis Kelamin', val: genderLabel },
             { label: 'Tinggi / Berat', val: `${settings.height_cm ?? '—'} cm · ${settings.weight_kg ?? '—'} kg` },
             { label: 'BMI', val: bmiData ? `${bmiData.bmi} (${bmiData.label})` : '—', color: bmiData?.color },
             { label: 'Training Age', val: taStr },
@@ -725,20 +719,35 @@ export default function ProfilPage() {
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Edit Profil</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
             {[
-              { key: 'name', label: 'Nama Lengkap', ph: 'Andita Sely Bestoro', type: 'text' },
-              { key: 'whatsapp', label: 'Nomor WhatsApp', ph: '08xxxxxxxxxx', type: 'text' },
-              { key: 'birth_date', label: 'Tanggal Lahir', ph: '', type: 'date' },
-              { key: 'height_cm', label: 'Tinggi (cm)', ph: '164', type: 'number' },
-              { key: 'weight_kg', label: 'Berat (kg)', ph: '69', type: 'number' },
-              { key: 'domisili', label: 'Domisili', ph: 'Makassar', type: 'text' },
-              { key: 'cedera', label: 'Status Cedera', ph: 'Tidak ada', type: 'text' },
-              { key: 'start_training_date', label: 'Mulai Latihan Terprogram', ph: '', type: 'date' },
+              { key: 'name',                label: 'Nama Lengkap',              ph: 'Andita Sely Bestoro', type: 'text' },
+              { key: 'whatsapp',            label: 'Nomor WhatsApp',            ph: '08xxxxxxxxxx',        type: 'text' },
+              { key: 'birth_date',          label: 'Tanggal Lahir',             ph: '',                    type: 'date' },
+              { key: 'gender',              label: 'Jenis Kelamin',             ph: '',                    type: 'select' },
+              { key: 'height_cm',           label: 'Tinggi (cm)',               ph: '164',                 type: 'number' },
+              { key: 'weight_kg',           label: 'Berat (kg)',                ph: '69',                  type: 'number' },
+              { key: 'domisili',            label: 'Domisili',                  ph: 'Makassar',            type: 'text' },
+              { key: 'cedera',              label: 'Status Cedera',             ph: 'Tidak ada',           type: 'text' },
+              { key: 'start_training_date', label: 'Mulai Latihan Terprogram',  ph: '',                    type: 'date' },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
-                <input type={f.type} value={editForm[f.key] ?? ''} placeholder={f.ph}
-                  onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                {f.type === 'select' ? (
+                  <select
+                    value={editForm[f.key] ?? 'male'}
+                    onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    <option value="male">Laki-laki</option>
+                    <option value="female">Perempuan</option>
+                  </select>
+                ) : (
+                  <input
+                    type={f.type}
+                    value={editForm[f.key] ?? ''}
+                    placeholder={f.ph}
+                    onChange={e => setEditForm(p => ({ ...p, [f.key]: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                )}
                 {f.key === 'birth_date' && editForm.birth_date && (
                   <div className="text-xs text-indigo-600 mt-1">Usia: {calcAge(editForm.birth_date)} tahun</div>
                 )}
@@ -823,12 +832,10 @@ export default function ProfilPage() {
         </div>
       </section>
 
-            {/* ── RACE PREDICTION ── */}
+      {/* ── RACE PREDICTION ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="font-gsans text-xl text-indigo-700 uppercase mb-4 pb-2 border-b border-indigo-100">Race Prediction</div>
         <p className="text-xs text-gray-400 mb-4">Prediksi berdasarkan Time Trial terbaru menggunakan formula Riegel (t₂ = t₁ × (d₂/d₁)^1.06)</p>
-
-        {/* 4 Card Prediksi */}
         {latestTt && latestTt.distance_km ? (() => {
           const preds = [
             { label: '5K', dist: 5000, emoji: '🚀', color: '#f59e0b' },
@@ -857,8 +864,6 @@ export default function ProfilPage() {
             Tambahkan Time Trial untuk melihat prediksi race.
           </div>
         )}
-
-        {/* Gap Progress vs Race Aktif */}
         {races.length > 0 && latestTt && latestTt.distance_km && (
           <div>
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">Gap vs Target Race</div>
@@ -908,13 +913,12 @@ export default function ProfilPage() {
         )}
       </section>
 
-            {/* ── FITNESS DASHBOARD ── */}
+      {/* ── FITNESS DASHBOARD ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="font-gsans text-xl text-indigo-700 uppercase mb-4 pb-2 border-b border-indigo-100">Fitness Dashboard</div>
         {!fitness ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex flex-col items-center justify-center p-8 bg-gray-50 rounded-xl">
-              {/* EFS Gauge kosong */}
               <svg width="160" height="160" viewBox="0 0 160 160">
                 <circle cx="80" cy="80" r="65" fill="none" stroke="#e5e7eb" strokeWidth="14" />
                 <text x="80" y="75" textAnchor="middle" fontSize="13" fill="#9ca3af" fontWeight="600">Belum Ada</text>
@@ -952,12 +956,9 @@ export default function ProfilPage() {
             : tsb > -10 ? { label: 'Optimal', color: '#6366f1' }
             : tsb > -30 ? { label: 'Tired', color: '#f59e0b' }
             : { label: 'Very Tired', color: '#ef4444' }
-
-          // SVG gauge
           const radius = 65
           const circumference = 2 * Math.PI * radius
           const dashOffset = circumference - (efs / 100) * circumference
-
           return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex flex-col items-center justify-center p-4 bg-indigo-50 rounded-xl">
@@ -1055,78 +1056,75 @@ export default function ProfilPage() {
           const previewVdot = (distKm > 0 && finishSec) ? calcVdot(distKm * 1000, finishSec) : null
           const previewLthr = calcLthrFromTT(ttForm.tt_type, hrAvgVal, hrPartialVal)
           return (
-          <div className="mb-5 p-4 bg-gray-50 rounded-lg">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Tanggal</label>
-                <input type="date" value={ttForm.tt_date} onChange={e => setTtForm(p => ({ ...p, tt_date: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-xs text-gray-500 mb-1">Jenis Time Trial</label>
-                <select value={ttForm.tt_type} onChange={e => onTtTypeChange(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                  {TT_TYPES.map(t => (
-                    <option key={t.value} value={t.value}>{t.label} — {t.race}</option>
-                  ))}
-                </select>
-                {activeTtType && (
-                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
-                    <span className="text-xs text-indigo-500">{activeTtType.hint}</span>
-                    <span className="text-xs font-semibold text-green-600">📍 {activeTtType.race}</span>
-                    <span className="text-xs font-semibold text-amber-600">🎯 {activeTtType.accuracy}</span>
+            <div className="mb-5 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Tanggal</label>
+                  <input type="date" value={ttForm.tt_date} onChange={e => setTtForm(p => ({ ...p, tt_date: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-500 mb-1">Jenis Time Trial</label>
+                  <select value={ttForm.tt_type} onChange={e => onTtTypeChange(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    {TT_TYPES.map(t => (
+                      <option key={t.value} value={t.value}>{t.label} — {t.race}</option>
+                    ))}
+                  </select>
+                  {activeTtType && (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1">
+                      <span className="text-xs text-indigo-500">{activeTtType.hint}</span>
+                      <span className="text-xs font-semibold text-green-600">📍 {activeTtType.race}</span>
+                      <span className="text-xs font-semibold text-amber-600">🎯 {activeTtType.accuracy}</span>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Jarak (km)</label>
+                  <input type="number" step="0.01" value={ttForm.distance_km} placeholder="5.0"
+                    onChange={e => setTtForm(p => ({ ...p, distance_km: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Total Waktu (MM:SS atau HH:MM:SS)</label>
+                  <input type="text" value={ttForm.finish_time} placeholder="20:00"
+                    onChange={e => setTtForm(p => ({ ...p, finish_time: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Avg HR (bpm)</label>
+                  <input type="number" value={ttForm.hr_avg} placeholder="165"
+                    onChange={e => setTtForm(p => ({ ...p, hr_avg: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </div>
+                {needsPartial && (
+                  <div className="col-span-2 md:col-span-1">
+                    <label className="block text-xs text-gray-500 mb-1">{needsPartial}</label>
+                    <input type="number" value={ttForm.hr_partial_avg} placeholder="172"
+                      onChange={e => setTtForm(p => ({ ...p, hr_partial_avg: e.target.value }))}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                   </div>
                 )}
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Jarak (km)</label>
-                <input type="number" step="0.01" value={ttForm.distance_km} placeholder="5.0"
-                  onChange={e => setTtForm(p => ({ ...p, distance_km: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Total Waktu (MM:SS atau HH:MM:SS)</label>
-                <input type="text" value={ttForm.finish_time} placeholder="20:00"
-                  onChange={e => setTtForm(p => ({ ...p, finish_time: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Avg HR (bpm)</label>
-                <input type="number" value={ttForm.hr_avg} placeholder="165"
-                  onChange={e => setTtForm(p => ({ ...p, hr_avg: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              </div>
-              {needsPartial && (
-                <div className="col-span-2 md:col-span-1">
-                  <label className="block text-xs text-gray-500 mb-1">{needsPartial}</label>
-                  <input type="number" value={ttForm.hr_partial_avg} placeholder="172"
-                    onChange={e => setTtForm(p => ({ ...p, hr_partial_avg: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                <div className="text-center">
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Avg Pace</div>
+                  <div className="text-lg font-extrabold text-indigo-700">{previewPace ? `${previewPace}/km` : '—'}</div>
                 </div>
-              )}
+                <div className="text-center">
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">VDOT</div>
+                  <div className="text-lg font-extrabold text-indigo-700">{previewVdot ?? '—'}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">LTHR</div>
+                  <div className="text-lg font-extrabold text-red-600">{previewLthr ? `${previewLthr} bpm` : '—'}</div>
+                </div>
+              </div>
+              <button onClick={saveTt} disabled={ttSaving}
+                className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                {ttSaving ? 'Menyimpan...' : 'Simpan TT'}
+              </button>
             </div>
-
-            {/* Preview Real-time */}
-            <div className="grid grid-cols-3 gap-3 mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
-              <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Avg Pace</div>
-                <div className="text-lg font-extrabold text-indigo-700">{previewPace ? `${previewPace}/km` : '—'}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">VDOT</div>
-                <div className="text-lg font-extrabold text-indigo-700">{previewVdot ?? '—'}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">LTHR</div>
-                <div className="text-lg font-extrabold text-red-600">{previewLthr ? `${previewLthr} bpm` : '—'}</div>
-              </div>
-            </div>
-
-            <button onClick={saveTt} disabled={ttSaving}
-              className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-              {ttSaving ? 'Menyimpan...' : 'Simpan TT'}
-            </button>
-          </div>
           )
         })()}
 
@@ -1158,90 +1156,90 @@ export default function ProfilPage() {
                   const editNeedsPartial = editType?.partialLabel ?? null
                   return (
                     <>
-                    <tr key={tt.id} className={`border-b border-gray-50 ${isEditing ? 'bg-yellow-50' : ''}`}>
-                      <td className="py-2 pr-3 whitespace-nowrap align-top">
-                        <div className="flex items-center gap-1.5">
-                          {isActive && <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0 mt-0.5"></span>}
-                          <span className="text-sm text-gray-700">{new Date(tt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                        </div>
-                      </td>
-                      <td className="py-2 pr-3 whitespace-nowrap align-top">
-                        <div className="text-sm font-semibold text-gray-700">{TT_TYPES.find(t => t.value === tt.tt_type)?.label ?? tt.tt_type ?? '—'}</div>
-                        <div className="text-xs text-green-600">{TT_TYPES.find(t => t.value === tt.tt_type)?.race ?? ''}</div>
-                      </td>
-                      <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{fmtTime(tt.finish_time_sec)}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{pace}</td>
-                      <td className="py-2 pr-3 font-bold text-indigo-600 text-sm align-top">{tt.vdot ?? '—'}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{tt.distance_km ? magicMilePace(tt) : '—'}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap align-top">
-                        {tt.lthr_calculated ? <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{tt.lthr_calculated} bpm</span> : '—'}
-                      </td>
-                      <td className="py-2 whitespace-nowrap align-top">
-                        <button onClick={() => isEditing ? setEditTtId(null) : openEditTt(tt)} className="text-xs px-2 py-1 rounded-md border border-indigo-300 text-indigo-600 hover:bg-indigo-50 font-medium mr-1 transition-colors">{isEditing ? 'Batal' : 'Edit'}</button>
-                        <button onClick={() => deleteTt(tt.id)} className="text-xs px-2 py-1 rounded-md border border-red-300 text-red-500 hover:bg-red-50 font-medium transition-colors">Hapus</button>
-                      </td>
-                    </tr>
-                    {isEditing && (
-                      <tr key={`edit-${tt.id}`} className="bg-yellow-50 border-b border-yellow-100">
-                        <td colSpan={9} className="px-3 py-4">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                            <div>
-                              <label className="block text-xs font-medium text-gray-500 mb-1">Tanggal</label>
-                              <input type="date" value={editTtForm.tt_date} onChange={e => setEditTtForm(p => ({ ...p, tt_date: e.target.value }))}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-500 mb-1">Jenis TT</label>
-                              <select value={editTtForm.tt_type} onChange={e => setEditTtForm(p => ({ ...p, tt_type: e.target.value, hr_partial_avg: '' }))}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                                {TT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label} — {t.race}</option>)}
-                              </select>
-                              {editType && <div className="text-xs text-amber-600 mt-1">🎯 {editType.accuracy}</div>}
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-500 mb-1">Jarak (km)</label>
-                              <input type="number" step="0.01" value={editTtForm.distance_km} onChange={e => setEditTtForm(p => ({ ...p, distance_km: e.target.value }))}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-500 mb-1">Total Waktu</label>
-                              <input type="text" value={editTtForm.finish_time} onChange={e => setEditTtForm(p => ({ ...p, finish_time: e.target.value }))}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                            </div>
-                            <div>
-                              <label className="block text-xs font-medium text-gray-500 mb-1">Avg HR (bpm)</label>
-                              <input type="number" value={editTtForm.hr_avg} onChange={e => setEditTtForm(p => ({ ...p, hr_avg: e.target.value }))}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                            </div>
-                            {editNeedsPartial && (
-                              <div>
-                                <label className="block text-xs font-medium text-gray-500 mb-1">{editNeedsPartial}</label>
-                                <input type="number" value={editTtForm.hr_partial_avg} onChange={e => setEditTtForm(p => ({ ...p, hr_partial_avg: e.target.value }))}
-                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                              </div>
-                            )}
+                      <tr key={tt.id} className={`border-b border-gray-50 ${isEditing ? 'bg-yellow-50' : ''}`}>
+                        <td className="py-2 pr-3 whitespace-nowrap align-top">
+                          <div className="flex items-center gap-1.5">
+                            {isActive && <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0 mt-0.5"></span>}
+                            <span className="text-sm text-gray-700">{new Date(tt.tt_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
                           </div>
-                          <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
-                            <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 uppercase mb-1">Avg Pace</div>
-                              <div className="text-base font-extrabold text-indigo-700">{editPreviewPace ? `${editPreviewPace}/km` : '—'}</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 uppercase mb-1">VDOT</div>
-                              <div className="text-base font-extrabold text-indigo-700">{editPreviewVdot ?? '—'}</div>
-                            </div>
-                            <div className="text-center">
-                              <div className="text-xs font-medium text-gray-500 uppercase mb-1">LTHR</div>
-                              <div className="text-base font-extrabold text-red-600">{editPreviewLthr ? `${editPreviewLthr} bpm` : '—'}</div>
-                            </div>
-                          </div>
-                          <button onClick={saveEditTt} disabled={editTtSaving}
-                            className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                            {editTtSaving ? 'Menyimpan...' : 'Simpan Perubahan'}
-                          </button>
+                        </td>
+                        <td className="py-2 pr-3 whitespace-nowrap align-top">
+                          <div className="text-sm font-semibold text-gray-700">{TT_TYPES.find(t => t.value === tt.tt_type)?.label ?? tt.tt_type ?? '—'}</div>
+                          <div className="text-xs text-green-600">{TT_TYPES.find(t => t.value === tt.tt_type)?.race ?? ''}</div>
+                        </td>
+                        <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{fmtTime(tt.finish_time_sec)}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{pace}</td>
+                        <td className="py-2 pr-3 font-bold text-indigo-600 text-sm align-top">{tt.vdot ?? '—'}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap text-sm align-top">{tt.distance_km ? magicMilePace(tt) : '—'}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap align-top">
+                          {tt.lthr_calculated ? <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">{tt.lthr_calculated} bpm</span> : '—'}
+                        </td>
+                        <td className="py-2 whitespace-nowrap align-top">
+                          <button onClick={() => isEditing ? setEditTtId(null) : openEditTt(tt)} className="text-xs px-2 py-1 rounded-md border border-indigo-300 text-indigo-600 hover:bg-indigo-50 font-medium mr-1 transition-colors">{isEditing ? 'Batal' : 'Edit'}</button>
+                          <button onClick={() => deleteTt(tt.id)} className="text-xs px-2 py-1 rounded-md border border-red-300 text-red-500 hover:bg-red-50 font-medium transition-colors">Hapus</button>
                         </td>
                       </tr>
-                    )}
+                      {isEditing && (
+                        <tr key={`edit-${tt.id}`} className="bg-yellow-50 border-b border-yellow-100">
+                          <td colSpan={9} className="px-3 py-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Tanggal</label>
+                                <input type="date" value={editTtForm.tt_date} onChange={e => setEditTtForm(p => ({ ...p, tt_date: e.target.value }))}
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Jenis TT</label>
+                                <select value={editTtForm.tt_type} onChange={e => setEditTtForm(p => ({ ...p, tt_type: e.target.value, hr_partial_avg: '' }))}
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                  {TT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label} — {t.race}</option>)}
+                                </select>
+                                {editType && <div className="text-xs text-amber-600 mt-1">🎯 {editType.accuracy}</div>}
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Jarak (km)</label>
+                                <input type="number" step="0.01" value={editTtForm.distance_km} onChange={e => setEditTtForm(p => ({ ...p, distance_km: e.target.value }))}
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Total Waktu</label>
+                                <input type="text" value={editTtForm.finish_time} onChange={e => setEditTtForm(p => ({ ...p, finish_time: e.target.value }))}
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Avg HR (bpm)</label>
+                                <input type="number" value={editTtForm.hr_avg} onChange={e => setEditTtForm(p => ({ ...p, hr_avg: e.target.value }))}
+                                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                              </div>
+                              {editNeedsPartial && (
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-500 mb-1">{editNeedsPartial}</label>
+                                  <input type="number" value={editTtForm.hr_partial_avg} onChange={e => setEditTtForm(p => ({ ...p, hr_partial_avg: e.target.value }))}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-3 gap-3 mb-3 p-3 bg-indigo-50 rounded-lg border border-indigo-100">
+                              <div className="text-center">
+                                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Avg Pace</div>
+                                <div className="text-base font-extrabold text-indigo-700">{editPreviewPace ? `${editPreviewPace}/km` : '—'}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs font-medium text-gray-500 uppercase mb-1">VDOT</div>
+                                <div className="text-base font-extrabold text-indigo-700">{editPreviewVdot ?? '—'}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs font-medium text-gray-500 uppercase mb-1">LTHR</div>
+                                <div className="text-base font-extrabold text-red-600">{editPreviewLthr ? `${editPreviewLthr} bpm` : '—'}</div>
+                              </div>
+                            </div>
+                            <button onClick={saveEditTt} disabled={editTtSaving}
+                              className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                              {editTtSaving ? 'Menyimpan...' : 'Simpan Perubahan'}
+                            </button>
+                          </td>
+                        </tr>
+                      )}
                     </>
                   )
                 })}
@@ -1260,15 +1258,10 @@ export default function ProfilPage() {
             {wxLoading ? '⏳ Memuat...' : '🔄 Refresh'}
           </button>
         </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-
-          {/* ── Cuaca Latihan ── */}
+          {/* Cuaca Latihan */}
           <div className="border border-gray-200 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-bold text-gray-900 mb-2">🏃 Cuaca Latihan Hari Ini</div>
-            </div>
-
+            <div className="text-sm font-bold text-gray-900 mb-3">🏃 Cuaca Latihan Hari Ini</div>
             {!settings.domisili ? (
               <div className="text-xs text-gray-400">Isi domisili di Edit Profil.</div>
             ) : !wxTraining ? (
@@ -1292,7 +1285,6 @@ export default function ProfilPage() {
               const wbgtText = wbgt < 23 ? '#065f46' : wbgt < 28 ? '#78350f' : wbgt < 32 ? '#9a3412' : '#7f1d1d'
               return (
                 <>
-                  {/* Input kota */}
                   <div className="flex gap-2 mb-3">
                     <input id="wx-train-city" defaultValue={cityName}
                       onKeyDown={e => { if (e.key === 'Enter') { const v = (document.getElementById('wx-train-city') as HTMLInputElement)?.value.trim(); if (v) fetchWeather(v, true).then(d => { if (d) setWxTraining(d) }) } }}
@@ -1302,7 +1294,6 @@ export default function ProfilPage() {
                       🔍 Cari
                     </button>
                   </div>
-                  {/* Kondisi */}
                   <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <div>
                       <div className="text-base font-bold text-gray-800">{condition}</div>
@@ -1310,7 +1301,6 @@ export default function ProfilPage() {
                     </div>
                     {wxTimestamp && <div className="text-xs text-gray-400">{wxTimestamp}</div>}
                   </div>
-                  {/* Metric tiles */}
                   <div className="grid grid-cols-4 gap-2 mb-3">
                     {[
                       { icon: '🌡️', val: `${temp}°C`,  label: 'Suhu',       bg: '#eff6ff', color: '#1e40af' },
@@ -1325,7 +1315,6 @@ export default function ProfilPage() {
                       </div>
                     ))}
                   </div>
-                  {/* WBGT bar */}
                   <div className="rounded-xl px-4 py-3 mb-3" style={{ background: wbgtBg }}>
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-bold uppercase" style={{ color: wbgtText }}>WBGT Index</span>
@@ -1335,13 +1324,11 @@ export default function ProfilPage() {
                       <div className="rounded-full" style={{ height: '100%', width: `${ws.pct}%`, background: ws.color, transition: 'width 0.5s' }} />
                     </div>
                   </div>
-                  {/* Advisory */}
                   {strat.length > 0 && (
                     <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mb-3">
                       {strat.map((s, i) => <div key={i} className="text-xs text-gray-700" style={{ lineHeight: 1.7 }}>{s}</div>)}
                     </div>
                   )}
-                  {/* Gear */}
                   {(gear.required.length > 0 || gear.recommended.length > 0 || gear.optional.length > 0) && (
                     <div className="bg-gray-50 rounded-xl px-4 py-3 mb-3 space-y-2">
                       {gear.required.length > 0 && (
@@ -1374,7 +1361,7 @@ export default function ProfilPage() {
             })()}
           </div>
 
-          {/* ── Cuaca Race ── */}
+          {/* Cuaca Race */}
           <div>
             <div className="text-sm font-bold text-gray-900 mb-3">🏁 Cuaca Kota Race</div>
             {races.filter(r => r.city).length === 0 ? (
@@ -1386,11 +1373,10 @@ export default function ProfilPage() {
                 {races.filter(r => r.city).map(race => {
                   const wx = wxRaces[race.id]
                   const isA = race.status === 'A'
-                  const accentDot  = isA ? '#f59e0b' : '#3b82f6'
+                  const accentDot = isA ? '#f59e0b' : '#3b82f6'
                   const daysLeft = race.event_date ? Math.ceil((new Date(race.event_date).getTime() - Date.now()) / 86400000) : null
                   return (
                     <div key={race.id} className="border border-gray-200 rounded-xl p-4">
-                      {/* Header race */}
                       <div className="flex items-start gap-2 mb-3">
                         <div className="flex-1">
                           <div className="flex items-center gap-1.5 mb-0.5">
@@ -1488,7 +1474,7 @@ export default function ProfilPage() {
         </div>
       </section>
 
-            {/* ── HEAT STRESS INDEX ── */}
+      {/* ── HEAT STRESS INDEX ── */}
       <section className="bg-white rounded-xl shadow-sm p-5">
         <div className="font-gsans text-xl text-indigo-700 uppercase mb-4 pb-2 border-b border-indigo-100">🌡️ Heat Stress Index</div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1530,10 +1516,9 @@ export default function ProfilPage() {
         </div>
       </section>
 
-
-      {/* Toast notification */}
+      {/* Toast */}
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-gray-900 text-white text-sm font-medium rounded-xl shadow-lg animate-fade-in">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-gray-900 text-white text-sm font-medium rounded-xl shadow-lg">
           ✅ {toastMsg}
         </div>
       )}

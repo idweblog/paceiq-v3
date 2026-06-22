@@ -68,6 +68,7 @@ export type Database = {
           birth_date: string | null
           cedera: string | null
           domisili: string | null
+          gender: string | null
           height_cm: number | null
           id: string
           lthr: number | null
@@ -82,6 +83,7 @@ export type Database = {
           birth_date?: string | null
           cedera?: string | null
           domisili?: string | null
+          gender?: string | null
           height_cm?: number | null
           id?: string
           lthr?: number | null
@@ -96,6 +98,7 @@ export type Database = {
           birth_date?: string | null
           cedera?: string | null
           domisili?: string | null
+          gender?: string | null
           height_cm?: number | null
           id?: string
           lthr?: number | null
@@ -154,31 +157,58 @@ export type Database = {
       body_metrics: {
         Row: {
           athlete_id: string
+          bmr_kcal: number | null
+          body_fat_pct: number | null
+          body_water_pct: number | null
           created_at: string | null
+          health_score: number | null
           id: string
+          lean_body_mass_kg: number | null
           notes: string | null
+          protein_pct: number | null
           recorded_date: string
           resting_hr: number | null
+          skeletal_muscle_pct: number | null
+          smi: number | null
+          visceral_fat_index: number | null
           waist_cm: number | null
           weight_kg: number | null
         }
         Insert: {
           athlete_id: string
+          bmr_kcal?: number | null
+          body_fat_pct?: number | null
+          body_water_pct?: number | null
           created_at?: string | null
+          health_score?: number | null
           id?: string
+          lean_body_mass_kg?: number | null
           notes?: string | null
+          protein_pct?: number | null
           recorded_date: string
           resting_hr?: number | null
+          skeletal_muscle_pct?: number | null
+          smi?: number | null
+          visceral_fat_index?: number | null
           waist_cm?: number | null
           weight_kg?: number | null
         }
         Update: {
           athlete_id?: string
+          bmr_kcal?: number | null
+          body_fat_pct?: number | null
+          body_water_pct?: number | null
           created_at?: string | null
+          health_score?: number | null
           id?: string
+          lean_body_mass_kg?: number | null
           notes?: string | null
+          protein_pct?: number | null
           recorded_date?: string
           resting_hr?: number | null
+          skeletal_muscle_pct?: number | null
+          smi?: number | null
+          visceral_fat_index?: number | null
           waist_cm?: number | null
           weight_kg?: number | null
         }
@@ -1160,6 +1190,47 @@ export type Database = {
           },
         ]
       }
+      treatment_issues: {
+        Row: {
+          action: string
+          athlete_id: string
+          created_at: string | null
+          decision_detail: string | null
+          id: string
+          severity: string
+          sort_order: number | null
+          symptom: string
+        }
+        Insert: {
+          action: string
+          athlete_id: string
+          created_at?: string | null
+          decision_detail?: string | null
+          id?: string
+          severity?: string
+          sort_order?: number | null
+          symptom: string
+        }
+        Update: {
+          action?: string
+          athlete_id?: string
+          created_at?: string | null
+          decision_detail?: string | null
+          id?: string
+          severity?: string
+          sort_order?: number | null
+          symptom?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatment_issues_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       treatment_log: {
         Row: {
           athlete_id: string
@@ -1194,6 +1265,41 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "treatment_log_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      treatment_protocols: {
+        Row: {
+          athlete_id: string
+          content: string | null
+          id: string
+          section_key: string
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          athlete_id: string
+          content?: string | null
+          id?: string
+          section_key: string
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          athlete_id?: string
+          content?: string | null
+          id?: string
+          section_key?: string
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatment_protocols_athlete_id_fkey"
             columns: ["athlete_id"]
             isOneToOne: false
             referencedRelation: "athletes"
