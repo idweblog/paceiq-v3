@@ -373,7 +373,7 @@ export default function NutritionPage() {
   const [myRoles, setMyRoles]     = useState<string[]>([])
   const cancelledRef              = useRef(false)
 
-  const canEdit = myRoles.includes('coach') || myRoles.includes('admin') || myRoles.includes('athlete')
+  const canEdit = myRoles.includes('coach') || myRoles.includes('admin')
 
   // ── Load ──────────────────────────────────────────────────────────────────
   const loadData = useCallback(async () => {
