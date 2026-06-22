@@ -168,6 +168,11 @@ export type Database = {
           protein_pct: number | null
           recorded_date: string
           resting_hr: number | null
+          seg_arm_left: number | null
+          seg_arm_right: number | null
+          seg_leg_left: number | null
+          seg_leg_right: number | null
+          seg_trunk: number | null
           skeletal_muscle_pct: number | null
           smi: number | null
           visceral_fat_index: number | null
@@ -187,6 +192,11 @@ export type Database = {
           protein_pct?: number | null
           recorded_date: string
           resting_hr?: number | null
+          seg_arm_left?: number | null
+          seg_arm_right?: number | null
+          seg_leg_left?: number | null
+          seg_leg_right?: number | null
+          seg_trunk?: number | null
           skeletal_muscle_pct?: number | null
           smi?: number | null
           visceral_fat_index?: number | null
@@ -206,6 +216,11 @@ export type Database = {
           protein_pct?: number | null
           recorded_date?: string
           resting_hr?: number | null
+          seg_arm_left?: number | null
+          seg_arm_right?: number | null
+          seg_leg_left?: number | null
+          seg_leg_right?: number | null
+          seg_trunk?: number | null
           skeletal_muscle_pct?: number | null
           smi?: number | null
           visceral_fat_index?: number | null
