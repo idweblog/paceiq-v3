@@ -44,23 +44,27 @@ Sumber: Alpukat, kacang, minyak zaitun, ikan berlemak
 Sumber: Air, kuah sayur, buah`
   },
   {
-    key: 'post',
-    defaultTitle: 'Post-Workout Recovery',
-    icon: '💪',
-    color: '#059669',
-    bgColor: '#ecfdf5',
-    borderColor: '#a7f3d0',
-    defaultContent: `## 💪 Post-Workout Recovery (within 30 min)
+    key: 'daily_lr',
+    defaultTitle: 'Daily Nutrition (LR Days)',
+    icon: '🏃',
+    color: '#7c3aed',
+    bgColor: '#f5f3ff',
+    borderColor: '#ddd6fe',
+    defaultContent: `## 🏃 Daily Nutrition (LR Days)
 
-**Formula 1:1:3** (per 0.3 kg BB):
-- ~20g protein
-- 150–300 mg sodium replenish
-- ~60–80g carb (jika sesi >90 menit)
+**Karbohidrat** — 6–7 g/kg = 415–485 g/hari
+Tingkatkan porsi karbohidrat pada makan siang dan malam H-1 LR.
 
-**Pilihan Praktis:**
-- Chocolate milk 300 ml + 1 pisang ✅
-- Smoothie: susu + pisang + 1 scoop whey + madu ✅
-- Nasi 1 centong + 2 telur + sayur + 1 gelas air kelapa ✅`
+**Protein** — 1.6–1.8 g/kg = 110–125 g/hari
+Sama dengan non-LR. Fokus pada recovery post-LR.
+
+**Lemak** — 0.8–1.0 g/kg = 55–70 g/hari
+Kurangi lemak H-1 LR untuk mempercepat pengosongan lambung.
+
+**Hidrasi** — 40–45 ml/kg = 2.8–3.2 L/hari
+Tambahkan 1 sachet elektrolit sore H-1 LR.
+
+> 💡 Mulai tingkatkan karbohidrat sejak makan malam H-1 LR, bukan H-2 jam sebelum lari.`
   },
   {
     key: 'pre',
@@ -107,6 +111,25 @@ Hidrasi: 600–800 ml elektrolit
 **> 120 menit (LR W10+)**
 Carb: 40–60g carb/jam
 Hidrasi: 800–1000 ml elektrolit`
+  },
+  {
+    key: 'post',
+    defaultTitle: 'Post-Workout Recovery',
+    icon: '💪',
+    color: '#059669',
+    bgColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+    defaultContent: `## 💪 Post-Workout Recovery (within 30 min)
+
+**Formula 1:1:3** (per 0.3 kg BB):
+- ~20g protein
+- 150–300 mg sodium replenish
+- ~60–80g carb (jika sesi >90 menit)
+
+**Pilihan Praktis:**
+- Chocolate milk 300 ml + 1 pisang ✅
+- Smoothie: susu + pisang + 1 scoop whey + madu ✅
+- Nasi 1 centong + 2 telur + sayur + 1 gelas air kelapa ✅`
   },
   {
     key: 'raceweek',
@@ -301,14 +324,14 @@ const TABS = [
   {
     key: 'nutrition',
     label: '🍽️ Nutrition',
-    desc: 'Panduan nutrisi harian untuk mendukung program latihan',
-    sections: ['daily', 'post']
+    desc: 'Panduan nutrisi harian untuk hari biasa dan long run',
+    sections: ['daily', 'daily_lr']
   },
   {
     key: 'fueling',
     label: '💧 Fueling',
-    desc: 'Protokol fueling sebelum, saat, dan saat race week',
-    sections: ['pre', 'during', 'raceweek']
+    desc: 'Protokol fueling sebelum, saat latihan, recovery, dan race week',
+    sections: ['pre', 'during', 'post', 'raceweek']
   },
 ]
 
@@ -467,12 +490,12 @@ export default function NutritionPage() {
       )}
 
       {/* ── Tab selector ── */}
-      <div className="bg-white rounded-xl shadow-sm p-1.5 flex gap-1">
+      <div className="flex items-center gap-1 bg-white rounded-xl shadow-sm p-1.5 w-fit">
         {TABS.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key as 'nutrition' | 'fueling')}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
               activeTab === tab.key
                 ? 'bg-indigo-600 text-white shadow-sm'
                 : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'
@@ -481,11 +504,6 @@ export default function NutritionPage() {
             {tab.label}
           </button>
         ))}
-      </div>
-
-      {/* ── Tab description ── */}
-      <div className="text-xs text-gray-400 -mt-3 px-1">
-        {TABS.find(t => t.key === activeTab)?.desc}
       </div>
 
       {/* ── Panduan Format ── */}
@@ -506,130 +524,116 @@ export default function NutritionPage() {
         </p>
       </div>
 
-      {/* ── Sections — filter by active tab ── */}
-      {SECTIONS.filter(sec => TABS.find(t => t.key === activeTab)?.sections.includes(sec.key)).map(sec => {
-        const isEditing  = editKey === sec.key
-        const custom     = isCustom(sec.key)
-        const lastUpdate = getRow(sec.key)?.updated_at
+      {/* ── Sections — 2-col grid, filter by active tab ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {SECTIONS.filter(sec => TABS.find(t => t.key === activeTab)?.sections.includes(sec.key)).map(sec => {
+          const isEditing  = editKey === sec.key
+          const custom     = isCustom(sec.key)
+          const lastUpdate = getRow(sec.key)?.updated_at
 
-        return (
-          <div key={sec.key} className="bg-white rounded-xl shadow-sm overflow-hidden">
+          return (
+            <div key={sec.key} className="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col">
 
-            {/* Section header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"
-              style={{ borderLeftWidth: 4, borderLeftColor: sec.color, borderLeftStyle: 'solid' }}>
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{sec.icon}</span>
-                <div>
-                  <h2 className="font-gsans text-xl text-indigo-700 uppercase">
-                    {getTitle(sec.key)}
-                  </h2>
-                  {custom && lastUpdate && (
-                    <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
-                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400" />
-                      Diubah {new Date(lastUpdate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </div>
-                  )}
+              {/* Section header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"
+                style={{ borderLeftWidth: 4, borderLeftColor: sec.color, borderLeftStyle: 'solid' }}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-lg flex-shrink-0">{sec.icon}</span>
+                  <div className="min-w-0">
+                    <h2 className="font-gsans text-base text-indigo-700 uppercase truncate">
+                      {getTitle(sec.key)}
+                    </h2>
+                    {custom && lastUpdate && (
+                      <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />
+                        Diubah {new Date(lastUpdate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
 
-              {/* Action buttons */}
-              {canEdit && !isEditing && (
-                <div className="flex items-center gap-2">
-                  {custom && (
-                    <button
-                      onClick={() => resetSection(sec.key)}
-                      className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
-                    >
-                      Reset
-                    </button>
-                  )}
+                {/* Action buttons — hanya Edit saat view mode */}
+                {canEdit && !isEditing && (
                   <button
                     onClick={() => startEdit(sec.key)}
-                    className="text-xs px-3 py-1.5 rounded-lg border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 transition-colors font-medium"
+                    className="text-xs px-3 py-1.5 rounded-lg border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 transition-colors font-medium flex-shrink-0 ml-2"
                   >
                     ✏️ Edit
                   </button>
-                </div>
-              )}
+                )}
 
-              {canEdit && isEditing && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={cancelEdit}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors"
-                  >
-                    Batal
-                  </button>
-                  {custom && (
+                {/* Edit mode buttons — Batal, Reset (jika custom), Simpan */}
+                {canEdit && isEditing && (
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
                     <button
-                      onClick={() => resetSection(sec.key)}
-                      className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                      onClick={cancelEdit}
+                      className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors"
                     >
-                      Reset
+                      Batal
                     </button>
-                  )}
-                  <button
-                    onClick={saveSection}
-                    disabled={saving}
-                    className="text-xs px-4 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors font-medium"
-                  >
-                    {saving ? 'Menyimpan...' : 'Simpan'}
-                  </button>
-                </div>
-              )}
-            </div>
+                    {custom && (
+                      <button
+                        onClick={() => resetSection(sec.key)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        Reset
+                      </button>
+                    )}
+                    <button
+                      onClick={saveSection}
+                      disabled={saving}
+                      className="text-xs px-4 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 transition-colors font-medium"
+                    >
+                      {saving ? '...' : 'Simpan'}
+                    </button>
+                  </div>
+                )}
+              </div>
 
-            {/* Content area */}
-            <div className="p-5">
-              {isEditing ? (
-                <div className="space-y-3">
-                  {/* Title input */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase mb-1 block">
-                      Judul Seksi
-                    </label>
-                    <input
-                      type="text"
-                      value={editTitle}
-                      onChange={e => setEditTitle(e.target.value)}
-                      placeholder={sec.defaultTitle}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-indigo-400"
-                    />
+              {/* Content area */}
+              <div className="p-5 flex-1">
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase mb-1 block">Judul Seksi</label>
+                      <input
+                        type="text"
+                        value={editTitle}
+                        onChange={e => setEditTitle(e.target.value)}
+                        placeholder={sec.defaultTitle}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:border-indigo-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 uppercase mb-1 block">Konten (Markdown)</label>
+                      <textarea
+                        value={editContent}
+                        onChange={e => setEditContent(e.target.value)}
+                        rows={14}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 font-mono focus:outline-none focus:border-indigo-400 resize-y"
+                        placeholder="Tulis konten dengan format Markdown..."
+                      />
+                    </div>
+                    <div>
+                      <div className="text-xs font-medium text-gray-500 uppercase mb-2">Preview</div>
+                      <div
+                        className="bg-gray-50 rounded-lg p-4 border border-gray-100 min-h-[60px]"
+                        dangerouslySetInnerHTML={{ __html: parseMarkdown(editContent) }}
+                      />
+                    </div>
                   </div>
-                  {/* Content textarea */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 uppercase mb-1 block">
-                      Konten (Markdown)
-                    </label>
-                    <textarea
-                      value={editContent}
-                      onChange={e => setEditContent(e.target.value)}
-                      rows={16}
-                      className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 font-mono focus:outline-none focus:border-indigo-400 resize-y"
-                      placeholder="Tulis konten dengan format Markdown..."
-                    />
-                  </div>
-                  {/* Live preview */}
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 uppercase mb-2">Preview</div>
-                    <div
-                      className="bg-gray-50 rounded-lg p-4 border border-gray-100 min-h-[80px]"
-                      dangerouslySetInnerHTML={{ __html: parseMarkdown(editContent) }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div
-                  className="min-h-[60px]"
-                  dangerouslySetInnerHTML={{ __html: parseMarkdown(getContent(sec.key)) }}
-                />
-              )}
-            </div>
+                ) : (
+                  <div
+                    className="min-h-[60px]"
+                    dangerouslySetInnerHTML={{ __html: parseMarkdown(getContent(sec.key)) }}
+                  />
+                )}
+              </div>
 
-          </div>
-        )
-      })}
+            </div>
+          )
+        })}
+      </div>
 
     </div>
   )
