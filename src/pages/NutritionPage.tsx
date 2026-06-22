@@ -291,9 +291,17 @@ function parseMarkdown(text: string): string {
 
     flushList()
 
-    // Empty line
+    // Empty line — tracking consecutive empty lines
     if (line.trim() === '') {
-      html += '<div style="margin-bottom:8px"></div>'
+      // Lihat apakah baris berikutnya juga kosong (double enter = paragraf baru)
+      const nextLine = lines[i + 1]?.trim() ?? 'x'
+      if (nextLine === '') {
+        html += '<div style="margin-bottom:20px"></div>'
+        // Skip baris kosong berikutnya agar tidak double-spacing
+        i++
+      } else {
+        html += '<div style="margin-bottom:5px"></div>'
+      }
       continue
     }
 
@@ -348,6 +356,8 @@ const FORMAT_GUIDE = [
   { syntax: '`kode`',    result: 'Inline code' },
   { syntax: '```...```', result: 'Code block' },
   { syntax: '| A | B |', result: 'Tabel' },
+  { syntax: '[enter]',   result: 'Baris baru' },
+  { syntax: '[enter×2]', result: 'Paragraf baru (jarak lebih besar)' },
 ]
 
 // ─── Component ────────────────────────────────────────────────────────────────
