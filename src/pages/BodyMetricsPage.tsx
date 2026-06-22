@@ -525,8 +525,8 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                 </div>
               </div>
 
-              {/* RCS + VFI + Body Type — 1 baris 3 kolom */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
+              {/* Baris 1: VFI + RCS */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
 
                 {/* VFI Alert */}
                 {latest.visceral_fat_index !== null && (
@@ -535,11 +535,15 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                     {(() => {
                       const vs = vfiStatus(latest.visceral_fat_index!)
                       return (
-                        <div className="p-3 rounded-lg" style={{ backgroundColor: vs.bg }}>
-                          <p className="text-2xl font-bold" style={{ color: vs.color }}>VFI {latest.visceral_fat_index}</p>
-                          <p className="text-sm font-bold mt-1" style={{ color: vs.color }}>{vs.label}</p>
-                          <p className="text-xs text-gray-500 mt-1">≤9 aman · 10–14 sedang · ≥15 tinggi</p>
-                          <p className="text-xs text-gray-400 mt-0.5">Despres et al. 2006</p>
+                        <div className="flex items-center gap-4 p-3 rounded-lg" style={{ backgroundColor: vs.bg }}>
+                          <div>
+                            <p className="text-3xl font-bold" style={{ color: vs.color }}>VFI {latest.visceral_fat_index}</p>
+                            <p className="text-sm font-bold mt-1" style={{ color: vs.color }}>{vs.label}</p>
+                          </div>
+                          <div className="border-l pl-4" style={{ borderColor: vs.color + '40' }}>
+                            <p className="text-xs text-gray-600">≤9 Aman · 10–14 Risiko Sedang · ≥15 Risiko Tinggi</p>
+                            <p className="text-xs text-gray-400 mt-1">Despres et al. 2006; Tanaka et al. 2014</p>
+                          </div>
                         </div>
                       )
                     })()}
@@ -550,31 +554,83 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                 {rcs !== null && (
                   <div className={sectionCls + ' !mb-0'}>
                     <h2 className={headerCls}>Runner's Composition Score</h2>
-                    <div className="flex items-center gap-4">
-                      <div className="text-5xl font-bold" style={{ color: rcsLabel(rcs).color }}>{rcs}</div>
+                    <div className="flex items-center gap-4 mb-3">
+                      <div className="text-5xl font-bold shrink-0" style={{ color: rcsLabel(rcs).color }}>{rcs}</div>
                       <div>
                         <p className="text-base font-bold" style={{ color: rcsLabel(rcs).color }}>{rcsLabel(rcs).label}</p>
-                        <p className="text-xs text-gray-400 mt-1">BF% · SM% · VFI composite</p>
-                        <p className="text-xs text-gray-400">Lohman 1992; Tanaka & Swensen 1998</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {rcs >= 85 ? 'Komposisi tubuh sangat mendukung performa lari.' : rcs >= 65 ? 'Komposisi tubuh sudah mendukung performa optimal.' : rcs >= 40 ? 'Ada ruang untuk perbaikan komposisi tubuh.' : 'Perlu perbaikan komposisi untuk mendukung performa.'}
+                        </p>
                       </div>
                     </div>
-                    <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
                       <div className="h-full rounded-full" style={{ width: `${rcs}%`, backgroundColor: rcsLabel(rcs).color }} />
                     </div>
+                    <p className="text-xs text-gray-400">BF% (40%) · SM% (40%) · VFI (20%) — Lohman 1992; Tanaka & Swensen 1998</p>
                   </div>
                 )}
+              </div>
+
+              {/* Baris 2: Body Type + Muscle Balance */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
 
                 {/* Body Type */}
                 {bodyTypeTag && (
                   <div className={sectionCls + ' !mb-0'}>
                     <h2 className={headerCls}>Body Type</h2>
-                    <div className="inline-block px-4 py-2 bg-indigo-50 rounded-lg mb-2">
-                      <p className="text-lg font-bold text-indigo-700">{bodyTypeTag}</p>
+                    <div className="flex items-center gap-4">
+                      <div className="px-4 py-3 bg-indigo-50 rounded-lg">
+                        <p className="text-lg font-bold text-indigo-700">{bodyTypeTag}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-600">Berdasarkan kombinasi Skeletal Muscle % dan Body Fat % relatif terhadap norma gender.</p>
+                        <p className="text-xs text-gray-400 mt-1">Gallagher et al. 2000; sistem InBody/Tanita</p>
+                      </div>
                     </div>
-                    <p className="text-xs text-gray-400">Matriks SM% vs BF% per gender.</p>
-                    <p className="text-xs text-gray-400">Gallagher et al. 2000; InBody/Tanita</p>
                   </div>
                 )}
+
+                {/* Muscle Balance */}
+                <div className={sectionCls + ' !mb-0'}>
+                  <h2 className={headerCls}>Muscle Balance</h2>
+                  {latest.seg_arm_left || latest.seg_arm_right || latest.seg_leg_left || latest.seg_leg_right ? (
+                    <>
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        {[
+                          { label: 'Lengan Kiri', value: latest.seg_arm_left ? `${latest.seg_arm_left} kg` : '—' },
+                          { label: 'Lengan Kanan', value: latest.seg_arm_right ? `${latest.seg_arm_right} kg` : '—' },
+                          { label: 'Gap Lengan', value: armGap ? `${armGap.pct}%` : '—', flag: armGap?.flag },
+                          { label: 'Tungkai Kiri', value: latest.seg_leg_left ? `${latest.seg_leg_left} kg` : '—' },
+                          { label: 'Tungkai Kanan', value: latest.seg_leg_right ? `${latest.seg_leg_right} kg` : '—' },
+                          { label: 'Gap Tungkai', value: legGap ? `${legGap.pct}%` : '—', flag: legGap?.flag },
+                        ].map(s => (
+                          <div key={s.label} className={cardCls}>
+                            <p className={labelCls}>{s.label}</p>
+                            <p className={`text-sm font-bold ${s.flag === true ? 'text-red-500' : s.flag === false ? 'text-green-600' : 'text-gray-800'}`}>
+                              {s.value}{s.flag === true ? ' ⚠' : s.flag === false ? ' ✓' : ''}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      {latest.seg_trunk !== null && (
+                        <div className={cardCls + ' mb-3'}>
+                          <p className={labelCls}>Trunk</p>
+                          <p className={valueCls}>{latest.seg_trunk} kg</p>
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-400">Gap L/R &gt;15% berisiko cedera overuse. Data distribusi lemak, bukan kekuatan otot.</p>
+                      <p className="text-xs text-gray-400">Rauh et al. 2006; Niemuth et al. 2005</p>
+                    </>
+                  ) : (
+                    <div>
+                      <div className="p-3 bg-amber-50 rounded-lg text-xs text-amber-700 mb-2">
+                        ⚠ Data distribusi lemak segmental dari timbangan, bukan kekuatan otot.
+                      </div>
+                      <p className="text-xs text-gray-400">Input data segmental di tab Input Data.</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Rauh et al. 2006; Niemuth et al. 2005</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Race Weight Estimator */}
@@ -654,54 +710,19 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                 </div>
               )}
 
-              {/* Trend Analisis + Muscle Balance — 2 kolom */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-                {trendMsgs.length > 0 && (
-                  <div className={sectionCls + ' !mb-0'}>
-                    <h2 className={headerCls}>Analisis Trend (4 Minggu)</h2>
-                    <ul className="space-y-2">
-                      {trendMsgs.map((msg, i) => (
-                        <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                          <span className="text-indigo-400 mt-0.5">→</span><span>{msg}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Muscle Balance */}
-                <div className={sectionCls + ' !mb-0'}>
-                  <h2 className={headerCls}>Muscle Balance</h2>
-                  <p className="text-xs text-gray-400 mb-2">Rauh et al. 2006; Niemuth et al. 2005 — gap L/R &gt;15% berisiko cedera overuse.</p>
-                  <div className="p-2 bg-amber-50 rounded-lg text-xs text-amber-700 mb-3">
-                    ⚠ Data distribusi lemak segmental dari timbangan, bukan kekuatan otot.
-                  </div>
-                  {latest.seg_arm_left || latest.seg_arm_right || latest.seg_leg_left || latest.seg_leg_right ? (
-                    <div className="space-y-2">
-                      {[
-                        { label: 'Lengan', left: latest.seg_arm_left, right: latest.seg_arm_right, gap: armGap },
-                        { label: 'Tungkai', left: latest.seg_leg_left, right: latest.seg_leg_right, gap: legGap },
-                      ].map(seg => (
-                        <div key={seg.label} className="grid grid-cols-3 gap-2 text-xs">
-                          <div className={cardCls}><p className={labelCls}>Kiri</p><p className={valueCls}>{seg.left ? `${seg.left} kg` : '—'}</p></div>
-                          <div className={cardCls}><p className={labelCls}>Kanan</p><p className={valueCls}>{seg.right ? `${seg.right} kg` : '—'}</p></div>
-                          <div className={cardCls}>
-                            <p className={labelCls}>Gap {seg.label}</p>
-                            <p className={`text-sm font-bold ${seg.gap?.flag ? 'text-red-500' : 'text-green-600'}`}>
-                              {seg.gap ? `${seg.gap.pct}%${seg.gap.flag ? ' ⚠' : ' ✓'}` : '—'}
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                      {latest.seg_trunk !== null && (
-                        <div className={cardCls}><p className={labelCls}>Trunk</p><p className={valueCls}>{latest.seg_trunk} kg</p></div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400">Input data segmental di tab Input Data.</p>
-                  )}
+              {/* Trend Analisis */}
+              {trendMsgs.length > 0 && (
+                <div className={sectionCls}>
+                  <h2 className={headerCls}>Analisis Trend (4 Minggu)</h2>
+                  <ul className="space-y-2">
+                    {trendMsgs.map((msg, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="text-indigo-400 mt-0.5">→</span><span>{msg}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </div>
+              )}
             </>
           )}
         </>
