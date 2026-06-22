@@ -146,7 +146,19 @@ H-30 menit: 1 pisang + 200 ml air.
   }
 ]
 
-// ─── Markdown renderer (dari v2.11, ported ke React) ─────────────────────────
+// ─── Markdown renderer (extended dari v2.11) ─────────────────────────────────
+// Syntax yang didukung:
+// # Judul Besar    → H1 (font besar)
+// ## Judul Sedang  → H2 (font medium, tebal)
+// ### Judul Kecil  → H3 (font kecil, tebal, uppercase)
+// **teks**         → Bold
+// *teks*           → Italic
+// - item           → Bullet list
+// 1. item          → Numbered list
+// > catatan        → Callout biru
+// `kode`           → Inline code
+// ```...```        → Code block
+// | col | col |    → Tabel
 function parseMarkdown(text: string): string {
   if (!text) return ''
 
@@ -166,9 +178,14 @@ function parseMarkdown(text: string): string {
   const lines = text.split('\n')
   let html = ''
   let inList = false
+  let inOL = false
   let inTable = false
   let tableRows: string[] = []
 
+  function flushList() {
+    if (inList) { html += '</ul>'; inList = false }
+    if (inOL)   { html += '</ol>'; inOL   = false }
+  }
   function flushTable() {
     if (!tableRows.length) return
     const parseRow = (row: string) => row.split('|').slice(1, -1).map(c => c.trim())
@@ -194,8 +211,9 @@ function parseMarkdown(text: string): string {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i]
 
+    // Table
     if (/^\s*\|/.test(line)) {
-      if (inList) { html += '</ul>'; inList = false }
+      flushList()
       inTable = true
       tableRows.push(line)
       continue
@@ -206,31 +224,57 @@ function parseMarkdown(text: string): string {
     line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     line = line.replace(/\*(.+?)\*/g, '<em>$1</em>')
 
-    if (/^##\s+/.test(line)) {
-      if (inList) { html += '</ul>'; inList = false }
-      html += `<div style="font-size:0.875rem;font-weight:700;color:#1f2937;margin:10px 0 3px">${line.replace(/^##\s+/, '')}</div>`
+    // H1 — # Judul (font besar)
+    if (/^#\s+/.test(line) && !/^##/.test(line)) {
+      flushList()
+      html += `<div style="font-size:1.1rem;font-weight:700;color:#1e1b4b;margin:14px 0 4px;border-bottom:2px solid #e0e7ff;padding-bottom:4px">${line.replace(/^#\s+/, '')}</div>`
+      continue
+    }
+    // H2 — ## Judul (font medium)
+    if (/^##\s+/.test(line) && !/^###/.test(line)) {
+      flushList()
+      html += `<div style="font-size:0.9rem;font-weight:700;color:#1f2937;margin:10px 0 3px">${line.replace(/^##\s+/, '')}</div>`
+      continue
+    }
+    // H3 — ### Judul (font kecil uppercase)
+    if (/^###\s+/.test(line)) {
+      flushList()
+      html += `<div style="font-size:0.72rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;margin:8px 0 2px">${line.replace(/^###\s+/, '')}</div>`
       continue
     }
 
+    // Blockquote
     if (/^&gt;\s+/.test(line)) {
-      if (inList) { html += '</ul>'; inList = false }
+      flushList()
       html += `<div style="background:#eff6ff;border-left:3px solid #4f46e5;border-radius:0 6px 6px 0;padding:8px 12px;margin:8px 0;font-size:0.8rem;color:#1e40af;line-height:1.6">${line.replace(/^&gt;\s+/, '')}</div>`
       continue
     }
 
+    // Bullet list (- item)
     if (/^-\s+/.test(line)) {
-      if (!inList) { html += '<ul style="margin:2px 0 2px 16px;line-height:1.6;font-size:0.83rem;color:#374151">'; inList = true }
-      html += `<li style="margin-bottom:1px">${line.replace(/^-\s+/, '')}</li>`
+      if (inOL) { html += '</ol>'; inOL = false }
+      if (!inList) { html += '<ul style="margin:4px 0 4px 18px;line-height:1.7;font-size:0.83rem;color:#374151;list-style-type:disc">'; inList = true }
+      html += `<li style="margin-bottom:2px">${line.replace(/^-\s+/, '')}</li>`
       continue
     }
 
-    if (inList) { html += '</ul>'; inList = false }
+    // Numbered list (1. item)
+    if (/^\d+\.\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false }
+      if (!inOL) { html += '<ol style="margin:4px 0 4px 18px;line-height:1.7;font-size:0.83rem;color:#374151;list-style-type:decimal">'; inOL = true }
+      html += `<li style="margin-bottom:2px">${line.replace(/^\d+\.\s+/, '')}</li>`
+      continue
+    }
 
+    flushList()
+
+    // Empty line
     if (line.trim() === '') {
       html += '<div style="margin-bottom:8px"></div>'
       continue
     }
 
+    // Code block
     if (line.includes('\x00CODEBLOCK\x00')) {
       const parts = line.split('\x00CODEBLOCK\x00')
       parts.forEach((part, pi) => {
@@ -247,19 +291,40 @@ function parseMarkdown(text: string): string {
     html += `<div style="font-size:0.83rem;color:#374151;line-height:1.6;margin-bottom:1px">${line}</div>`
   }
 
-  if (inList) html += '</ul>'
+  flushList()
   if (inTable) flushTable()
   return html
 }
 
+// ─── Tab config ──────────────────────────────────────────────────────────────
+const TABS = [
+  {
+    key: 'nutrition',
+    label: '🍽️ Nutrition',
+    desc: 'Panduan nutrisi harian untuk mendukung program latihan',
+    sections: ['daily', 'post']
+  },
+  {
+    key: 'fueling',
+    label: '💧 Fueling',
+    desc: 'Protokol fueling sebelum, saat, dan saat race week',
+    sections: ['pre', 'during', 'raceweek']
+  },
+]
+
 // ─── Panduan Format ───────────────────────────────────────────────────────────
 const FORMAT_GUIDE = [
-  { syntax: '## Judul', result: 'Heading tebal' },
-  { syntax: '**teks**', result: 'Teks tebal' },
-  { syntax: '*teks*', result: 'Teks miring' },
-  { syntax: '- item', result: 'Bullet list' },
+  { syntax: '# Judul',   result: 'Heading besar' },
+  { syntax: '## Judul',  result: 'Heading sedang' },
+  { syntax: '### Judul', result: 'Heading kecil (uppercase)' },
+  { syntax: '**teks**',  result: 'Teks tebal' },
+  { syntax: '*teks*',    result: 'Teks miring' },
+  { syntax: '- item',    result: 'Bullet list' },
+  { syntax: '1. item',   result: 'Numbered list' },
   { syntax: '> catatan', result: 'Callout biru' },
-  { syntax: '`kode`', result: 'Inline code' },
+  { syntax: '`kode`',    result: 'Inline code' },
+  { syntax: '```...```', result: 'Code block' },
+  { syntax: '| A | B |', result: 'Tabel' },
 ]
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -270,6 +335,7 @@ export default function NutritionPage() {
   const [editTitle, setEditTitle] = useState('')
   const [editContent, setEditContent] = useState('')
   const [saving, setSaving]       = useState(false)
+  const [activeTab, setActiveTab]   = useState<'nutrition'|'fueling'>('nutrition')
   const [toast, setToast]         = useState('')
   const [myRoles, setMyRoles]     = useState<string[]>([])
   const cancelledRef              = useRef(false)
@@ -400,6 +466,28 @@ export default function NutritionPage() {
         </div>
       )}
 
+      {/* ── Tab selector ── */}
+      <div className="bg-white rounded-xl shadow-sm p-1.5 flex gap-1">
+        {TABS.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key as 'nutrition' | 'fueling')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all ${
+              activeTab === tab.key
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab description ── */}
+      <div className="text-xs text-gray-400 -mt-3 px-1">
+        {TABS.find(t => t.key === activeTab)?.desc}
+      </div>
+
       {/* ── Panduan Format ── */}
       <div className="bg-white rounded-xl shadow-sm p-5">
         <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">
@@ -414,12 +502,12 @@ export default function NutritionPage() {
           ))}
         </div>
         <p className="text-xs text-gray-400 mt-3">
-          Konten setiap seksi mendukung format Markdown ringan. Klik <strong>Edit</strong> untuk mengubah konten dan judul seksi.
+          Konten setiap seksi mendukung Markdown. Klik <strong>Edit</strong> untuk mengubah konten dan judul seksi.
         </p>
       </div>
 
-      {/* ── Sections ── */}
-      {SECTIONS.map(sec => {
+      {/* ── Sections — filter by active tab ── */}
+      {SECTIONS.filter(sec => TABS.find(t => t.key === activeTab)?.sections.includes(sec.key)).map(sec => {
         const isEditing  = editKey === sec.key
         const custom     = isCustom(sec.key)
         const lastUpdate = getRow(sec.key)?.updated_at
