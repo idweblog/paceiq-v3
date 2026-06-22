@@ -422,7 +422,7 @@ export default function TreatmentPage() {
                   } : {}}>
                   {sev.icon} {sev.label}
                   <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                    severityTab === key ? 'bg-white bg-opacity-30' : 'bg-gray-100 text-gray-500'
+                    severityTab === key ? 'bg-white text-gray-800' : 'bg-gray-100 text-gray-500'
                   }`}>{count}</span>
                 </button>
               )
