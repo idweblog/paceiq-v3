@@ -228,9 +228,10 @@ export default function TreatmentPage() {
   const [myRoles, setMyRoles]         = useState<string[]>([])
   const [loading, setLoading]         = useState(true)
   const [toast, setToast]             = useState('')
-  const [issueForm, setIssueForm]     = useState<Partial<MidsessionIssue> | null>(null)
-  const [issueEditId, setIssueEditId] = useState<string | null>(null)
-  const [issueSaving, setIssueSaving] = useState(false)
+  const [issueForm, setIssueForm]       = useState<Partial<MidsessionIssue> | null>(null)
+  const [issueEditId, setIssueEditId]   = useState<string | null>(null)
+  const [issueSaving, setIssueSaving]   = useState(false)
+  const [severityTab, setSeverityTab] = useState<Severity>('green')
   const [editKey, setEditKey]         = useState<string | null>(null)
   const [editTitle, setEditTitle]     = useState('')
   const [editContent, setEditContent] = useState('')
@@ -379,7 +380,7 @@ export default function TreatmentPage() {
                   🏃 Saat Latihan — Mid-Session Issues
                 </h2>
                 <p className="text-xs text-gray-400">
-                  Panduan penanganan masalah yang muncul saat sesi lari berlangsung.
+                  Panduan penanganan masalah saat sesi lari berlangsung.
                   {isDefaultIssues && <span className="text-amber-500 ml-1">Menampilkan data default.</span>}
                 </p>
               </div>
@@ -391,7 +392,7 @@ export default function TreatmentPage() {
                       Reset Default
                     </button>
                   )}
-                  <button onClick={() => { setIssueEditId(null); setIssueForm({ symptom:'', action:'', severity:'green', decision_detail:'' }) }}
+                  <button onClick={() => { setIssueEditId(null); setIssueForm({ symptom:'', action:'', severity: severityTab, decision_detail:'' }) }}
                     className="text-xs px-3 py-1 rounded-lg border border-emerald-500 text-emerald-600 hover:bg-emerald-50 transition-colors font-medium">
                     + Tambah Issue
                   </button>
@@ -407,65 +408,104 @@ export default function TreatmentPage() {
             )}
           </div>
 
-          {/* Issue cards — 2 col grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {displayIssues.map((iss, idx) => {
-              const sev = SEVERITY_CONFIG[iss.severity as Severity] ?? SEVERITY_CONFIG.green
-              const isEditing = issueEditId === iss.id
+          {/* Severity tabs */}
+          <div className="flex gap-2 flex-wrap">
+            {(Object.entries(SEVERITY_CONFIG) as [Severity, typeof SEVERITY_CONFIG[Severity]][]).map(([key, sev]) => {
+              const count = displayIssues.filter(i => i.severity === key).length
               return (
-                <div key={iss.id} className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-                  {/* Severity strip header */}
-                  <div className="px-4 py-3 flex items-center justify-between gap-2"
-                    style={{ backgroundColor: sev.headerBg }}>
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-sm font-bold flex-shrink-0" style={{ color: sev.headerText, opacity: 0.7 }}>#{idx+1}</span>
-                      <span className="font-bold text-sm leading-tight" style={{ color: sev.headerText }}>{sev.icon} {sev.badgeText}</span>
-                    </div>
-                    {canEdit && !isEditing && (
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button onClick={() => moveIssue(iss.id, -1)} disabled={idx===0||iss.id.startsWith('default-')}
-                          className="p-1 rounded text-white opacity-60 hover:opacity-100 disabled:opacity-20 transition-opacity text-xs">▲</button>
-                        <button onClick={() => moveIssue(iss.id, 1)} disabled={idx===displayIssues.length-1||iss.id.startsWith('default-')}
-                          className="p-1 rounded text-white opacity-60 hover:opacity-100 disabled:opacity-20 transition-opacity text-xs">▼</button>
-                        <button onClick={() => { setIssueEditId(iss.id); setIssueForm({...iss}) }}
-                          className="text-xs px-2 py-1 rounded text-white border border-white border-opacity-40 hover:bg-white hover:bg-opacity-20 transition-colors">Edit</button>
-                        {!iss.id.startsWith('default-') && (
-                          <button onClick={() => deleteIssue(iss.id)}
-                            className="text-xs px-2 py-1 rounded text-white border border-white border-opacity-40 hover:bg-red-600 transition-colors">Hapus</button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {isEditing ? (
-                    <div className="p-4">
-                      <IssueForm form={issueForm!} onChange={setIssueForm} onSave={saveIssue} onCancel={() => { setIssueEditId(null); setIssueForm(null) }} saving={issueSaving} />
-                    </div>
-                  ) : (
-                    <div className="p-4 space-y-3">
-                      {/* Symptom */}
-                      <div>
-                        <div className="text-xs font-medium text-gray-400 uppercase mb-1">Gejala / Situasi</div>
-                        <div className="text-sm font-semibold text-gray-800">{iss.symptom}</div>
-                      </div>
-                      {/* Action */}
-                      <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                        <div className="text-xs font-medium text-gray-400 uppercase mb-1">⚡ Tindakan Segera</div>
-                        <div className="text-sm text-gray-700 leading-relaxed">{iss.action}</div>
-                      </div>
-                      {/* Decision */}
-                      {iss.decision_detail && (
-                        <div className="rounded-lg px-3 py-2 text-xs font-medium"
-                          style={{ background: sev.bodyBg, border: `1px solid ${sev.bodyBorder}`, color: sev.bodyText }}>
-                          {iss.decision_detail}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <button key={key} onClick={() => setSeverityTab(key)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
+                    severityTab === key ? 'shadow-sm' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                  style={severityTab === key ? {
+                    backgroundColor: sev.headerBg, color: sev.headerText, borderColor: sev.headerBg
+                  } : {}}>
+                  {sev.icon} {sev.label}
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                    severityTab === key ? 'bg-white bg-opacity-30' : 'bg-gray-100 text-gray-500'
+                  }`}>{count}</span>
+                </button>
               )
             })}
           </div>
+
+          {/* Issue cards — filtered by severityTab, 2 col grid */}
+          {(() => {
+            const filtered = displayIssues.filter(i => i.severity === severityTab)
+            const sev = SEVERITY_CONFIG[severityTab]
+            if (filtered.length === 0) return (
+              <div className="bg-white rounded-xl shadow-sm p-8 text-center text-sm text-gray-400">
+                Tidak ada issue untuk kategori ini.
+                {canEdit && <span className="ml-1">Klik <strong>+ Tambah Issue</strong> untuk menambahkan.</span>}
+              </div>
+            )
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {filtered.map((iss) => {
+                  const isEditing = issueEditId === iss.id
+                  const globalIdx = displayIssues.findIndex(i => i.id === iss.id)
+                  return (
+                    <div key={iss.id} className="bg-white rounded-xl shadow-sm overflow-hidden"
+                      style={{ border: `2px solid ${sev.bodyBorder}` }}>
+                      {/* Accent bar tipis */}
+                      <div className="h-1" style={{ backgroundColor: sev.headerBg }} />
+                      {isEditing ? (
+                        <div className="p-4">
+                          <IssueForm form={issueForm!} onChange={setIssueForm} onSave={saveIssue}
+                            onCancel={() => { setIssueEditId(null); setIssueForm(null) }} saving={issueSaving} />
+                        </div>
+                      ) : (
+                        <div className="p-4 space-y-3">
+                          {/* Top row: emoji + symptom + actions */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <span className="text-lg flex-shrink-0 mt-0.5">{sev.icon}</span>
+                              <div className="min-w-0">
+                                <div className="text-xs font-medium uppercase mb-0.5" style={{ color: sev.headerBg }}>
+                                  {sev.badgeText}
+                                </div>
+                                <div className="text-sm font-semibold text-gray-800 leading-snug">{iss.symptom}</div>
+                              </div>
+                            </div>
+                            {canEdit && (
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <button onClick={() => moveIssue(iss.id, -1)}
+                                  disabled={globalIdx === 0 || iss.id.startsWith('default-')}
+                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors text-xs">▲</button>
+                                <button onClick={() => moveIssue(iss.id, 1)}
+                                  disabled={globalIdx === displayIssues.length - 1 || iss.id.startsWith('default-')}
+                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 transition-colors text-xs">▼</button>
+                                <button onClick={() => { setIssueEditId(iss.id); setIssueForm({...iss}) }}
+                                  className="text-xs px-2 py-1 rounded border border-indigo-200 text-indigo-500 hover:bg-indigo-50 transition-colors">Edit</button>
+                                {!iss.id.startsWith('default-') && (
+                                  <button onClick={() => deleteIssue(iss.id)}
+                                    className="text-xs px-2 py-1 rounded border border-red-200 text-red-400 hover:bg-red-50 transition-colors">Hapus</button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action */}
+                          <div className="rounded-lg p-3 border border-gray-100 bg-gray-50">
+                            <div className="text-xs font-medium text-gray-400 uppercase mb-1">⚡ Tindakan Segera</div>
+                            <div className="text-sm text-gray-700 leading-relaxed">{iss.action}</div>
+                          </div>
+
+                          {/* Decision detail */}
+                          {iss.decision_detail && (
+                            <div className="rounded-lg px-3 py-2 text-xs font-medium"
+                              style={{ background: sev.bodyBg, border: `1px solid ${sev.bodyBorder}`, color: sev.bodyText }}>
+                              {iss.decision_detail}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
       )}
 
