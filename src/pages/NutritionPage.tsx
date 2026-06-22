@@ -516,23 +516,27 @@ export default function NutritionPage() {
         ))}
       </div>
 
-      {/* ── Panduan Format ── */}
-      <div className="bg-white rounded-xl shadow-sm p-5">
-        <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">
-          Panduan Format
-        </h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {FORMAT_GUIDE.map(g => (
-            <div key={g.syntax} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-              <code className="text-xs font-mono text-indigo-600 block mb-1">{g.syntax}</code>
-              <div className="text-xs text-gray-500">{g.result}</div>
-            </div>
-          ))}
+      {/* ── Panduan Format (collapsed) ── */}
+      <details className="bg-white rounded-xl shadow-sm overflow-hidden group">
+        <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none list-none border-b border-gray-100 hover:bg-gray-50 transition-colors">
+          <h2 className="font-gsans text-base text-indigo-700 uppercase">📖 Panduan Format</h2>
+          <span className="text-xs text-gray-400 group-open:hidden">Klik untuk lihat</span>
+          <span className="text-xs text-gray-400 hidden group-open:inline">Tutup ▲</span>
+        </summary>
+        <div className="p-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {FORMAT_GUIDE.map(g => (
+              <div key={g.syntax} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                <code className="text-xs font-mono text-indigo-600 block mb-1">{g.syntax}</code>
+                <div className="text-xs text-gray-500">{g.result}</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-gray-400 mt-3">
+            Konten setiap seksi mendukung Markdown. Klik <strong>Edit</strong> untuk mengubah konten dan judul seksi.
+          </p>
         </div>
-        <p className="text-xs text-gray-400 mt-3">
-          Konten setiap seksi mendukung Markdown. Klik <strong>Edit</strong> untuk mengubah konten dan judul seksi.
-        </p>
-      </div>
+      </details>
 
       {/* ── Sections — 2-col grid, filter by active tab ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -566,9 +570,9 @@ export default function NutritionPage() {
                 {canEdit && !isEditing && (
                   <button
                     onClick={() => startEdit(sec.key)}
-                    className="text-xs px-3 py-1.5 rounded-lg border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 transition-colors font-medium flex-shrink-0 ml-2"
+                    className="text-xs px-3 py-1 rounded-lg border border-indigo-500 text-indigo-600 hover:bg-indigo-50 transition-colors flex-shrink-0 ml-2"
                   >
-                    ✏️ Edit
+                    Edit
                   </button>
                 )}
 
