@@ -70,13 +70,29 @@ interface Segment {
 
 function parsePace(str: string): number | null {
   if (!str) return null
-  const parts = str.trim().split(':')
-  if (parts.length === 2) {
-    const m = parseFloat(parts[0]), s = parseFloat(parts[1])
-    if (isNaN(m) || isNaN(s)) return null
-    return m * 60 + s
+  const s = str.trim()
+  const parts = s.split(':')
+  // H:MM:SS
+  if (parts.length === 3) {
+    const h = parseFloat(parts[0]), m = parseFloat(parts[1]), sec = parseFloat(parts[2])
+    if (isNaN(h) || isNaN(m) || isNaN(sec)) return null
+    return h * 3600 + m * 60 + sec
   }
+  // M:SS atau M:SS.d
+  if (parts.length === 2) {
+    const m = parseFloat(parts[0]), sec = parseFloat(parts[1])
+    if (isNaN(m) || isNaN(sec)) return null
+    return m * 60 + sec
+  }
+  // Angka tunggal = menit (misal "135" = 135 menit)
+  const n = parseFloat(s)
+  if (!isNaN(n) && n > 0) return n * 60
   return null
+}
+
+/** Parse target waktu race */
+function parseTargetTime(str: string): number | null {
+  return parsePace(str)
 }
 
 function secToMMSS(sec: number): string {
@@ -254,6 +270,7 @@ export default function RwrPage() {
   const [mAWx, setMAWx] = useState<{ wbgt: number; adj: number; msg: string; color: string } | null>(null)
   const [mALabel, setMALabel] = useState('Latihan')
   const [mASaving, setMASaving] = useState(false)
+  const [mAUnit, setMAUnit] = useState<'sec' | 'mtr'>('sec')
 
   // Mode B state
   const [mB, setMB] = useState({ runPace: '', walkPace: '8:00', runSec: '60', walkSec: '30', dist: '21.1', targetTime: '' })
@@ -286,6 +303,51 @@ export default function RwrPage() {
   const [editNote, setEditNote]   = useState(false)
   const [noteContent, setNoteContent] = useState('')
   const [noteSaving, setNoteSaving] = useState(false)
+
+  // ── Auto-calc Mode A ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const walkP = parsePace(mA.walkPace)
+    const targetS = parseTargetTime(mA.targetTime)
+    const dist = parseFloat(mA.dist)
+    if (!walkP || !targetS || !dist || !parseFloat(mA.runSec) || !parseFloat(mA.walkSec)) {
+      setMARes(null); return
+    }
+    if (mAUnit === 'sec') {
+      setMARes(calcModeA(parseFloat(mA.runSec), parseFloat(mA.walkSec), walkP, targetS, dist))
+    } else {
+      // Mode meter: konversi meter ke detik menggunakan walk pace, lalu cari run pace
+      const runMtr = parseFloat(mA.runSec)
+      const walkMtr = parseFloat(mA.walkSec)
+      if (!runMtr || !walkMtr) { setMARes(null); return }
+      const overallPaceSec = targetS / dist
+      const totalMtr = runMtr + walkMtr
+      const runPaceSec = (overallPaceSec * totalMtr - walkMtr * walkP) / runMtr
+      if (runPaceSec <= 0 || runPaceSec >= walkP) {
+        setMARes({ error: 'Kombinasi jarak & pace walk tidak bisa mencapai target.' }); return
+      }
+      const runS = (runMtr / 1000) * runPaceSec
+      const walkS = (walkMtr / 1000) * walkP
+      setMARes(calcModeA(runS, walkS, walkP, targetS, dist))
+    }
+  }, [mA, mAUnit])
+
+  // ── Auto-calc Mode B ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const runP = parsePace(mB.runPace)
+    const walkP = parsePace(mB.walkPace)
+    const dist = parseFloat(mB.dist)
+    if (!runP || !walkP || !dist || !parseFloat(mB.runSec) || !parseFloat(mB.walkSec)) {
+      setMBRes(null); return
+    }
+    setMBRes(calcModeB(runP, walkP, parseFloat(mB.runSec), parseFloat(mB.walkSec), dist))
+  }, [mB])
+
+  // ── Auto-calc Mode C ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const hasAllInputs = segments.every(s => s.distKm && s.runSec && s.walkSec && s.runPace && s.walkPace)
+    if (!hasAllInputs) { setMCRes(null); return }
+    setMCRes(calcModeC(segments))
+  }, [segments])
 
   // ── Load ──────────────────────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
@@ -637,18 +699,31 @@ export default function RwrPage() {
       {activeTab === 'modeA' && (
         <div className={sectionCls}>
           <h2 className={headerCls}>Mode A — Input Rasio → Output Run Pace & Finish</h2>
-          <p className="text-xs text-gray-400 mb-4">
+          <p className="text-xs text-gray-400 mb-3">
             Input: rasio RWR + walk pace + target waktu → Kalkulasi: run pace yang dibutuhkan untuk mencapai target.
+            Hasil dihitung otomatis saat input berubah.
           </p>
+
+          {/* Toggle Satuan */}
+          <div className="flex gap-2 mb-4">
+            {[{ key: 'sec', label: 'Satuan Detik' }, { key: 'mtr', label: 'Satuan Meter' }].map(u => (
+              <button key={u.key} onClick={() => setMAUnit(u.key as 'sec' | 'mtr')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  mAUnit === u.key ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}>
+                {u.label}
+              </button>
+            ))}
+          </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
             <div>
-              <label className={labelCls}>Run Interval (detik)</label>
-              <input type="number" value={mA.runSec} onChange={e => setMA(p => ({ ...p, runSec: e.target.value }))} className={inputCls} placeholder="60" />
+              <label className={labelCls}>{mAUnit === 'sec' ? 'Run Interval (detik)' : 'Run Interval (meter)'}</label>
+              <input type="number" value={mA.runSec} onChange={e => setMA(p => ({ ...p, runSec: e.target.value }))} className={inputCls} placeholder={mAUnit === 'sec' ? '60' : '200'} />
             </div>
             <div>
-              <label className={labelCls}>Walk Interval (detik)</label>
-              <input type="number" value={mA.walkSec} onChange={e => setMA(p => ({ ...p, walkSec: e.target.value }))} className={inputCls} placeholder="30" />
+              <label className={labelCls}>{mAUnit === 'sec' ? 'Walk Interval (detik)' : 'Walk Interval (meter)'}</label>
+              <input type="number" value={mA.walkSec} onChange={e => setMA(p => ({ ...p, walkSec: e.target.value }))} className={inputCls} placeholder={mAUnit === 'sec' ? '30' : '100'} />
             </div>
             <div>
               <label className={labelCls}>Walk Pace (/km)</label>
@@ -679,20 +754,7 @@ export default function RwrPage() {
             </div>
           )}
 
-          <button
-            onClick={() => {
-              const walkP = parsePace(mA.walkPace)
-              const targetS = parsePace(mA.targetTime) ?? ((() => {
-                const p = mA.targetTime.split(':').map(Number)
-                return p.length === 3 ? p[0]*3600 + p[1]*60 + p[2] : null
-              })())
-              if (!walkP || !targetS) { showToast('Format pace atau waktu tidak valid.'); return }
-              const res = calcModeA(parseFloat(mA.runSec), parseFloat(mA.walkSec), walkP, targetS, parseFloat(mA.dist))
-              setMARes(res)
-            }}
-            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors mb-5">
-            Hitung
-          </button>
+
 
           {mARes && !('error' in mARes) && (
             <>
@@ -779,8 +841,7 @@ export default function RwrPage() {
         <div className={sectionCls}>
           <h2 className={headerCls}>Mode B — Input Pace + Rasio → Projected Finish</h2>
           <p className="text-xs text-gray-400 mb-4">
-            Formula Galloway harmonic mean: distPerCycle = runSec/runPace + walkSec/walkPace (km).
-            Target waktu bersifat benchmark — bukan constraint.
+            Formula Galloway harmonic mean. Target waktu bersifat benchmark — bukan constraint. Hasil dihitung otomatis.
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
@@ -822,17 +883,7 @@ export default function RwrPage() {
             </div>
           )}
 
-          <button
-            onClick={() => {
-              const runP = parsePace(mB.runPace)
-              const walkP = parsePace(mB.walkPace)
-              if (!runP || !walkP) { showToast('Format pace tidak valid. Gunakan M:SS'); return }
-              const res = calcModeB(runP, walkP, parseFloat(mB.runSec), parseFloat(mB.walkSec), parseFloat(mB.dist))
-              setMBRes(res)
-            }}
-            className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors mb-5">
-            Hitung
-          </button>
+
 
           {mBRes && !('error' in mBRes) && (
             <>
@@ -979,10 +1030,7 @@ export default function RwrPage() {
               className="px-4 py-2 border border-indigo-300 text-indigo-600 text-sm rounded-lg hover:bg-indigo-50 transition-colors">
               + Tambah Segmen
             </button>
-            <button onClick={() => setMCRes(calcModeC(segments))}
-              className="px-5 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors">
-              Hitung
-            </button>
+
           </div>
 
           {mCRes && !('error' in mCRes) && (
