@@ -52,6 +52,7 @@ interface SessionForm {
   session_date: string
   program_type: string
   notes: string
+  details: DetailForm[]
 }
 
 interface DetailForm {
@@ -92,7 +93,7 @@ const ZONE_DEFINITIONS = [
   { name: 'Anaerob',       label: 'Anaerob',        pct_min: 1.09, pct_max: 1.15, color: '#7c3aed' },
 ]
 
-const SESSION_BLANK: SessionForm = { session_date: '', program_type: 'EASY RUN (EZ)', notes: '' }
+const SESSION_BLANK: SessionForm = { session_date: '', program_type: 'EASY RUN (EZ)', notes: '', details: [{ zone_name: 'Easy', distance_km: '' }] }
 const DETAIL_BLANK: DetailForm   = { zone_name: 'Easy', distance_km: '' }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -259,7 +260,7 @@ export default function ProgramPage() {
     const { data: tt } = await (supabase as any)
       .from('tt_history').select('distance_km,finish_time_sec')
       .eq('athlete_id', athId)
-      .order('test_date', { ascending: false })
+      .order('tt_date', { ascending: false })
       .limit(1)
       .single()
 
@@ -338,9 +339,13 @@ export default function ProgramPage() {
   // ── Session CRUD ──
   function openSessionModal(editing: ProgramSession | null) {
     if (editing) {
-      setSessionForm({ session_date: editing.session_date, program_type: editing.program_type, notes: editing.notes || '' })
+      setSessionForm({
+        session_date: editing.session_date,
+        program_type: editing.program_type,
+        notes: editing.notes || '',
+        details: [{ zone_name: 'Easy', distance_km: '' }]
+      })
     } else {
-      // Default date = today
       setSessionForm({ ...SESSION_BLANK, session_date: new Date().toISOString().slice(0, 10) })
     }
     setSessionModal({ open: true, editing })
@@ -349,6 +354,7 @@ export default function ProgramPage() {
   async function saveSession() {
     if (!selectedRaceId || !athleteId) return
     if (!sessionForm.session_date) { showToast('Tanggal wajib diisi', false); return }
+    const validDetails = sessionForm.details.filter(d => d.distance_km && Number(d.distance_km) > 0)
     setSaving(true)
     const payload = {
       athlete_id: athleteId,
@@ -358,12 +364,30 @@ export default function ProgramPage() {
       notes: sessionForm.notes || null
     }
     try {
+      let sessionId: string
       if (sessionModal.editing) {
         await (supabase as any).from('program_sessions').update(payload).eq('id', sessionModal.editing.id)
+        sessionId = sessionModal.editing.id
         showToast('Sesi diperbarui')
       } else {
-        await (supabase as any).from('program_sessions').insert(payload)
+        const { data: newSess } = await (supabase as any).from('program_sessions').insert(payload).select().single()
+        sessionId = newSess.id
         showToast('Sesi ditambahkan')
+      }
+      // Save details
+      if (validDetails.length && sessionId) {
+        const detailInserts = validDetails.map((d, i) => {
+          const estMin = calcEstDuration(d.zone_name, Number(d.distance_km))
+          return {
+            session_id: sessionId,
+            athlete_id: athleteId,
+            sort_order: i,
+            zone_name: d.zone_name,
+            distance_km: Number(d.distance_km),
+            est_duration_min: estMin
+          }
+        })
+        await (supabase as any).from('program_session_details').insert(detailInserts)
       }
       setSessionModal({ open: false, editing: null })
       await loadSessions(selectedRaceId, athleteId)
@@ -779,32 +803,112 @@ export default function ProgramPage() {
       {/* ── Session Modal ── */}
       {sessionModal.open && (
         <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[90vh] overflow-y-auto">
             <div className="p-5 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-gsans text-lg text-indigo-700">{sessionModal.editing ? 'Edit Sesi' : 'Tambah Sesi'}</h3>
               <button onClick={() => setSessionModal({ open: false, editing: null })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="p-5 space-y-4">
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal *</div>
-                <input type="date" value={sessionForm.session_date}
-                  onChange={e => setSessionForm(f => ({ ...f, session_date: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal *</div>
+                  <input type="date" value={sessionForm.session_date}
+                    onChange={e => setSessionForm(f => ({ ...f, session_date: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Jenis Program *</div>
+                  <select value={sessionForm.program_type}
+                    onChange={e => setSessionForm(f => ({ ...f, program_type: e.target.value }))}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                    {PROGRAM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
               </div>
+
+              {/* Detail rows */}
               <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Jenis Program *</div>
-                <select value={sessionForm.program_type}
-                  onChange={e => setSessionForm(f => ({ ...f, program_type: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                  {PROGRAM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-medium text-gray-500 uppercase">Detail Sesi</div>
+                  <div className="text-[10px] text-gray-400">Zona Pace → Jarak → Est. Waktu</div>
+                </div>
+
+                {/* Column headers */}
+                <div className="grid grid-cols-[1fr_90px_80px_24px] gap-2 mb-1 px-1">
+                  <div className="text-[10px] font-medium text-gray-400 uppercase">Zona</div>
+                  <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Jarak (km)</div>
+                  <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Est. Waktu</div>
+                  <div />
+                </div>
+
+                <div className="space-y-2">
+                  {sessionForm.details.map((d, idx) => {
+                    const zone   = getZone(d.zone_name)
+                    const estMin = calcEstDuration(d.zone_name, d.distance_km ? Number(d.distance_km) : null)
+                    return (
+                      <div key={idx} className="grid grid-cols-[1fr_90px_80px_24px] gap-2 items-center">
+                        <select value={d.zone_name}
+                          onChange={e => setSessionForm(f => {
+                            const details = [...f.details]
+                            details[idx] = { ...details[idx], zone_name: e.target.value }
+                            return { ...f, details }
+                          })}
+                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                          style={{ color: zone?.color || '#374151' }}>
+                          {ZONE_DEFINITIONS.map(z => <option key={z.name} value={z.name}>{z.name}</option>)}
+                        </select>
+                        <input type="number" step="0.1" value={d.distance_km}
+                          onChange={e => setSessionForm(f => {
+                            const details = [...f.details]
+                            details[idx] = { ...details[idx], distance_km: e.target.value }
+                            return { ...f, details }
+                          })}
+                          placeholder="0.0"
+                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-300" />
+                        <div className="text-xs text-center font-bold" style={{ color: zone?.color || '#9ca3af' }}>
+                          {estMin != null ? fmtDuration(estMin) : '—'}
+                        </div>
+                        {sessionForm.details.length > 1 ? (
+                          <button onClick={() => setSessionForm(f => {
+                            const details = f.details.filter((_, i) => i !== idx)
+                            return { ...f, details }
+                          })} className="text-red-300 hover:text-red-500 text-xs text-center">✕</button>
+                        ) : <div />}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Total row */}
+                {sessionForm.details.length > 0 && (
+                  <div className="grid grid-cols-[1fr_90px_80px_24px] gap-2 items-center mt-2 pt-2 border-t border-gray-100">
+                    <div className="text-[11px] font-bold text-gray-500 text-right pr-2">Total</div>
+                    <div className="text-xs text-center font-bold text-indigo-700">
+                      {sessionForm.details.reduce((s, d) => s + (Number(d.distance_km) || 0), 0).toFixed(1)} km
+                    </div>
+                    <div className="text-xs text-center font-bold text-indigo-700">
+                      {(() => {
+                        const total = sessionForm.details.reduce((s, d) =>
+                          s + (calcEstDuration(d.zone_name, d.distance_km ? Number(d.distance_km) : null) || 0), 0)
+                        return total > 0 ? fmtDuration(total) : '—'
+                      })()}
+                    </div>
+                    <div />
+                  </div>
+                )}
+
+                <button onClick={() => setSessionForm(f => ({ ...f, details: [...f.details, { ...DETAIL_BLANK }] }))}
+                  className="mt-2 text-xs border border-dashed border-indigo-300 text-indigo-500 px-3 py-1.5 rounded-lg hover:bg-indigo-50 w-full">
+                  + Tambah Baris Detail
+                </button>
               </div>
+
               <div>
                 <div className="text-xs font-medium text-gray-500 uppercase mb-1">Catatan</div>
                 <textarea value={sessionForm.notes}
                   onChange={e => setSessionForm(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Catatan tambahan untuk sesi ini..."
-                  rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
+                  rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
