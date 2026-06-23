@@ -746,7 +746,7 @@ export default function RwrPage() {
             ))}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
             <div>
               <label className={labelCls}>{mAUnit === 'sec' ? 'Run Interval (detik)' : 'Run Interval (meter)'}</label>
               <input type="number" value={mA.runSec} onChange={e => setMA(p => ({ ...p, runSec: e.target.value }))} className={inputCls} placeholder={mAUnit === 'sec' ? '60' : '200'} />
@@ -760,14 +760,14 @@ export default function RwrPage() {
               <input type="text" value={mA.walkPace} onChange={e => setMA(p => ({ ...p, walkPace: e.target.value }))} className={inputCls} placeholder="8:00" />
             </div>
             <div>
-              <label className={labelCls}>Target Waktu (H:MM:SS)</label>
-              <input type="text" value={mA.targetTime} onChange={e => setMA(p => ({ ...p, targetTime: e.target.value }))} className={inputCls} placeholder="2:15:00" />
-            </div>
-            <div>
               <label className={labelCls}>Jarak (km)</label>
               <input type="number" step="0.1" value={mA.dist} onChange={e => setMA(p => ({ ...p, dist: e.target.value }))} className={inputCls} placeholder="21.1" />
             </div>
-            <div className="flex items-end gap-2">
+            <div>
+              <label className={labelCls}>Target Waktu (H:MM)</label>
+              <input type="text" value={mA.targetTime} onChange={e => setMA(p => ({ ...p, targetTime: e.target.value }))} className={inputCls} placeholder="2:15" />
+            </div>
+            <div className="flex items-end pb-1">
               <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
                 <input type="checkbox" checked={mAHeat} onChange={e => setMAHeat(e.target.checked)} className="rounded" />
                 Heat Mode
