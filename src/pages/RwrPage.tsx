@@ -317,6 +317,7 @@ export default function RwrPage() {
   const [qcWalkPace, setQcWalkPace] = useState('')
   const [qcRunSec, setQcRunSec]     = useState('')
   const [qcWalkSec, setQcWalkSec]   = useState('')
+  const [qcCustomDist, setQcCustomDist] = useState('')
 
   // Pace Converter
   const [pcMinKm, setPcMinKm]     = useState('')
