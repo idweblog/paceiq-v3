@@ -279,10 +279,10 @@ export default function RwrPage() {
   const myIdRef                         = useRef<string | null>(null)
 
   // Tab
-  const [activeTab, setActiveTab] = useState<'modeA' | 'modeB' | 'modeC' | 'fatigue' | 'ref' | 'history'>('modeA')
+  const [activeTab, setActiveTab] = useState<'modeA' | 'modeB' | 'modeC' | 'tools' | 'ref' | 'history'>('modeA')
 
   // Mode A state
-  const [mA, setMA] = useState({ runSec: '60', walkSec: '30', walkPace: '8:00', targetTime: '', dist: '21.1' })
+  const [mA, setMA] = useState({ runSec: '', walkSec: '', walkPace: '', targetTime: '', dist: '' })
   const [mARes, setMARes] = useState<ReturnType<typeof calcModeA> | null>(null)
   const [mAHeat, setMAHeat] = useState(false)
   const [mAWx, setMAWx] = useState<{ wbgt: number; adj: number; msg: string; color: string } | null>(null)
@@ -291,7 +291,7 @@ export default function RwrPage() {
   const [mAUnit, setMAUnit] = useState<'sec' | 'mtr'>('sec')
 
   // Mode B state
-  const [mB, setMB] = useState({ runPace: '', walkPace: '8:00', runSec: '60', walkSec: '30', dist: '21.1', targetTime: '' })
+  const [mB, setMB] = useState({ runPace: '', walkPace: '', runSec: '', walkSec: '', dist: '', targetTime: '' })
   const [mBRes, setMBRes] = useState<ReturnType<typeof calcModeB> | null>(null)
   const [mBHeat, setMBHeat] = useState(false)
   const [mBWx, setMBWx] = useState<{ wbgt: number; adj: number; msg: string; color: string } | null>(null)
@@ -300,8 +300,8 @@ export default function RwrPage() {
 
   // Mode C state
   const [segments, setSegments] = useState<Segment[]>([
-    { id: 1, distKm: '10', runSec: '60', walkSec: '30', runPace: '', walkPace: '8:00' },
-    { id: 2, distKm: '11.1', runSec: '75', walkSec: '30', runPace: '', walkPace: '8:00' },
+    { id: 1, distKm: '', runSec: '', walkSec: '', runPace: '', walkPace: '' },
+    { id: 2, distKm: '', runSec: '', walkSec: '', runPace: '', walkPace: '' },
   ])
   const [mCRes, setMCRes] = useState<ReturnType<typeof calcModeC> | null>(null)
   const [mCLabel, setMCLabel] = useState('Race')
@@ -311,6 +311,17 @@ export default function RwrPage() {
   const [faEWS, setFaEWS]     = useState('')
   const [faRPE, setFaRPE]     = useState('')
   const [faBase, setFaBase]   = useState('')
+
+  // Quick Cycle Calculator
+  const [qcRunPace, setQcRunPace]   = useState('')
+  const [qcWalkPace, setQcWalkPace] = useState('')
+  const [qcRunSec, setQcRunSec]     = useState('')
+  const [qcWalkSec, setQcWalkSec]   = useState('')
+
+  // Pace Converter
+  const [pcMinKm, setPcMinKm]     = useState('')
+  const [pcKmh, setPcKmh]         = useState('')
+  const [pcMinMile, setPcMinMile] = useState('')
 
   // Ref editor
   const [editRefId, setEditRefId]   = useState<string | null>(null)
@@ -700,7 +711,7 @@ export default function RwrPage() {
           { key: 'modeA', label: 'Mode A — Rasio → Pace' },
           { key: 'modeB', label: 'Mode B — Pace → Finish' },
           { key: 'modeC', label: 'Mode C — Multi-Segment' },
-          { key: 'fatigue', label: 'Fatigue Adjuster' },
+          { key: 'tools', label: 'Tools & Kalkulator' },
           { key: 'ref', label: 'Referensi' },
           { key: 'history', label: 'Riwayat' },
         ].map(t => (
@@ -1125,61 +1136,200 @@ export default function RwrPage() {
       )}
 
       {/* ══════════════ FATIGUE ADJUSTER ══════════════ */}
-      {activeTab === 'fatigue' && (
-        <div className={sectionCls}>
-          <h2 className={headerCls}>Fatigue Adjuster</h2>
-          <p className="text-xs text-gray-400 mb-4">
-            Rekomendasi penyesuaian ratio RWR berdasarkan kondisi fisik terkini.
-            EWS score auto-pull dari data terbaru.
-          </p>
+      {activeTab === 'tools' && (
+        <div className="space-y-5">
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
-            <div>
-              <label className={labelCls}>EWS Score (auto dari data terbaru)</label>
-              <input type="number" step="0.1" value={faEWS} onChange={e => setFaEWS(e.target.value)}
-                className={inputCls} placeholder="0–100" />
-              {ewsLatest?.composite_score !== null && ewsLatest?.composite_score !== undefined && (
-                <p className="text-xs text-gray-400 mt-1">Data terbaru: {ewsLatest.composite_score}</p>
-              )}
+          {/* ── 1. Fatigue Adjuster ── */}
+          <div className={sectionCls}>
+            <h2 className={headerCls}>Fatigue Adjuster</h2>
+            <p className="text-xs text-gray-400 mb-4">
+              Rekomendasi penyesuaian ratio RWR berdasarkan kondisi fisik terkini.
+              EWS score auto-pull dari data terbaru.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-5">
+              <div>
+                <label className={labelCls}>EWS Score (auto dari data terbaru)</label>
+                <input type="number" step="0.1" value={faEWS} onChange={e => setFaEWS(e.target.value)}
+                  className={inputCls} placeholder="0–100" />
+                {ewsLatest?.composite_score !== null && ewsLatest?.composite_score !== undefined && (
+                  <p className="text-xs text-gray-400 mt-1">Data terbaru: {ewsLatest.composite_score}</p>
+                )}
+              </div>
+              <div>
+                <label className={labelCls}>RPE Sesi Kemarin (1–10)</label>
+                <input type="number" min="1" max="10" value={faRPE} onChange={e => setFaRPE(e.target.value)}
+                  className={inputCls} placeholder="6" />
+              </div>
+              <div>
+                <label className={labelCls}>Ratio Dasar</label>
+                <select value={faBase} onChange={e => setFaBase(e.target.value)} className={inputCls}>
+                  <option value="">Pilih ratio dasar...</option>
+                  {displayRefRows.map(r => (
+                    <option key={r.id} value={`${r.run_sec}:${r.walk_sec}`}>
+                      {r.run_sec}:{r.walk_sec} — {r.pace_label}{r.is_default ? ' ★' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label className={labelCls}>RPE Sesi Kemarin (1–10)</label>
-              <input type="number" min="1" max="10" value={faRPE} onChange={e => setFaRPE(e.target.value)}
-                className={inputCls} placeholder="6" />
-            </div>
-            <div>
-              <label className={labelCls}>Ratio Dasar</label>
-              <select value={faBase} onChange={e => setFaBase(e.target.value)} className={inputCls}>
-                <option value="">Pilih ratio dasar...</option>
-                {displayRefRows.map(r => (
-                  <option key={r.id} value={`${r.run_sec}:${r.walk_sec}`}>
-                    {r.run_sec}:{r.walk_sec} — {r.pace_label}{r.is_default ? ' ★' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {faResult ? (
+              <div className="p-4 rounded-xl" style={{ background: faResult.color + '12', border: `1px solid ${faResult.color}30` }}>
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-2xl">{faResult.adj < 0 ? '⬇' : faResult.adj > 0 ? '⬆' : '↔'}</span>
+                  <p className="text-base font-bold" style={{ color: faResult.color }}>{faResult.msg}</p>
+                </div>
+                <div className="mb-3">
+                  <p className="text-xs text-gray-500 mb-1">Rekomendasi Ratio</p>
+                  <p className="text-3xl font-bold" style={{ color: faResult.color }}>
+                    {faResult.rec.run_sec}:{faResult.rec.walk_sec}
+                    <span className="text-sm font-normal text-gray-500 ml-2">det — {faResult.rec.pace_label} · {faResult.rec.aplikasi}</span>
+                  </p>
+                </div>
+                <p className="text-xs text-gray-500">{faResult.reasons.join(' · ')}</p>
+              </div>
+            ) : (
+              <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400">
+                Pilih ratio dasar dan isi minimal EWS atau RPE untuk melihat rekomendasi.
+              </div>
+            )}
           </div>
 
-          {faResult ? (
-            <div className="p-4 rounded-xl" style={{ background: faResult.color + '12', border: `1px solid ${faResult.color}30` }}>
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-2xl">{faResult.adj < 0 ? '⬇' : faResult.adj > 0 ? '⬆' : '↔'}</span>
-                <p className="text-base font-bold" style={{ color: faResult.color }}>{faResult.msg}</p>
+          {/* ── 2. Quick Cycle Calculator ── */}
+          <div className={sectionCls}>
+            <h2 className={headerCls}>Quick Cycle Calculator</h2>
+            <p className="text-xs text-gray-400 mb-4">
+              Hitung blended pace dan proyeksi finish dari pace run/walk + rasio secara cepat.
+              Semua dihitung otomatis saat input berubah.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+              <div>
+                <label className={labelCls}>Run Pace (/km)</label>
+                <input type="text" value={qcRunPace} onChange={e => setQcRunPace(e.target.value)}
+                  className={inputCls} placeholder="6:00" />
               </div>
-              <div className="mb-3">
-                <p className="text-xs text-gray-500 mb-1">Rekomendasi Ratio</p>
-                <p className="text-3xl font-bold" style={{ color: faResult.color }}>
-                  {faResult.rec.run_sec}:{faResult.rec.walk_sec}
-                  <span className="text-sm font-normal text-gray-500 ml-2">det — {faResult.rec.pace_label} · {faResult.rec.aplikasi}</span>
-                </p>
+              <div>
+                <label className={labelCls}>Walk Pace (/km)</label>
+                <input type="text" value={qcWalkPace} onChange={e => setQcWalkPace(e.target.value)}
+                  className={inputCls} placeholder="8:30" />
               </div>
-              <p className="text-xs text-gray-500">{faResult.reasons.join(' · ')}</p>
+              <div>
+                <label className={labelCls}>Run Interval (det)</label>
+                <input type="number" value={qcRunSec} onChange={e => setQcRunSec(e.target.value)}
+                  className={inputCls} placeholder="60" />
+              </div>
+              <div>
+                <label className={labelCls}>Walk Interval (det)</label>
+                <input type="number" value={qcWalkSec} onChange={e => setQcWalkSec(e.target.value)}
+                  className={inputCls} placeholder="30" />
+              </div>
             </div>
-          ) : (
-            <div className="p-4 bg-gray-50 rounded-xl text-xs text-gray-400">
-              Pilih ratio dasar dan isi minimal EWS atau RPE untuk melihat rekomendasi.
+            {(() => {
+              const rp = parsePace(qcRunPace)
+              const wp = parsePace(qcWalkPace)
+              const rs = parseFloat(qcRunSec)
+              const ws = parseFloat(qcWalkSec)
+              if (!rp || !wp || !rs || !ws || rp >= wp) return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {['Blended Pace', 'HM (21.1 km)', 'FM (42.2 km)', '% Run'].map(l => (
+                    <div key={l} className={cardCls}>
+                      <p className={labelCls}>{l}</p>
+                      <p className="text-lg font-bold text-gray-300">—</p>
+                    </div>
+                  ))}
+                </div>
+              )
+              const distPerCycle = rs / rp + ws / wp
+              const cycleSec = rs + ws
+              const blended = cycleSec / distPerCycle
+              const runPct = (rs / cycleSec * 100).toFixed(1)
+              const hmFinish = (21.1 / distPerCycle) * cycleSec
+              const fmFinish = (42.2 / distPerCycle) * cycleSec
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-indigo-50 rounded-lg p-3">
+                    <p className={labelCls}>Blended Pace</p>
+                    <p className="text-xl font-bold text-indigo-700">{secToMMSS(blended)}<span className="text-sm font-normal">/km</span></p>
+                  </div>
+                  <div className={cardCls}>
+                    <p className={labelCls}>HM (21.1 km)</p>
+                    <p className="text-xl font-bold text-gray-800">{secToHMMSS(hmFinish)}</p>
+                  </div>
+                  <div className={cardCls}>
+                    <p className={labelCls}>FM (42.2 km)</p>
+                    <p className="text-xl font-bold text-gray-800">{secToHMMSS(fmFinish)}</p>
+                  </div>
+                  <div className={cardCls}>
+                    <p className={labelCls}>% Run / Walk</p>
+                    <p className="text-sm font-bold text-gray-800">{runPct}% / {(100 - parseFloat(runPct)).toFixed(1)}%</p>
+                    <div className="h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${runPct}%` }} />
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* ── 3. Pace Converter ── */}
+          <div className={sectionCls}>
+            <h2 className={headerCls}>Pace Converter</h2>
+            <p className="text-xs text-gray-400 mb-4">
+              Konversi pace antara menit/km, km/jam, dan menit/mil. Input di salah satu field, field lain terisi otomatis.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className={labelCls}>Menit/km (M:SS)</label>
+                <input type="text" value={pcMinKm}
+                  onChange={e => {
+                    const v = e.target.value; setPcMinKm(v)
+                    const sec = parsePace(v)
+                    if (sec && sec > 0) {
+                      setPcKmh((3600 / sec).toFixed(2))
+                      setPcMinMile(secToMMSS(sec * 1.60934))
+                    } else { setPcKmh(''); setPcMinMile('') }
+                  }}
+                  className={inputCls} placeholder="6:00" />
+              </div>
+              <div>
+                <label className={labelCls}>km/jam</label>
+                <input type="number" step="0.01" value={pcKmh}
+                  onChange={e => {
+                    const v = e.target.value; setPcKmh(v)
+                    const kmh = parseFloat(v)
+                    if (!isNaN(kmh) && kmh > 0) {
+                      const sec = 3600 / kmh
+                      setPcMinKm(secToMMSS(sec))
+                      setPcMinMile(secToMMSS(sec * 1.60934))
+                    } else { setPcMinKm(''); setPcMinMile('') }
+                  }}
+                  className={inputCls} placeholder="10.00" />
+              </div>
+              <div>
+                <label className={labelCls}>Menit/mil (M:SS)</label>
+                <input type="text" value={pcMinMile}
+                  onChange={e => {
+                    const v = e.target.value; setPcMinMile(v)
+                    const sec = parsePace(v)
+                    if (sec && sec > 0) {
+                      const secPerKm = sec / 1.60934
+                      setPcMinKm(secToMMSS(secPerKm))
+                      setPcKmh((3600 / secPerKm).toFixed(2))
+                    } else { setPcMinKm(''); setPcKmh('') }
+                  }}
+                  className={inputCls} placeholder="9:39" />
+              </div>
             </div>
-          )}
+            {pcMinKm && pcKmh && pcMinMile && (
+              <div className="p-3 bg-indigo-50 rounded-lg text-sm">
+                <span className="text-indigo-700 font-medium">{pcMinKm}/km</span>
+                <span className="text-gray-400 mx-2">=</span>
+                <span className="text-indigo-700 font-medium">{pcKmh} km/h</span>
+                <span className="text-gray-400 mx-2">=</span>
+                <span className="text-indigo-700 font-medium">{pcMinMile}/mil</span>
+              </div>
+            )}
+          </div>
+
         </div>
       )}
 
