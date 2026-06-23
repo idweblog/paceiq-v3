@@ -92,7 +92,25 @@ function parsePace(str: string): number | null {
 
 /** Parse target waktu race */
 function parseTargetTime(str: string): number | null {
-  return parsePace(str)
+  if (!str) return null
+  const s = str.trim()
+  const parts = s.split(':')
+  // H:MM:SS
+  if (parts.length === 3) {
+    const h = parseFloat(parts[0]), m = parseFloat(parts[1]), sec = parseFloat(parts[2])
+    if (isNaN(h) || isNaN(m) || isNaN(sec)) return null
+    return h * 3600 + m * 60 + sec
+  }
+  // H:MM → jam:menit (untuk race target)
+  if (parts.length === 2) {
+    const h = parseFloat(parts[0]), m = parseFloat(parts[1])
+    if (isNaN(h) || isNaN(m)) return null
+    return h * 3600 + m * 60
+  }
+  // Angka tunggal = menit
+  const n = parseFloat(s)
+  if (!isNaN(n) && n > 0) return n * 60
+  return null
 }
 
 function secToMMSS(sec: number): string {
@@ -756,83 +774,92 @@ export default function RwrPage() {
 
 
 
-          {mARes && !('error' in mARes) && (
-            <>
+          <>
+              {/* Output boxes — selalu terlihat, terisi otomatis */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div className="bg-indigo-50 rounded-lg p-3">
                   <p className={labelCls}>Run Pace yang Dibutuhkan</p>
-                  <p className="text-2xl font-bold text-indigo-700">{secToMMSSd(mARes.runPaceSec)}<span className="text-sm font-normal">/km</span></p>
+                  <p className="text-2xl font-bold text-indigo-700">
+                    {mARes && !('error' in mARes) ? secToMMSSd(mARes.runPaceSec) : '—'}
+                    <span className="text-sm font-normal">/km</span>
+                  </p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Overall Pace</p>
-                  <p className="text-xl font-bold text-gray-800">{secToMMSS(mARes.overallPaceSec)}<span className="text-sm font-normal">/km</span></p>
+                  <p className="text-xl font-bold text-gray-800">
+                    {mARes && !('error' in mARes) ? secToMMSS(mARes.overallPaceSec) : '—'}
+                    <span className="text-sm font-normal">/km</span>
+                  </p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Proj. Finish</p>
-                  <p className="text-xl font-bold text-gray-800">{secToHMMSS(mARes.projFinishSec)}</p>
+                  <p className="text-xl font-bold text-gray-800">
+                    {mARes && !('error' in mARes) ? secToHMMSS(mARes.projFinishSec) : '—'}
+                  </p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Total Cycles</p>
-                  <p className={valueCls}>{mARes.totalCycles}×</p>
+                  <p className={valueCls}>{mARes && !('error' in mARes) ? `${mARes.totalCycles}×` : '—'}</p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Rasio (meter)</p>
-                  <p className={valueCls}>{mARes.runMeter}:{mARes.walkMeter} m</p>
+                  <p className={valueCls}>{mARes && !('error' in mARes) ? `${mARes.runMeter}:${mARes.walkMeter} m` : '—'}</p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Total Lari</p>
-                  <p className={valueCls}>{secToHMMSS(mARes.totalRunMin * 60)}</p>
+                  <p className={valueCls}>{mARes && !('error' in mARes) ? secToHMMSS(mARes.totalRunMin * 60) : '—'}</p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Total Jalan</p>
-                  <p className={valueCls}>{secToHMMSS(mARes.totalWalkMin * 60)}</p>
+                  <p className={valueCls}>{mARes && !('error' in mARes) ? secToHMMSS(mARes.totalWalkMin * 60) : '—'}</p>
                 </div>
               </div>
               <div className="mb-4">
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>Run {mARes.runPct.toFixed(1)}%</span>
-                  <span>Walk {(100 - mARes.runPct).toFixed(1)}%</span>
+                  <span>Run {mARes && !('error' in mARes) ? mARes.runPct.toFixed(1) : '0'}%</span>
+                  <span>Walk {mARes && !('error' in mARes) ? (100 - mARes.runPct).toFixed(1) : '100'}%</span>
                 </div>
                 <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${mARes.runPct}%` }} />
+                  <div className="h-full bg-indigo-500 rounded-full transition-all"
+                    style={{ width: mARes && !('error' in mARes) ? `${mARes.runPct}%` : '0%' }} />
                 </div>
               </div>
-              {mARes.runPaceSec < 300 && (
+              {mARes && !('error' in mARes) && mARes.runPaceSec < 300 && (
                 <div className="p-3 bg-red-50 rounded-lg text-xs text-red-700 mb-3">⚠ Pace run sangat cepat (&lt;5:00/km). Pertimbangkan memperbesar interval atau percepat walk pace.</div>
               )}
-              {mARes.runPaceSec > 600 && (
+              {mARes && !('error' in mARes) && mARes.runPaceSec > 600 && (
                 <div className="p-3 bg-amber-50 rounded-lg text-xs text-amber-700 mb-3">💡 Pace run relatif lambat (&gt;10:00/km). Cocok untuk recovery atau LR awal program.</div>
               )}
+              {/* Error message */}
+              {mARes && 'error' in mARes && (
+                <div className="p-3 bg-red-50 rounded-lg text-sm text-red-600 mb-4">{mARes.error}</div>
+              )}
+
               <div className="flex items-center gap-3">
                 <select value={mALabel} onChange={e => setMALabel(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
                   <option>Latihan</option><option>Race</option><option>Time Trial</option>
                 </select>
                 <button onClick={async () => {
+                  if (!mARes || 'error' in mARes) { showToast('Tidak ada hasil kalkulasi untuk disimpan.'); return }
                   setMASaving(true)
-                  if (!('error' in mARes)) {
-                    const wp = parsePace(mA.walkPace)
-                    const ts = parsePace(mA.targetTime) ?? ((() => { const p = mA.targetTime.split(':').map(Number); return p.length === 3 ? p[0]*3600+p[1]*60+p[2] : null })())
-                    await saveHistory({
-                      mode: 'A', label: mALabel,
-                      distance_km: parseFloat(mA.dist),
-                      run_sec: parseFloat(mA.runSec), walk_sec: parseFloat(mA.walkSec),
-                      run_pace_sec: mARes.runPaceSec, walk_pace_sec: wp,
-                      blended_pace_sec: mARes.overallPaceSec,
-                      proj_finish_sec: Math.round(mARes.projFinishSec),
-                      target_finish_sec: ts, notes: null,
-                    })
-                  }
+                  const wp = parsePace(mA.walkPace)
+                  const ts = parseTargetTime(mA.targetTime)
+                  await saveHistory({
+                    mode: 'A', label: mALabel,
+                    distance_km: parseFloat(mA.dist),
+                    run_sec: parseFloat(mA.runSec), walk_sec: parseFloat(mA.walkSec),
+                    run_pace_sec: mARes.runPaceSec, walk_pace_sec: wp,
+                    blended_pace_sec: mARes.overallPaceSec,
+                    proj_finish_sec: Math.round(mARes.projFinishSec),
+                    target_finish_sec: ts, notes: null,
+                  })
                   setMASaving(false)
-                }} disabled={mASaving}
+                }} disabled={mASaving || !mARes || ('error' in mARes)}
                   className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
                   {mASaving ? 'Menyimpan...' : '💾 Simpan ke Riwayat'}
                 </button>
               </div>
             </>
-          )}
-          {mARes && 'error' in mARes && (
-            <div className="p-3 bg-red-50 rounded-lg text-sm text-red-600">{mARes.error}</div>
-          )}
         </div>
       )}
 
@@ -885,10 +912,9 @@ export default function RwrPage() {
 
 
 
-          {mBRes && !('error' in mBRes) && (
-            <>
+          <>
               {/* vs Target */}
-              {(() => {
+              {mBRes && !('error' in mBRes) && (() => {
                 const ts = mB.targetTime ? (() => { const p = mB.targetTime.split(':').map(Number); return p.length === 3 ? p[0]*3600+p[1]*60+p[2] : p[0]*60+p[1] })() : null
                 const diff = ts ? mBRes.projFinishSec - ts : null
                 return diff !== null ? (
@@ -903,71 +929,77 @@ export default function RwrPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div className="bg-indigo-50 rounded-lg p-3">
                   <p className={labelCls}>Projected Finish</p>
-                  <p className="text-2xl font-bold text-indigo-700">{secToHMMSS(mBRes.projFinishSec)}</p>
+                  <p className="text-2xl font-bold text-indigo-700">
+                    {mBRes && !('error' in mBRes) ? secToHMMSS(mBRes.projFinishSec) : '—'}
+                  </p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Blended Pace</p>
-                  <p className="text-xl font-bold text-gray-800">{secToMMSS(mBRes.blendedPaceSec)}<span className="text-sm font-normal">/km</span></p>
+                  <p className="text-xl font-bold text-gray-800">
+                    {mBRes && !('error' in mBRes) ? secToMMSS(mBRes.blendedPaceSec) : '—'}
+                    <span className="text-sm font-normal">/km</span>
+                  </p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Rasio (meter)</p>
-                  <p className={valueCls}>{mBRes.runMeter}:{mBRes.walkMeter} m</p>
+                  <p className={valueCls}>{mBRes && !('error' in mBRes) ? `${mBRes.runMeter}:${mBRes.walkMeter} m` : '—'}</p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Total Cycles</p>
-                  <p className={valueCls}>{mBRes.totalCycles}×</p>
+                  <p className={valueCls}>{mBRes && !('error' in mBRes) ? `${mBRes.totalCycles}×` : '—'}</p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Total Lari</p>
-                  <p className={valueCls}>{secToHMMSS(mBRes.totalRunMin * 60)}</p>
+                  <p className={valueCls}>{mBRes && !('error' in mBRes) ? secToHMMSS(mBRes.totalRunMin * 60) : '—'}</p>
                 </div>
                 <div className={cardCls}>
                   <p className={labelCls}>Total Jalan</p>
-                  <p className={valueCls}>{secToHMMSS(mBRes.totalWalkMin * 60)}</p>
+                  <p className={valueCls}>{mBRes && !('error' in mBRes) ? secToHMMSS(mBRes.totalWalkMin * 60) : '—'}</p>
                 </div>
               </div>
               <div className="mb-4">
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>Run {mBRes.runPct.toFixed(1)}%</span>
-                  <span>Walk {(100 - mBRes.runPct).toFixed(1)}%</span>
+                  <span>Run {mBRes && !('error' in mBRes) ? mBRes.runPct.toFixed(1) : '0'}%</span>
+                  <span>Walk {mBRes && !('error' in mBRes) ? (100 - mBRes.runPct).toFixed(1) : '100'}%</span>
                 </div>
                 <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${mBRes.runPct}%` }} />
+                  <div className="h-full bg-indigo-500 rounded-full transition-all"
+                    style={{ width: mBRes && !('error' in mBRes) ? `${mBRes.runPct}%` : '0%' }} />
                 </div>
               </div>
-              <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-700 mb-4">
-                💡 Tip: Gunakan nilai pace presisi ({secToMMSSd(parsePace(mB.runPace) ?? 0)}) saat input ke Mode A untuk konsistensi.
-              </div>
+              {mBRes && !('error' in mBRes) && (
+                <div className="p-3 bg-blue-50 rounded-lg text-xs text-blue-700 mb-4">
+                  💡 Tip: Gunakan nilai pace presisi ({secToMMSSd(parsePace(mB.runPace) ?? 0)}) saat input ke Mode A untuk konsistensi.
+                </div>
+              )}
+              {mBRes && 'error' in mBRes && (
+                <div className="p-3 bg-red-50 rounded-lg text-sm text-red-600 mb-4">{mBRes.error}</div>
+              )}
               <div className="flex items-center gap-3">
                 <select value={mBLabel} onChange={e => setMBLabel(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm">
                   <option>Latihan</option><option>Race</option><option>Time Trial</option>
                 </select>
                 <button onClick={async () => {
+                  if (!mBRes || 'error' in mBRes) { showToast('Tidak ada hasil kalkulasi untuk disimpan.'); return }
                   setMBSaving(true)
-                  if (!('error' in mBRes)) {
-                    const rp = parsePace(mB.runPace), wp = parsePace(mB.walkPace)
-                    const ts = mB.targetTime ? (() => { const p = mB.targetTime.split(':').map(Number); return p.length === 3 ? p[0]*3600+p[1]*60+p[2] : p[0]*60+p[1] })() : null
-                    await saveHistory({
-                      mode: 'B', label: mBLabel,
-                      distance_km: parseFloat(mB.dist),
-                      run_sec: parseFloat(mB.runSec), walk_sec: parseFloat(mB.walkSec),
-                      run_pace_sec: rp, walk_pace_sec: wp,
-                      blended_pace_sec: mBRes.blendedPaceSec,
-                      proj_finish_sec: Math.round(mBRes.projFinishSec),
-                      target_finish_sec: ts, notes: null,
-                    })
-                  }
+                  const rp = parsePace(mB.runPace), wp = parsePace(mB.walkPace)
+                  const ts = parseTargetTime(mB.targetTime)
+                  await saveHistory({
+                    mode: 'B', label: mBLabel,
+                    distance_km: parseFloat(mB.dist),
+                    run_sec: parseFloat(mB.runSec), walk_sec: parseFloat(mB.walkSec),
+                    run_pace_sec: rp, walk_pace_sec: wp,
+                    blended_pace_sec: mBRes.blendedPaceSec,
+                    proj_finish_sec: Math.round(mBRes.projFinishSec),
+                    target_finish_sec: ts, notes: null,
+                  })
                   setMBSaving(false)
-                }} disabled={mBSaving}
+                }} disabled={mBSaving || !mBRes || ('error' in mBRes)}
                   className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors">
                   {mBSaving ? 'Menyimpan...' : '💾 Simpan ke Riwayat'}
                 </button>
               </div>
             </>
-          )}
-          {mBRes && 'error' in mBRes && (
-            <div className="p-3 bg-red-50 rounded-lg text-sm text-red-600">{mBRes.error}</div>
-          )}
         </div>
       )}
 
