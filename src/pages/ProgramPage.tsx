@@ -10,160 +10,204 @@ interface Race {
   status: string
 }
 
-interface ProgramWeek {
-  id: string
-  race_id: string | null
-  athlete_id: string
-  week_number: number
-  phase_name: string | null
-  period_start: string | null
-  period_end: string | null
-  volume_target_km: number | null
-  duration_target: string | null
-  rwr_default: string | null
-  philosophy: string | null
-  goal: string | null
-}
-
 interface ProgramSession {
   id: string
-  week_id: string
   athlete_id: string
-  sort_order: number
-  day: string | null
-  session_date: string | null
-  type: string | null
-  label: string | null
-  is_rest: boolean
-  is_key_session: boolean
-  distance_km: number | null
-  duration_min: number | null
-  hr_zone: string | null
-  hr_target: string | null
-  rwr_ratio: string | null
-  pace_run: string | null
-  pace_walk: string | null
-  guardrails: string[] | null
-  important_notes: string[] | null
-  session_structure: {
-    warm_up?: string[]
-    main_set?: { block_name: string; details: string[] }[]
-    cool_down?: string[]
-  } | null
-  coach_notes: string | null
+  race_id: string
+  session_date: string
+  program_type: string
+  notes: string | null
+  details?: SessionDetail[]
 }
 
-interface WeekForm {
-  week_number: string
-  phase_name: string
-  period_start: string
-  period_end: string
-  volume_target_km: string
-  duration_target: string
-  rwr_default: string
-  philosophy: string
-  goal: string
+interface SessionDetail {
+  id: string
+  session_id: string
+  athlete_id: string
+  sort_order: number
+  zone_name: string
+  distance_km: number | null
+  est_duration_min: number | null
+}
+
+interface PaceZone {
+  name: string
+  label: string
+  pct_min: number
+  pct_max: number
+  pace_min_sec: number // sec/km
+  pace_max_sec: number // sec/km
+  color: string
+}
+
+interface WeekGroup {
+  week_number: number
+  period_start: string // Monday
+  period_end: string   // Sunday
+  sessions: ProgramSession[]
+  total_km: number
 }
 
 interface SessionForm {
-  sort_order: string
-  day: string
   session_date: string
-  type: string
-  label: string
-  is_rest: boolean
-  is_key_session: boolean
+  program_type: string
+  notes: string
+}
+
+interface DetailForm {
+  zone_name: string
   distance_km: string
-  duration_min: string
-  hr_zone: string
-  hr_target: string
-  rwr_ratio: string
-  pace_run: string
-  pace_walk: string
-  guardrails: string
-  important_notes: string
-  warm_up: string
-  main_set: string
-  cool_down: string
-  coach_notes: string
 }
 
-const WEEK_BLANK: WeekForm = {
-  week_number: '', phase_name: '', period_start: '', period_end: '',
-  volume_target_km: '', duration_target: '', rwr_default: '',
-  philosophy: '', goal: ''
-}
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-const SESSION_BLANK: SessionForm = {
-  sort_order: '', day: '', session_date: '', type: 'Easy RWR', label: '',
-  is_rest: false, is_key_session: false,
-  distance_km: '', duration_min: '', hr_zone: '', hr_target: '',
-  rwr_ratio: '', pace_run: '', pace_walk: '',
-  guardrails: '', important_notes: '',
-  warm_up: '', main_set: '', cool_down: '',
-  coach_notes: ''
-}
-
-const SESSION_TYPES = [
-  'Easy RWR', 'Easy RWR + Strides', 'Easy RWR + Form Drills',
-  'Long Run', 'Tempo', 'Interval / VO2max',
-  'Active Recovery', 'Rest', 'Race', 'Test'
+const PROGRAM_TYPES = [
+  'EASY RUN (EZ)',
+  'LONGRUN (LR)',
+  'MEDIUM RUN (MD-R)',
+  'FARTLEK (SPEED PLAY)',
+  'SUB-TEMPO (SPEED)',
+  'TEMPO RUN (SPEED)',
+  'SUB THRESHOLD RUN (SPEED)',
+  'THRESHOLD RUN (SPEED)',
+  'SUPRA-THRESHOLD RUN (SPEED)',
+  'VCR TEST / TIME TRIAL / RACE DAY',
+  'SPESIFIC LONGRUN (S-LR)',
+  'MIX PACE (SPEED)',
+  'STRENGTH - (SENIN)',
+  'RUNNING DRILLS - (Kamis)',
+  'ST / RD (Mandiri)',
 ]
 
-const DAY_OPTIONS = ['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Ahad']
+// 9 zona VCR — pct range dari locked algorithm
+const ZONE_DEFINITIONS = [
+  { name: 'Recovery',      label: 'Recovery',      pct_min: 0.64, pct_max: 0.68, color: '#94a3b8' },
+  { name: 'Long Run',      label: 'Long Run',       pct_min: 0.69, pct_max: 0.71, color: '#60a5fa' },
+  { name: 'Easy',          label: 'Easy',           pct_min: 0.74, pct_max: 0.76, color: '#34d399' },
+  { name: 'Moderate',      label: 'Moderate',       pct_min: 0.83, pct_max: 0.85, color: '#a3e635' },
+  { name: 'Tempo',         label: 'Tempo',          pct_min: 0.88, pct_max: 0.90, color: '#fbbf24' },
+  { name: 'Threshold',     label: 'Threshold',      pct_min: 0.92, pct_max: 0.94, color: '#f97316' },
+  { name: 'Aerobic Power', label: 'Aerobic Power',  pct_min: 1.00, pct_max: 1.02, color: '#ef4444' },
+  { name: 'VO2Max',        label: 'VO₂Max',         pct_min: 1.03, pct_max: 1.05, color: '#dc2626' },
+  { name: 'Anaerob',       label: 'Anaerob',        pct_min: 1.09, pct_max: 1.15, color: '#7c3aed' },
+]
 
-const TYPE_COLORS: Record<string, string> = {
-  'Long Run': '#ef4444', 'Tempo': '#f97316', 'Interval / VO2max': '#f59e0b',
-  'Easy RWR': '#22c55e', 'Easy RWR + Strides': '#22c55e', 'Easy RWR + Form Drills': '#22c55e',
-  'Active Recovery': '#10b981', 'Rest': '#9ca3af', 'Race': '#6366f1', 'Test': '#8b5cf6'
-}
+const SESSION_BLANK: SessionForm = { session_date: '', program_type: 'EASY RUN (EZ)', notes: '' }
+const DETAIL_BLANK: DetailForm   = { zone_name: 'Easy', distance_km: '' }
 
-function getTypeColor(type: string | null): string {
-  if (!type) return '#6366f1'
-  return Object.entries(TYPE_COLORS).find(([k]) => type.includes(k))?.[1] || '#6366f1'
-}
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtDate(d: string | null) {
   if (!d) return '—'
   return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-function parseLines(s: string): string[] {
-  return s.split('\n').map(l => l.trim()).filter(Boolean)
+function fmtDateShort(d: string) {
+  return new Date(d).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 
-function joinLines(arr: string[] | null): string {
-  return (arr || []).join('\n')
+function secToMMSS(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = Math.round(sec % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+function fmtDuration(min: number): string {
+  if (min < 60) return `${Math.round(min)} mnt`
+  const h = Math.floor(min / 60)
+  const m = Math.round(min % 60)
+  return m > 0 ? `${h}j ${m}mnt` : `${h}j`
+}
+
+// Get Monday of the week containing date d
+function getMondayOf(d: Date): Date {
+  const day = d.getDay() // 0=Sun
+  const diff = (day === 0 ? -6 : 1 - day)
+  const mon = new Date(d)
+  mon.setDate(d.getDate() + diff)
+  mon.setHours(0, 0, 0, 0)
+  return mon
+}
+
+function toYMD(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+// Calculate week number from program start date (first Monday on or before first session)
+function calcWeekNumber(sessionDate: string, programStartMonday: string): number {
+  const sess = new Date(sessionDate).getTime()
+  const start = new Date(programStartMonday).getTime()
+  return Math.floor((sess - start) / (7 * 86400000)) + 1
+}
+
+// Group sessions into weeks
+function groupByWeek(sessions: ProgramSession[]): WeekGroup[] {
+  if (!sessions.length) return []
+
+  // Find earliest session date → determine program start Monday
+  const sorted = [...sessions].sort((a, b) => a.session_date.localeCompare(b.session_date))
+  const firstMonday = toYMD(getMondayOf(new Date(sorted[0].session_date)))
+
+  const weekMap: Map<number, WeekGroup> = new Map()
+
+  sessions.forEach(s => {
+    const wn = calcWeekNumber(s.session_date, firstMonday)
+    if (!weekMap.has(wn)) {
+      const mon = new Date(firstMonday)
+      mon.setDate(mon.getDate() + (wn - 1) * 7)
+      const sun = new Date(mon)
+      sun.setDate(mon.getDate() + 6)
+      weekMap.set(wn, {
+        week_number: wn,
+        period_start: toYMD(mon),
+        period_end: toYMD(sun),
+        sessions: [],
+        total_km: 0
+      })
+    }
+    weekMap.get(wn)!.sessions.push(s)
+  })
+
+  // Sort sessions within each week by date
+  weekMap.forEach(wg => {
+    wg.sessions.sort((a, b) => a.session_date.localeCompare(b.session_date))
+    wg.total_km = wg.sessions.reduce((sum, s) => {
+      const detailKm = (s.details || []).reduce((ds, d) => ds + (d.distance_km || 0), 0)
+      return sum + detailKm
+    }, 0)
+  })
+
+  return Array.from(weekMap.values()).sort((a, b) => a.week_number - b.week_number)
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export default function ProgramPage() {
-  const [athleteId, setAthleteId]     = useState<string | null>(null)
-  const [roles, setRoles]             = useState<string[]>([])
-  const [races, setRaces]             = useState<Race[]>([])
+  const [athleteId, setAthleteId]   = useState<string | null>(null)
+  const [roles, setRoles]           = useState<string[]>([])
+  const [races, setRaces]           = useState<Race[]>([])
   const [selectedRaceId, setSelectedRaceId] = useState<string>('')
-  const [weeks, setWeeks]             = useState<ProgramWeek[]>([])
-  const [selectedWeekId, setSelectedWeekId] = useState<string>('')
-  const [sessions, setSessions]       = useState<ProgramSession[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [toast, setToast]             = useState<{ msg: string; ok: boolean } | null>(null)
+  const [sessions, setSessions]     = useState<ProgramSession[]>([])
+  const [paceZones, setPaceZones]   = useState<PaceZone[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
 
-  // Modals
-  const [weekModal, setWeekModal]     = useState<{ open: boolean; editing: ProgramWeek | null }>({ open: false, editing: null })
-  const [sessionModal, setSessionModal] = useState<{ open: boolean; editing: ProgramSession | null; weekId: string }>({ open: false, editing: null, weekId: '' })
-  const [weekForm, setWeekForm]       = useState<WeekForm>(WEEK_BLANK)
-  const [sessionForm, setSessionForm] = useState<SessionForm>(SESSION_BLANK)
-  const [notesModal, setNotesModal]   = useState<{ open: boolean; session: ProgramSession | null }>({ open: false, session: null })
-  const [notesText, setNotesText]     = useState('')
+  // Selected week for detail view
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
+
+  // Session modal
+  const [sessionModal, setSessionModal] = useState<{ open: boolean; editing: ProgramSession | null }>({ open: false, editing: null })
+  const [sessionForm, setSessionForm]   = useState<SessionForm>(SESSION_BLANK)
+
+  // Detail forms (inline per session)
+  const [detailForms, setDetailForms] = useState<Record<string, DetailForm[]>>({})
+  const [savingDetail, setSavingDetail] = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
-  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
 
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const canEdit = roles.includes('coach') || roles.includes('admin')
-  const selectedWeek = weeks.find(w => w.id === selectedWeekId) || null
+  const canEdit  = roles.includes('coach') || roles.includes('admin')
   const selectedRace = races.find(r => r.id === selectedRaceId) || null
-  const isArchived = selectedRace?.status === 'done'
+  const isArchived   = selectedRace?.status === 'done'
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -189,6 +233,7 @@ export default function ProgramPage() {
         setRoles((roleNames || []).map((r: any) => r.name))
       }
 
+      // Load races
       const { data: raceRows } = await (supabase as any)
         .from('races').select('id,name,event_date,status')
         .eq('athlete_id', ath.id)
@@ -201,198 +246,117 @@ export default function ProgramPage() {
       const auto        = raceA || firstActive || raceList[0]
       if (auto) setSelectedRaceId(auto.id)
 
+      // Load VCR from latest TT
+      await loadPaceZones(ath.id)
+
       setLoading(false)
     }
     init()
   }, [])
 
-  // ── Load weeks when race changes ──
+  // ── Load pace zones from VCR ──
+  async function loadPaceZones(athId: string) {
+    const { data: tt } = await (supabase as any)
+      .from('tt_history').select('distance_km,finish_time_sec')
+      .eq('athlete_id', athId)
+      .order('test_date', { ascending: false })
+      .limit(1)
+      .single()
+
+    // VCR = distance_km * 1000 / finish_time_sec
+    const vcr: number = (tt?.distance_km && tt?.finish_time_sec)
+      ? (tt.distance_km * 1000) / tt.finish_time_sec
+      : 0
+    if (!vcr) { setPaceZones([]); return }
+
+    // VCR = distance_km * 1000 / finish_time_sec → pace_sec_per_km = 1000 / vcr_pct
+    const zones: PaceZone[] = ZONE_DEFINITIONS.map(z => {
+      const pace_min_sec = 1000 / (vcr * z.pct_max) // faster end
+      const pace_max_sec = 1000 / (vcr * z.pct_min) // slower end
+      return { ...z, pace_min_sec, pace_max_sec }
+    })
+    setPaceZones(zones)
+  }
+
+  // ── Load sessions when race changes ──
   useEffect(() => {
-    if (!selectedRaceId || !athleteId) { setWeeks([]); setSelectedWeekId(''); setSessions([]); return }
-    loadWeeks(selectedRaceId, athleteId)
+    if (!selectedRaceId || !athleteId) { setSessions([]); return }
+    loadSessions(selectedRaceId, athleteId)
   }, [selectedRaceId, athleteId])
 
-  async function loadWeeks(raceId: string, athId: string) {
-    const { data } = await (supabase as any)
-      .from('program_weeks').select('*')
-      .eq('athlete_id', athId)
-      .eq('race_id', raceId)
-      .order('week_number')
-    const wList: ProgramWeek[] = data || []
-    setWeeks(wList)
-
-    // Auto-select current week by date
-    const todayStr = new Date().toISOString().slice(0, 10)
-    const current = wList.find(w => w.period_start && w.period_end && todayStr >= w.period_start && todayStr <= w.period_end)
-    const upcoming = wList.find(w => w.period_end && todayStr <= w.period_end)
-    const auto = current || upcoming || wList[0]
-    if (auto) {
-      setSelectedWeekId(auto.id)
-      loadSessions(auto.id)
-    } else {
-      setSelectedWeekId('')
-      setSessions([])
-    }
-  }
-
-  // ── Load sessions when week changes ──
-  async function loadSessions(weekId: string) {
-    const { data } = await (supabase as any)
+  async function loadSessions(raceId: string, athId: string) {
+    const { data: sessRows } = await (supabase as any)
       .from('program_sessions').select('*')
-      .eq('week_id', weekId)
-      .order('sort_order')
-    setSessions(data || [])
-  }
+      .eq('race_id', raceId)
+      .eq('athlete_id', athId)
+      .order('session_date')
 
-  function handleWeekSelect(weekId: string) {
-    setSelectedWeekId(weekId)
-    if (weekId) loadSessions(weekId)
-    else setSessions([])
-  }
+    const sessList: ProgramSession[] = sessRows || []
 
-  // ── Week CRUD ──
-  function openWeekModal(editing: ProgramWeek | null) {
-    if (editing) {
-      setWeekForm({
-        week_number: String(editing.week_number),
-        phase_name: editing.phase_name || '',
-        period_start: editing.period_start || '',
-        period_end: editing.period_end || '',
-        volume_target_km: editing.volume_target_km != null ? String(editing.volume_target_km) : '',
-        duration_target: editing.duration_target || '',
-        rwr_default: editing.rwr_default || '',
-        philosophy: editing.philosophy || '',
-        goal: editing.goal || ''
+    // Load details for all sessions in one query
+    if (sessList.length) {
+      const ids = sessList.map(s => s.id)
+      const { data: detailRows } = await (supabase as any)
+        .from('program_session_details').select('*')
+        .in('session_id', ids)
+        .order('sort_order')
+
+      const detailMap: Record<string, SessionDetail[]> = {}
+      ;(detailRows || []).forEach((d: SessionDetail) => {
+        if (!detailMap[d.session_id]) detailMap[d.session_id] = []
+        detailMap[d.session_id].push(d)
       })
-    } else {
-      const nextWeek = weeks.length ? Math.max(...weeks.map(w => w.week_number)) + 1 : 1
-      setWeekForm({ ...WEEK_BLANK, week_number: String(nextWeek) })
-    }
-    setWeekModal({ open: true, editing })
-  }
 
-  async function saveWeek() {
-    if (!selectedRaceId || !athleteId) return
-    if (!weekForm.week_number) { showToast('Nomor minggu wajib diisi', false); return }
-    setSaving(true)
-    const payload = {
-      race_id: selectedRaceId,
-      athlete_id: athleteId,
-      week_number: Number(weekForm.week_number),
-      phase_name: weekForm.phase_name || null,
-      period_start: weekForm.period_start || null,
-      period_end: weekForm.period_end || null,
-      volume_target_km: weekForm.volume_target_km ? Number(weekForm.volume_target_km) : null,
-      duration_target: weekForm.duration_target || null,
-      rwr_default: weekForm.rwr_default || null,
-      philosophy: weekForm.philosophy || null,
-      goal: weekForm.goal || null
+      sessList.forEach(s => { s.details = detailMap[s.id] || [] })
     }
-    try {
-      if (weekModal.editing) {
-        await (supabase as any).from('program_weeks').update(payload).eq('id', weekModal.editing.id)
-        showToast('Minggu diperbarui')
-      } else {
-        await (supabase as any).from('program_weeks').insert(payload)
-        showToast('Minggu ditambahkan')
-      }
-      setWeekModal({ open: false, editing: null })
-      await loadWeeks(selectedRaceId, athleteId)
-    } catch (e: any) {
-      showToast('Gagal menyimpan: ' + e.message, false)
-    } finally {
-      setSaving(false)
+
+    setSessions(sessList)
+
+    // Auto-select current week
+    const weeks = groupByWeek(sessList)
+    if (weeks.length) {
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const current  = weeks.find(w => todayStr >= w.period_start && todayStr <= w.period_end)
+      const upcoming = weeks.find(w => w.period_end >= todayStr)
+      setSelectedWeek((current || upcoming || weeks[0]).week_number)
     }
   }
 
-  async function deleteWeek(id: string) {
-    if (!confirm('Hapus minggu ini beserta semua sesinya?')) return
-    await (supabase as any).from('program_weeks').delete().eq('id', id)
-    if (selectedWeekId === id) { setSelectedWeekId(''); setSessions([]) }
-    await loadWeeks(selectedRaceId, athleteId!)
-    showToast('Minggu dihapus')
+  // ── Pace zone lookup ──
+  function getZone(zoneName: string): PaceZone | null {
+    return paceZones.find(z => z.name === zoneName) || null
+  }
+
+  function calcEstDuration(zoneName: string, distKm: number | null): number | null {
+    if (!distKm) return null
+    const zone = getZone(zoneName)
+    if (!zone) return null
+    const avgPaceSec = (zone.pace_min_sec + zone.pace_max_sec) / 2
+    return (avgPaceSec * distKm) / 60 // minutes
   }
 
   // ── Session CRUD ──
   function openSessionModal(editing: ProgramSession | null) {
     if (editing) {
-      setSessionForm({
-        sort_order: String(editing.sort_order),
-        day: editing.day || '',
-        session_date: editing.session_date || '',
-        type: editing.type || 'Easy RWR',
-        label: editing.label || '',
-        is_rest: editing.is_rest,
-        is_key_session: editing.is_key_session,
-        distance_km: editing.distance_km != null ? String(editing.distance_km) : '',
-        duration_min: editing.duration_min != null ? String(editing.duration_min) : '',
-        hr_zone: editing.hr_zone || '',
-        hr_target: editing.hr_target || '',
-        rwr_ratio: editing.rwr_ratio || '',
-        pace_run: editing.pace_run || '',
-        pace_walk: editing.pace_walk || '',
-        guardrails: joinLines(editing.guardrails),
-        important_notes: joinLines(editing.important_notes),
-        warm_up: joinLines(editing.session_structure?.warm_up || []),
-        main_set: editing.session_structure?.main_set?.map(b => `[${b.block_name}]\n${b.details.join('\n')}`).join('\n\n') || '',
-        cool_down: joinLines(editing.session_structure?.cool_down || []),
-        coach_notes: editing.coach_notes || ''
-      })
+      setSessionForm({ session_date: editing.session_date, program_type: editing.program_type, notes: editing.notes || '' })
     } else {
-      const nextOrder = sessions.length ? Math.max(...sessions.map(s => s.sort_order)) + 1 : 0
-      setSessionForm({ ...SESSION_BLANK, sort_order: String(nextOrder) })
+      // Default date = today
+      setSessionForm({ ...SESSION_BLANK, session_date: new Date().toISOString().slice(0, 10) })
     }
-    setSessionModal({ open: true, editing, weekId: selectedWeekId })
-  }
-
-  function parseMainSet(raw: string): { block_name: string; details: string[] }[] {
-    if (!raw.trim()) return []
-    const blocks = raw.split(/\n\n+/)
-    return blocks.map(block => {
-      const lines = block.split('\n').map(l => l.trim()).filter(Boolean)
-      const firstLine = lines[0] || ''
-      const blockName = firstLine.startsWith('[') && firstLine.endsWith(']')
-        ? firstLine.slice(1, -1)
-        : firstLine
-      const details = firstLine.startsWith('[') ? lines.slice(1) : lines.slice(1)
-      return { block_name: blockName, details }
-    })
+    setSessionModal({ open: true, editing })
   }
 
   async function saveSession() {
-    if (!selectedWeekId || !athleteId) return
-    if (!sessionForm.label) { showToast('Label sesi wajib diisi', false); return }
+    if (!selectedRaceId || !athleteId) return
+    if (!sessionForm.session_date) { showToast('Tanggal wajib diisi', false); return }
     setSaving(true)
-
-    const structure = {
-      warm_up: parseLines(sessionForm.warm_up),
-      main_set: parseMainSet(sessionForm.main_set),
-      cool_down: parseLines(sessionForm.cool_down)
-    }
-
     const payload = {
-      week_id: selectedWeekId,
       athlete_id: athleteId,
-      sort_order: Number(sessionForm.sort_order) || 0,
-      day: sessionForm.day || null,
-      session_date: sessionForm.session_date || null,
-      type: sessionForm.type || null,
-      label: sessionForm.label,
-      is_rest: sessionForm.is_rest,
-      is_key_session: sessionForm.is_key_session,
-      distance_km: sessionForm.distance_km ? Number(sessionForm.distance_km) : null,
-      duration_min: sessionForm.duration_min ? Number(sessionForm.duration_min) : null,
-      hr_zone: sessionForm.hr_zone || null,
-      hr_target: sessionForm.hr_target || null,
-      rwr_ratio: sessionForm.rwr_ratio || null,
-      pace_run: sessionForm.pace_run || null,
-      pace_walk: sessionForm.pace_walk || null,
-      guardrails: parseLines(sessionForm.guardrails).length ? parseLines(sessionForm.guardrails) : null,
-      important_notes: parseLines(sessionForm.important_notes).length ? parseLines(sessionForm.important_notes) : null,
-      session_structure: structure,
-      coach_notes: sessionForm.coach_notes || null
+      race_id: selectedRaceId,
+      session_date: sessionForm.session_date,
+      program_type: sessionForm.program_type,
+      notes: sessionForm.notes || null
     }
-
     try {
       if (sessionModal.editing) {
         await (supabase as any).from('program_sessions').update(payload).eq('id', sessionModal.editing.id)
@@ -401,8 +365,8 @@ export default function ProgramPage() {
         await (supabase as any).from('program_sessions').insert(payload)
         showToast('Sesi ditambahkan')
       }
-      setSessionModal({ open: false, editing: null, weekId: '' })
-      await loadSessions(selectedWeekId)
+      setSessionModal({ open: false, editing: null })
+      await loadSessions(selectedRaceId, athleteId)
     } catch (e: any) {
       showToast('Gagal menyimpan: ' + e.message, false)
     } finally {
@@ -411,54 +375,76 @@ export default function ProgramPage() {
   }
 
   async function deleteSession(id: string) {
-    if (!confirm('Hapus sesi ini?')) return
+    if (!confirm('Hapus sesi ini beserta semua detailnya?')) return
     await (supabase as any).from('program_sessions').delete().eq('id', id)
-    await loadSessions(selectedWeekId)
+    await loadSessions(selectedRaceId, athleteId!)
     showToast('Sesi dihapus')
   }
 
-  // ── Coach Notes ──
-  function openNotesModal(session: ProgramSession) {
-    setNotesModal({ open: true, session })
-    setNotesText(session.coach_notes || '')
+  // ── Detail CRUD ──
+  function initDetailForm(sessionId: string) {
+    setDetailForms(prev => ({ ...prev, [sessionId]: [...(prev[sessionId] || []), { ...DETAIL_BLANK }] }))
   }
 
-  async function saveNotes() {
-    if (!notesModal.session) return
-    setSaving(true)
-    try {
-      await (supabase as any).from('program_sessions').update({ coach_notes: notesText || null }).eq('id', notesModal.session.id)
-      await loadSessions(selectedWeekId)
-      setNotesModal({ open: false, session: null })
-      showToast('Catatan disimpan')
-    } catch (e: any) {
-      showToast('Gagal menyimpan: ' + e.message, false)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  function toggleExpand(id: string) {
-    setExpandedSessions(prev => {
-      const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
-      return next
+  function updateDetailForm(sessionId: string, idx: number, field: keyof DetailForm, value: string) {
+    setDetailForms(prev => {
+      const arr = [...(prev[sessionId] || [])]
+      arr[idx] = { ...arr[idx], [field]: value }
+      return { ...prev, [sessionId]: arr }
     })
   }
 
-  // ── Week stats ──
-  function weekStats(_w: ProgramWeek) {
-    const nonRest = sessions.filter(s => !s.is_rest)
-    const totalDist = nonRest.reduce((s, x) => s + (x.distance_km || 0), 0)
-    const totalDur = nonRest.reduce((s, x) => s + (x.duration_min || 0), 0)
-    return { nonRest: nonRest.length, totalDist, totalDur }
+  function removeDetailForm(sessionId: string, idx: number) {
+    setDetailForms(prev => {
+      const arr = [...(prev[sessionId] || [])]
+      arr.splice(idx, 1)
+      return { ...prev, [sessionId]: arr }
+    })
+  }
+
+  async function saveDetails(session: ProgramSession) {
+    if (!athleteId) return
+    const forms = detailForms[session.id] || []
+    if (!forms.length) return
+
+    setSavingDetail(session.id)
+    try {
+      const existingCount = session.details?.length || 0
+      const inserts = forms.map((f, i) => {
+        const estMin = calcEstDuration(f.zone_name, f.distance_km ? Number(f.distance_km) : null)
+        return {
+          session_id: session.id,
+          athlete_id: athleteId,
+          sort_order: existingCount + i,
+          zone_name: f.zone_name,
+          distance_km: f.distance_km ? Number(f.distance_km) : null,
+          est_duration_min: estMin
+        }
+      })
+      await (supabase as any).from('program_session_details').insert(inserts)
+      setDetailForms(prev => { const n = { ...prev }; delete n[session.id]; return n })
+      await loadSessions(selectedRaceId, athleteId)
+      showToast('Detail disimpan')
+    } catch (e: any) {
+      showToast('Gagal: ' + e.message, false)
+    } finally {
+      setSavingDetail(null)
+    }
+  }
+
+  async function deleteDetail(detailId: string) {
+    await (supabase as any).from('program_session_details').delete().eq('id', detailId)
+    await loadSessions(selectedRaceId, athleteId!)
+    showToast('Detail dihapus')
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400 text-sm">Memuat...</div>
 
-  const stats = selectedWeek ? weekStats(selectedWeek) : null
+  const weeks     = groupByWeek(sessions)
+  const activeWk  = weeks.find(w => w.week_number === selectedWeek) || null
+  const todayStr  = new Date().toISOString().slice(0, 10)
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-6">
@@ -475,18 +461,31 @@ export default function ProgramPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Program Detail</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Sesi latihan mingguan per race</p>
+            <p className="text-xs text-gray-400 mt-0.5">Rencana latihan harian per race</p>
           </div>
-          <select value={selectedRaceId} onChange={e => setSelectedRaceId(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
-            {races.length === 0 && <option value="">Belum ada race</option>}
-            {races.map(r => (
-              <option key={r.id} value={r.id}>
-                {r.status === 'A' ? '🏆 ' : r.status === 'B' ? '🎯 ' : r.status === 'done' ? '✅ ' : '📅 '}
-                {r.name} · {fmtDate(r.event_date)}{r.status === 'done' ? ' (Arsip)' : ''}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* VCR badge */}
+            {paceZones.length > 0 && (
+              <div className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-600 px-3 py-1.5 rounded-lg">
+                ⚡ VCR aktif — pace zones terhitung
+              </div>
+            )}
+            {!paceZones.length && (
+              <div className="text-xs bg-amber-50 border border-amber-200 text-amber-600 px-3 py-1.5 rounded-lg">
+                ⚠️ Belum ada data TT — est. waktu tidak tersedia
+              </div>
+            )}
+            <select value={selectedRaceId} onChange={e => setSelectedRaceId(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+              {races.length === 0 && <option value="">Belum ada race</option>}
+              {races.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.status === 'A' ? '🏆 ' : r.status === 'B' ? '🎯 ' : r.status === 'done' ? '✅ ' : '📅 '}
+                  {r.name}{r.status === 'done' ? ' (Arsip)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         {isArchived && (
           <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-500 flex items-center gap-2">
@@ -498,49 +497,48 @@ export default function ProgramPage() {
       {!selectedRaceId ? (
         <div className="bg-white rounded-xl shadow-sm p-12 text-center text-gray-400 text-sm">Pilih race untuk melihat program</div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
 
           {/* ── LEFT: Week List ── */}
           <div className="space-y-3">
             <div className="bg-white rounded-xl shadow-sm p-4">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-gsans text-base text-indigo-700 uppercase">Minggu</h2>
+                <h2 className="font-gsans text-base text-indigo-700 uppercase">Pekan</h2>
                 {canEdit && !isArchived && (
-                  <button onClick={() => openWeekModal(null)}
-                    className="border border-indigo-500 text-indigo-600 text-xs px-2 py-1 rounded-lg hover:bg-indigo-50">+ Tambah</button>
+                  <button onClick={() => openSessionModal(null)}
+                    className="border border-indigo-500 text-indigo-600 text-xs px-2 py-1 rounded-lg hover:bg-indigo-50">+ Tambah Sesi</button>
                 )}
               </div>
 
               {weeks.length === 0 ? (
-                <div className="text-center py-6 text-gray-400 text-xs">
-                  <div className="text-3xl mb-2">📅</div>
-                  <div>Belum ada minggu.</div>
-                  {canEdit && !isArchived && <div className="mt-1">Klik + Tambah untuk mulai.</div>}
+                <div className="text-center py-8 text-gray-400 text-xs space-y-2">
+                  <div className="text-3xl">📅</div>
+                  <div>Belum ada sesi latihan.</div>
+                  {canEdit && !isArchived && <div>Klik + Tambah Sesi untuk mulai.</div>}
                 </div>
               ) : (
                 <div className="space-y-1.5">
                   {weeks.map(w => {
-                    const isSelected = w.id === selectedWeekId
-                    const todayStr = new Date().toISOString().slice(0, 10)
-                    const isActive = w.period_start && w.period_end && todayStr >= w.period_start && todayStr <= w.period_end
+                    const isActive   = todayStr >= w.period_start && todayStr <= w.period_end
+                    const isSelected = w.week_number === selectedWeek
+                    const isPast     = todayStr > w.period_end
                     return (
-                      <div key={w.id}
-                        onClick={() => handleWeekSelect(w.id)}
+                      <div key={w.week_number} onClick={() => setSelectedWeek(w.week_number)}
                         className={`rounded-lg px-3 py-2.5 cursor-pointer border transition-all ${isSelected ? 'bg-indigo-50 border-indigo-400' : 'border-gray-100 hover:border-indigo-200 hover:bg-gray-50'}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className={`text-xs font-bold ${isSelected ? 'text-indigo-700' : 'text-gray-700'}`}>W{w.week_number}</span>
+                            <span className={`text-xs font-bold ${isSelected ? 'text-indigo-700' : 'text-gray-700'}`}>
+                              Pekan {w.week_number}
+                            </span>
                             {isActive && <span className="text-[9px] font-bold text-white bg-indigo-500 px-1.5 py-0.5 rounded-full">AKTIF</span>}
+                            {isPast && !isActive && <span className="text-[9px] text-green-600">✓</span>}
                           </div>
-                          {canEdit && !isArchived && (
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100" onClick={e => e.stopPropagation()}>
-                              <button onClick={() => openWeekModal(w)} className="text-indigo-400 hover:text-indigo-600 text-xs px-1">✏️</button>
-                              <button onClick={() => deleteWeek(w.id)} className="text-red-300 hover:text-red-500 text-xs px-1">🗑️</button>
-                            </div>
-                          )}
+                          <span className="text-[10px] text-gray-400 font-medium">{w.total_km.toFixed(1)} km</span>
                         </div>
-                        {w.phase_name && <div className="text-[10px] text-gray-500 mt-0.5 truncate">{w.phase_name}</div>}
-                        {w.period_start && <div className="text-[10px] text-gray-400 mt-0.5">{fmtDate(w.period_start)}</div>}
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          {fmtDate(w.period_start)} — {fmtDate(w.period_end)}
+                        </div>
+                        <div className="text-[10px] text-gray-500 mt-0.5">{w.sessions.length} sesi</div>
                       </div>
                     )
                   })}
@@ -548,253 +546,229 @@ export default function ProgramPage() {
               )}
             </div>
 
-            {/* Edit/Delete week buttons when selected */}
-            {selectedWeek && canEdit && !isArchived && (
-              <div className="bg-white rounded-xl shadow-sm p-3 flex gap-2">
-                <button onClick={() => openWeekModal(selectedWeek)}
-                  className="flex-1 border border-indigo-500 text-indigo-600 text-xs py-1.5 rounded-lg hover:bg-indigo-50">✏️ Edit Minggu</button>
-                <button onClick={() => deleteWeek(selectedWeek.id)}
-                  className="flex-1 border border-red-200 text-red-500 text-xs py-1.5 rounded-lg hover:bg-red-50">🗑️ Hapus</button>
+            {/* Summary total */}
+            {weeks.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-4">
+                <div className="text-xs font-medium text-gray-500 uppercase mb-2">Total Program</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="text-xs text-gray-400">Pekan</div>
+                    <div className="text-sm font-bold text-gray-800">{weeks.length}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="text-xs text-gray-400">Total Sesi</div>
+                    <div className="text-sm font-bold text-gray-800">{sessions.length}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg px-3 py-2 col-span-2">
+                    <div className="text-xs text-gray-400">Total Jarak</div>
+                    <div className="text-sm font-bold text-indigo-600">
+                      {weeks.reduce((s, w) => s + w.total_km, 0).toFixed(1)} km
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </div>
 
           {/* ── RIGHT: Week Detail ── */}
           <div className="space-y-4">
-            {!selectedWeekId ? (
+            {!activeWk ? (
               <div className="bg-white rounded-xl shadow-sm p-12 text-center text-gray-400 text-sm">
                 <div className="text-4xl mb-3">📋</div>
-                <div>Pilih minggu untuk melihat sesi latihan</div>
+                <div>Pilih pekan untuk melihat detail sesi</div>
               </div>
             ) : (
               <>
-                {/* Week Summary */}
-                {selectedWeek && (
-                  <div className="bg-white rounded-xl shadow-sm p-5">
-                    <div className="flex items-start justify-between flex-wrap gap-2 mb-3">
-                      <div>
-                        <h2 className="font-gsans text-lg text-indigo-700">Minggu {selectedWeek.week_number}
-                          {selectedWeek.phase_name && <span className="text-sm text-gray-400 ml-2 font-normal normal-case">— {selectedWeek.phase_name}</span>}
-                        </h2>
-                        {selectedWeek.period_start && (
-                          <div className="text-xs text-gray-400 mt-0.5">{fmtDate(selectedWeek.period_start)} → {fmtDate(selectedWeek.period_end)}</div>
+                {/* Week header */}
+                <div className="bg-white rounded-xl shadow-sm p-5">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h2 className="font-gsans text-lg text-indigo-700">
+                        Pekan {activeWk.week_number}
+                        {todayStr >= activeWk.period_start && todayStr <= activeWk.period_end && (
+                          <span className="ml-2 text-xs font-normal text-white bg-indigo-500 px-2 py-0.5 rounded-full">AKTIF</span>
                         )}
+                      </h2>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {fmtDate(activeWk.period_start)} — {fmtDate(activeWk.period_end)}
                       </div>
                     </div>
-
-                    {/* Stats strip */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-3">
-                      <div className="bg-gray-50 rounded-lg px-3 py-2">
-                        <div className="text-xs font-medium text-gray-500 uppercase mb-0.5">Sesi</div>
-                        <div className="text-sm font-bold text-gray-800">{stats?.nonRest ?? 0}</div>
+                    <div className="flex gap-4 text-center text-xs">
+                      <div>
+                        <div className="text-sm font-bold text-gray-800">{activeWk.sessions.length}</div>
+                        <div className="text-gray-400">Sesi</div>
                       </div>
-                      <div className="bg-gray-50 rounded-lg px-3 py-2">
-                        <div className="text-xs font-medium text-gray-500 uppercase mb-0.5">Volume</div>
+                      <div>
+                        <div className="text-sm font-bold text-indigo-600">{activeWk.total_km.toFixed(1)} km</div>
+                        <div className="text-gray-400">Total Jarak</div>
+                      </div>
+                      <div>
                         <div className="text-sm font-bold text-gray-800">
-                          {stats?.totalDist ? `~${stats.totalDist.toFixed(1)} km` : (selectedWeek.volume_target_km ? `${selectedWeek.volume_target_km} km` : '—')}
+                          {fmtDuration(activeWk.sessions.reduce((s, sess) =>
+                            s + (sess.details || []).reduce((ds, d) => ds + (d.est_duration_min || 0), 0), 0))}
                         </div>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg px-3 py-2">
-                        <div className="text-xs font-medium text-gray-500 uppercase mb-0.5">Durasi</div>
-                        <div className="text-sm font-bold text-gray-800">
-                          {stats?.totalDur ? `~${stats.totalDur} mnt` : (selectedWeek.duration_target || '—')}
-                        </div>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg px-3 py-2">
-                        <div className="text-xs font-medium text-gray-500 uppercase mb-0.5">RWR Default</div>
-                        <div className="text-sm font-bold text-indigo-600">{selectedWeek.rwr_default || '—'}</div>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg px-3 py-2">
-                        <div className="text-xs font-medium text-gray-500 uppercase mb-0.5">Target Volume</div>
-                        <div className="text-sm font-bold text-gray-800">{selectedWeek.volume_target_km ? `${selectedWeek.volume_target_km} km` : '—'}</div>
+                        <div className="text-gray-400">Est. Durasi</div>
                       </div>
                     </div>
-
-                    {/* Philosophy / Goal */}
-                    {(selectedWeek.philosophy || selectedWeek.goal) && (
-                      <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-3 text-xs text-indigo-800 space-y-1">
-                        {selectedWeek.philosophy && <div><span className="font-bold">💡 Filosofi:</span> {selectedWeek.philosophy}</div>}
-                        {selectedWeek.goal && <div><span className="font-bold">🎯 Tujuan:</span> {selectedWeek.goal}</div>}
-                      </div>
-                    )}
                   </div>
-                )}
+                </div>
 
                 {/* Sessions */}
-                <div className="bg-white rounded-xl shadow-sm p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 flex-1">Sesi Latihan</h2>
-                    {canEdit && !isArchived && (
-                      <button onClick={() => openSessionModal(null)}
-                        className="ml-3 border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50 flex-shrink-0">+ Tambah Sesi</button>
-                    )}
-                  </div>
+                <div className="space-y-4">
+                  {activeWk.sessions.map(sess => {
+                    const sessKm      = (sess.details || []).reduce((s, d) => s + (d.distance_km || 0), 0)
+                    const sessMinutes = (sess.details || []).reduce((s, d) => s + (d.est_duration_min || 0), 0)
+                    const pendingForms = detailForms[sess.id] || []
 
-                  {sessions.length === 0 ? (
-                    <div className="text-center py-10 text-gray-400 text-sm">
-                      <div className="text-4xl mb-3">🏃</div>
-                      <div>Belum ada sesi. {canEdit && !isArchived ? 'Tambah sesi pertama.' : ''}</div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {sessions.map(s => {
-                        const color = getTypeColor(s.type)
-                        const expanded = expandedSessions.has(s.id)
-                        const hasStructure = !!(
-                          s.session_structure?.warm_up?.length ||
-                          s.session_structure?.main_set?.length ||
-                          s.session_structure?.cool_down?.length ||
-                          s.guardrails?.length ||
-                          s.important_notes?.length
-                        )
-
-                        if (s.is_rest) return (
-                          <div key={s.id} className="rounded-xl border border-gray-100 p-3 flex items-center justify-between opacity-60">
-                            <div className="flex items-center gap-3">
-                              <span className="text-xl">😴</span>
-                              <div>
-                                <div className="text-sm font-bold text-gray-500">{s.day ? `${s.day} — ` : ''}{s.label || 'Full Rest'}</div>
-                                {s.session_date && <div className="text-xs text-gray-400">{fmtDate(s.session_date)}</div>}
+                    return (
+                      <div key={sess.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                        {/* Session header */}
+                        <div className="px-5 py-4 border-b border-gray-100">
+                          <div className="flex items-start justify-between flex-wrap gap-2">
+                            <div>
+                              <div className="text-[11px] font-bold text-indigo-500 uppercase tracking-wider mb-0.5">
+                                {fmtDateShort(sess.session_date)}
                               </div>
+                              <div className="text-sm font-bold text-gray-800">{sess.program_type}</div>
+                              {sess.notes && <div className="text-xs text-gray-500 mt-1 italic">{sess.notes}</div>}
                             </div>
-                            {canEdit && !isArchived && (
-                              <div className="flex gap-1">
-                                <button onClick={() => openSessionModal(s)} className="border border-indigo-500 text-indigo-600 text-xs px-2 py-0.5 rounded-lg hover:bg-indigo-50">Edit</button>
-                                <button onClick={() => deleteSession(s.id)} className="border border-red-200 text-red-500 text-xs px-2 py-0.5 rounded-lg hover:bg-red-50">Hapus</button>
+                            <div className="flex items-center gap-4 text-center text-xs">
+                              <div>
+                                <div className="text-sm font-bold text-indigo-600">{sessKm.toFixed(1)} km</div>
+                                <div className="text-gray-400">Total Jarak</div>
                               </div>
-                            )}
+                              {sessMinutes > 0 && (
+                                <div>
+                                  <div className="text-sm font-bold text-gray-700">{fmtDuration(sessMinutes)}</div>
+                                  <div className="text-gray-400">Est. Durasi</div>
+                                </div>
+                              )}
+                              {canEdit && !isArchived && (
+                                <div className="flex gap-1">
+                                  <button onClick={() => openSessionModal(sess)}
+                                    className="border border-indigo-500 text-indigo-600 text-xs px-2 py-0.5 rounded-lg hover:bg-indigo-50">Edit</button>
+                                  <button onClick={() => deleteSession(sess.id)}
+                                    className="border border-red-200 text-red-500 text-xs px-2 py-0.5 rounded-lg hover:bg-red-50">Hapus</button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        )
+                        </div>
 
-                        return (
-                          <div key={s.id} className="rounded-xl border overflow-hidden" style={{ borderColor: '#e5e7eb', borderLeftWidth: 4, borderLeftColor: color }}>
-                            <div className="p-4">
-                              {/* Header */}
-                              <div className="flex items-start justify-between gap-3 flex-wrap">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 flex-wrap mb-1">
-                                    <span className="text-[11px] font-bold text-white px-2 py-0.5 rounded-full" style={{ background: color }}>{s.type || 'Sesi'}</span>
-                                    {s.is_key_session && <span className="text-[11px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">⭐ KEY SESSION</span>}
-                                  </div>
-                                  <div className="text-sm font-bold text-gray-800">{s.label}</div>
-                                  <div className="text-xs text-gray-400 mt-0.5">
-                                    {s.day}{s.day && s.session_date ? ', ' : ''}{s.session_date ? fmtDate(s.session_date) : ''}
-                                  </div>
+                        {/* Detail rows */}
+                        <div className="px-5 py-3">
+                          {/* Header row */}
+                          {((sess.details || []).length > 0 || pendingForms.length > 0) && (
+                            <div className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 mb-2 px-1">
+                              <div className="text-[10px] font-medium text-gray-400 uppercase">Sesi / Zona</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Range Pace</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Jarak</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Est. Waktu</div>
+                              <div />
+                            </div>
+                          )}
+
+                          {/* Existing details */}
+                          {(sess.details || []).map((det, idx) => {
+                            const zone    = getZone(det.zone_name)
+                            const estMin  = det.est_duration_min || calcEstDuration(det.zone_name, det.distance_km)
+                            const paceStr = zone ? `${secToMMSS(zone.pace_min_sec)}–${secToMMSS(zone.pace_max_sec)}/km` : '—'
+                            return (
+                              <div key={det.id}
+                                className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 items-center py-2 border-b border-gray-50 last:border-0">
+                                {/* Zone pill */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-medium text-gray-400">{idx + 1}.</span>
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                                    style={{ background: zone?.color + '20' || '#f3f4f6', color: zone?.color || '#6b7280' }}>
+                                    <span className="w-2 h-2 rounded-full inline-block" style={{ background: zone?.color || '#9ca3af' }} />
+                                    {det.zone_name}
+                                  </span>
                                 </div>
-
-                                {/* Stats chips */}
-                                <div className="flex gap-3 flex-wrap text-center text-xs">
-                                  {s.distance_km != null && (
-                                    <div><div className="font-bold text-gray-700">{s.distance_km} km</div><div className="text-gray-400 text-[10px]">📍 Jarak</div></div>
-                                  )}
-                                  {s.duration_min != null && (
-                                    <div><div className="font-bold text-gray-700">{s.duration_min}'</div><div className="text-gray-400 text-[10px]">⏱ Durasi</div></div>
-                                  )}
-                                  {s.hr_zone && (
-                                    <div><div className="font-bold text-gray-700">{s.hr_zone}</div><div className="text-gray-400 text-[10px]">💓 Zone</div></div>
-                                  )}
-                                  {s.hr_target && (
-                                    <div><div className="font-bold" style={{ color }}>{s.hr_target}</div><div className="text-gray-400 text-[10px]">🎯 HR</div></div>
-                                  )}
-                                  {s.rwr_ratio && (
-                                    <div><div className="font-bold text-indigo-600">{s.rwr_ratio}</div><div className="text-gray-400 text-[10px]">🔄 RWR</div></div>
-                                  )}
+                                {/* Pace range */}
+                                <div className="text-xs text-center font-mono text-gray-600">{paceStr}</div>
+                                {/* Distance */}
+                                <div className="text-xs text-center font-bold text-gray-800">
+                                  {det.distance_km != null ? `${det.distance_km} km` : '—'}
                                 </div>
-                              </div>
-
-                              {/* Pace strip */}
-                              {(s.pace_run || s.pace_walk) && (
-                                <div className="mt-2 text-xs text-gray-600 bg-gray-50 rounded-lg px-3 py-2">
-                                  {s.pace_run && <span>🏃 Pace run: <strong>{s.pace_run}</strong></span>}
-                                  {s.pace_run && s.pace_walk && <span className="mx-2 text-gray-300">|</span>}
-                                  {s.pace_walk && <span>🚶 Walk: <strong>{s.pace_walk}</strong></span>}
+                                {/* Est time */}
+                                <div className="text-xs text-center font-bold" style={{ color: zone?.color || '#6b7280' }}>
+                                  {estMin != null ? fmtDuration(estMin) : '—'}
                                 </div>
-                              )}
-
-                              {/* Coach notes preview */}
-                              {s.coach_notes && (
-                                <div className="mt-2 text-xs text-gray-600 leading-relaxed line-clamp-2">{s.coach_notes}</div>
-                              )}
-
-                              {/* Expand / action row */}
-                              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-2 flex-wrap">
-                                <div className="flex gap-2">
-                                  {hasStructure && (
-                                    <button onClick={() => toggleExpand(s.id)}
-                                      className="text-xs text-gray-500 border border-gray-200 rounded-lg px-3 py-1 hover:bg-gray-50 flex items-center gap-1">
-                                      {expanded ? '▲ Tutup Detail' : '▼ Lihat Detail'}
-                                    </button>
-                                  )}
-                                  {canEdit && (
-                                    <button onClick={() => openNotesModal(s)}
-                                      className="text-xs border border-indigo-200 text-indigo-600 rounded-lg px-3 py-1 hover:bg-indigo-50">
-                                      {s.coach_notes ? '✏️ Edit Catatan' : '+ Catatan'}
-                                    </button>
-                                  )}
-                                </div>
+                                {/* Delete */}
                                 {canEdit && !isArchived && (
-                                  <div className="flex gap-1">
-                                    <button onClick={() => openSessionModal(s)} className="border border-indigo-500 text-indigo-600 text-xs px-2 py-0.5 rounded-lg hover:bg-indigo-50">Edit</button>
-                                    <button onClick={() => deleteSession(s.id)} className="border border-red-200 text-red-500 text-xs px-2 py-0.5 rounded-lg hover:bg-red-50">Hapus</button>
-                                  </div>
+                                  <button onClick={() => deleteDetail(det.id)}
+                                    className="text-red-300 hover:text-red-500 text-xs text-center">✕</button>
                                 )}
                               </div>
+                            )
+                          })}
 
-                              {/* Expanded detail */}
-                              {expanded && (
-                                <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
-                                  {s.session_structure?.warm_up && s.session_structure.warm_up.length > 0 && (
-                                    <div>
-                                      <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wide mb-1">🔥 Warm-Up</div>
-                                      <ul className="list-disc list-inside space-y-0.5">
-                                        {s.session_structure.warm_up.map((item, i) => <li key={i} className="text-xs text-gray-600">{item}</li>)}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {s.session_structure?.main_set && s.session_structure.main_set.length > 0 && (
-                                    <div>
-                                      {s.session_structure.main_set.map((block, i) => (
-                                        <div key={i} className="mb-2">
-                                          <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wide mb-1">⚡ {block.block_name}</div>
-                                          <ul className="list-disc list-inside space-y-0.5">
-                                            {block.details.map((d, j) => <li key={j} className="text-xs text-gray-600">{d}</li>)}
-                                          </ul>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {s.session_structure?.cool_down && s.session_structure.cool_down.length > 0 && (
-                                    <div>
-                                      <div className="text-[11px] font-bold text-indigo-500 uppercase tracking-wide mb-1">🧊 Cool-Down</div>
-                                      <ul className="list-disc list-inside space-y-0.5">
-                                        {s.session_structure.cool_down.map((item, i) => <li key={i} className="text-xs text-gray-600">{item}</li>)}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {s.guardrails && s.guardrails.length > 0 && (
-                                    <div className="bg-red-50 border-l-4 border-red-400 rounded-r-lg px-3 py-2">
-                                      <div className="text-[11px] font-bold text-red-600 uppercase tracking-wide mb-1">🚨 Guardrails</div>
-                                      <ul className="list-disc list-inside space-y-0.5">
-                                        {s.guardrails.map((g, i) => <li key={i} className="text-xs text-red-700">{g}</li>)}
-                                      </ul>
-                                    </div>
-                                  )}
-                                  {s.important_notes && s.important_notes.length > 0 && (
-                                    <div className="bg-amber-50 border-l-4 border-amber-400 rounded-r-lg px-3 py-2">
-                                      <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wide mb-1">📌 Catatan Penting</div>
-                                      <ul className="list-disc list-inside space-y-0.5">
-                                        {s.important_notes.map((n, i) => <li key={i} className="text-xs text-amber-800">{n}</li>)}
-                                      </ul>
-                                    </div>
-                                  )}
+                          {/* Pending new detail forms */}
+                          {pendingForms.map((f, idx) => {
+                            const zone   = getZone(f.zone_name)
+                            const estMin = calcEstDuration(f.zone_name, f.distance_km ? Number(f.distance_km) : null)
+                            return (
+                              <div key={idx} className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 items-center py-2 border-b border-indigo-50 bg-indigo-50/30 rounded-lg px-1 mb-1">
+                                {/* Zone select */}
+                                <select value={f.zone_name}
+                                  onChange={e => updateDetailForm(sess.id, idx, 'zone_name', e.target.value)}
+                                  className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                                  style={{ color: zone?.color || '#374151' }}>
+                                  {ZONE_DEFINITIONS.map(z => (
+                                    <option key={z.name} value={z.name}>{z.name}</option>
+                                  ))}
+                                </select>
+                                {/* Pace preview */}
+                                <div className="text-[10px] text-center font-mono text-gray-500">
+                                  {zone ? `${secToMMSS(zone.pace_min_sec)}–${secToMMSS(zone.pace_max_sec)}` : '—'}
                                 </div>
+                                {/* Distance input */}
+                                <input type="number" step="0.1" value={f.distance_km}
+                                  onChange={e => updateDetailForm(sess.id, idx, 'distance_km', e.target.value)}
+                                  placeholder="km" className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-300" />
+                                {/* Est time preview */}
+                                <div className="text-[10px] text-center font-bold" style={{ color: zone?.color || '#6b7280' }}>
+                                  {estMin != null ? fmtDuration(estMin) : '—'}
+                                </div>
+                                {/* Remove row */}
+                                <button onClick={() => removeDetailForm(sess.id, idx)}
+                                  className="text-red-300 hover:text-red-500 text-xs text-center">✕</button>
+                              </div>
+                            )
+                          })}
+
+                          {/* Empty state */}
+                          {!(sess.details || []).length && !pendingForms.length && (
+                            <div className="text-center py-4 text-gray-400 text-xs">Belum ada detail sesi.</div>
+                          )}
+
+                          {/* Add detail row / save */}
+                          {canEdit && !isArchived && (
+                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                              <button onClick={() => initDetailForm(sess.id)}
+                                className="text-xs border border-dashed border-indigo-300 text-indigo-500 px-3 py-1.5 rounded-lg hover:bg-indigo-50 flex items-center gap-1">
+                                + Tambah Baris
+                              </button>
+                              {pendingForms.length > 0 && (
+                                <button onClick={() => saveDetails(sess)}
+                                  disabled={savingDetail === sess.id}
+                                  className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                                  {savingDetail === sess.id ? 'Menyimpan...' : '✓ Simpan Detail'}
+                                </button>
+                              )}
+                              {pendingForms.length > 0 && (
+                                <button onClick={() => setDetailForms(prev => { const n = { ...prev }; delete n[sess.id]; return n })}
+                                  className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+                                  Batal
+                                </button>
                               )}
                             </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </>
             )}
@@ -802,254 +776,43 @@ export default function ProgramPage() {
         </div>
       )}
 
-      {/* ── Week Modal ── */}
-      {weekModal.open && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-gsans text-lg text-indigo-700">{weekModal.editing ? 'Edit Minggu' : 'Tambah Minggu'}</h3>
-              <button onClick={() => setWeekModal({ open: false, editing: null })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Nomor Minggu *</div>
-                  <input type="number" value={weekForm.week_number} onChange={e => setWeekForm(f => ({ ...f, week_number: e.target.value }))}
-                    placeholder="1" min={1} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Nama Fase</div>
-                  <input value={weekForm.phase_name} onChange={e => setWeekForm(f => ({ ...f, phase_name: e.target.value }))}
-                    placeholder="cth. Base 1, Build 2..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal Mulai</div>
-                  <input type="date" value={weekForm.period_start} onChange={e => setWeekForm(f => ({ ...f, period_start: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal Selesai</div>
-                  <input type="date" value={weekForm.period_end} onChange={e => setWeekForm(f => ({ ...f, period_end: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Target Volume (km)</div>
-                  <input type="number" step="0.1" value={weekForm.volume_target_km} onChange={e => setWeekForm(f => ({ ...f, volume_target_km: e.target.value }))}
-                    placeholder="40" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Target Durasi</div>
-                  <input value={weekForm.duration_target} onChange={e => setWeekForm(f => ({ ...f, duration_target: e.target.value }))}
-                    placeholder="cth. 300 mnt" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">RWR Default</div>
-                  <input value={weekForm.rwr_default} onChange={e => setWeekForm(f => ({ ...f, rwr_default: e.target.value }))}
-                    placeholder="cth. 60:30" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Filosofi Minggu</div>
-                <input value={weekForm.philosophy} onChange={e => setWeekForm(f => ({ ...f, philosophy: e.target.value }))}
-                  placeholder="cth. Bangun aerobic base, easy dominan" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tujuan Minggu</div>
-                <input value={weekForm.goal} onChange={e => setWeekForm(f => ({ ...f, goal: e.target.value }))}
-                  placeholder="cth. Establish HR baseline, toleransi RWR" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
-            </div>
-            <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
-              <button onClick={() => setWeekModal({ open: false, editing: null })} className="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg hover:bg-gray-50">Batal</button>
-              <button onClick={saveWeek} disabled={saving} className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                {saving ? 'Menyimpan...' : 'Simpan'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Session Modal ── */}
       {sessionModal.open && (
         <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="p-5 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-gsans text-lg text-indigo-700">{sessionModal.editing ? 'Edit Sesi' : 'Tambah Sesi'}</h3>
-              <button onClick={() => setSessionModal({ open: false, editing: null, weekId: '' })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              <button onClick={() => setSessionModal({ open: false, editing: null })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="p-5 space-y-4">
-
-              {/* Rest toggle */}
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={sessionForm.is_rest} onChange={e => setSessionForm(f => ({ ...f, is_rest: e.target.checked }))} className="rounded" />
-                  <span className="text-sm text-gray-700">Rest Day 😴</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={sessionForm.is_key_session} onChange={e => setSessionForm(f => ({ ...f, is_key_session: e.target.checked }))} className="rounded" />
-                  <span className="text-sm text-gray-700">⭐ Key Session</span>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tipe Sesi</div>
-                  <select value={sessionForm.type} onChange={e => setSessionForm(f => ({ ...f, type: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                    {SESSION_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Label Sesi *</div>
-                  <input value={sessionForm.label} onChange={e => setSessionForm(f => ({ ...f, label: e.target.value }))}
-                    placeholder="cth. Easy RWR 8km, Long Run #1" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Hari</div>
-                  <select value={sessionForm.day} onChange={e => setSessionForm(f => ({ ...f, day: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                    <option value="">— Pilih —</option>
-                    {DAY_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal</div>
-                  <input type="date" value={sessionForm.session_date} onChange={e => setSessionForm(f => ({ ...f, session_date: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Urutan</div>
-                  <input type="number" value={sessionForm.sort_order} onChange={e => setSessionForm(f => ({ ...f, sort_order: e.target.value }))}
-                    placeholder="0" min={0} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-              </div>
-
-              {!sessionForm.is_rest && (
-                <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">Jarak (km)</div>
-                      <input type="number" step="0.1" value={sessionForm.distance_km} onChange={e => setSessionForm(f => ({ ...f, distance_km: e.target.value }))}
-                        placeholder="8.0" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">Durasi (mnt)</div>
-                      <input type="number" value={sessionForm.duration_min} onChange={e => setSessionForm(f => ({ ...f, duration_min: e.target.value }))}
-                        placeholder="60" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">HR Zone</div>
-                      <input value={sessionForm.hr_zone} onChange={e => setSessionForm(f => ({ ...f, hr_zone: e.target.value }))}
-                        placeholder="Z1-Z2" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">HR Target</div>
-                      <input value={sessionForm.hr_target} onChange={e => setSessionForm(f => ({ ...f, hr_target: e.target.value }))}
-                        placeholder="135-145 bpm" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">RWR Ratio</div>
-                      <input value={sessionForm.rwr_ratio} onChange={e => setSessionForm(f => ({ ...f, rwr_ratio: e.target.value }))}
-                        placeholder="60:30" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">Pace Run</div>
-                      <input value={sessionForm.pace_run} onChange={e => setSessionForm(f => ({ ...f, pace_run: e.target.value }))}
-                        placeholder="7:30/km" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">Pace Walk</div>
-                      <input value={sessionForm.pace_walk} onChange={e => setSessionForm(f => ({ ...f, pace_walk: e.target.value }))}
-                        placeholder="10:00/km" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                    </div>
-                  </div>
-
-                  {/* Structure */}
-                  <div className="border border-gray-100 rounded-xl p-4 space-y-3 bg-gray-50">
-                    <div className="text-xs font-bold text-gray-500 uppercase">Struktur Sesi</div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">🔥 Warm-Up <span className="text-gray-300 font-normal normal-case">(1 baris = 1 item)</span></div>
-                      <textarea value={sessionForm.warm_up} onChange={e => setSessionForm(f => ({ ...f, warm_up: e.target.value }))}
-                        placeholder={"4 min Jalan Cepat\n3 min Jog Ringan"} rows={3}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none bg-white" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">⚡ Main Set <span className="text-gray-300 font-normal normal-case">([Nama Block] lalu detail, pisah blok dgn baris kosong)</span></div>
-                      <textarea value={sessionForm.main_set} onChange={e => setSessionForm(f => ({ ...f, main_set: e.target.value }))}
-                        placeholder={"[Block A: RWR 60:30]\n60 detik Run\n30 detik Walk\n\n[Block B: Strides]\n4× 20 detik stride"} rows={5}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none bg-white" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">🧊 Cool-Down <span className="text-gray-300 font-normal normal-case">(1 baris = 1 item)</span></div>
-                      <textarea value={sessionForm.cool_down} onChange={e => setSessionForm(f => ({ ...f, cool_down: e.target.value }))}
-                        placeholder={"3 min Jog\n2 min Jalan\nStretching 5 mnt"} rows={3}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none bg-white" />
-                    </div>
-                  </div>
-
-                  {/* Guardrails & Notes */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">🚨 Guardrails <span className="text-gray-300 font-normal normal-case">(1 baris = 1 item)</span></div>
-                      <textarea value={sessionForm.guardrails} onChange={e => setSessionForm(f => ({ ...f, guardrails: e.target.value }))}
-                        placeholder={"Jika HR >155 bpm, turunkan pace\nStop jika nyeri lutut"} rows={3}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-medium text-gray-500 uppercase mb-1">📌 Catatan Penting <span className="text-gray-300 font-normal normal-case">(1 baris = 1 item)</span></div>
-                      <textarea value={sessionForm.important_notes} onChange={e => setSessionForm(f => ({ ...f, important_notes: e.target.value }))}
-                        placeholder={"Pre-run fueling: 1 pisang + air\nBawa gel untuk >60 mnt"} rows={3}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
-                    </div>
-                  </div>
-                </>
-              )}
-
               <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Catatan Coach</div>
-                <textarea value={sessionForm.coach_notes} onChange={e => setSessionForm(f => ({ ...f, coach_notes: e.target.value }))}
-                  placeholder="Catatan khusus dari coach untuk sesi ini..." rows={3}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal *</div>
+                <input type="date" value={sessionForm.session_date}
+                  onChange={e => setSessionForm(f => ({ ...f, session_date: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Jenis Program *</div>
+                <select value={sessionForm.program_type}
+                  onChange={e => setSessionForm(f => ({ ...f, program_type: e.target.value }))}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                  {PROGRAM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Catatan</div>
+                <textarea value={sessionForm.notes}
+                  onChange={e => setSessionForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Catatan tambahan untuk sesi ini..."
+                  rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
-              <button onClick={() => setSessionModal({ open: false, editing: null, weekId: '' })} className="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg hover:bg-gray-50">Batal</button>
-              <button onClick={saveSession} disabled={saving} className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+              <button onClick={() => setSessionModal({ open: false, editing: null })}
+                className="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg hover:bg-gray-50">Batal</button>
+              <button onClick={saveSession} disabled={saving}
+                className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
                 {saving ? 'Menyimpan...' : 'Simpan'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Coach Notes Modal ── */}
-      {notesModal.open && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-gsans text-lg text-indigo-700">Catatan Coach — {notesModal.session?.label}</h3>
-              <button onClick={() => setNotesModal({ open: false, session: null })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
-            </div>
-            <div className="p-5">
-              <textarea value={notesText} onChange={e => setNotesText(e.target.value)}
-                placeholder={"Tulis catatan coaching detail di sini...\nContoh:\n## Tujuan Sesi\n- HR guardrail: jika >155 stop\n- Focus: form dan ritme RWR"}
-                rows={10}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
-            </div>
-            <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
-              <button onClick={() => setNotesModal({ open: false, session: null })} className="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg hover:bg-gray-50">Batal</button>
-              <button onClick={saveNotes} disabled={saving} className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                {saving ? 'Menyimpan...' : 'Simpan Catatan'}
               </button>
             </div>
           </div>
