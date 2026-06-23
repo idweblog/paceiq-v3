@@ -408,22 +408,53 @@ export default function TreatmentPage() {
             )}
           </div>
 
-          {/* Severity tabs */}
+          {/* Severity tabs — dengan hover color sesuai masing-masing tab */}
           <div className="flex gap-2 flex-wrap">
             {(Object.entries(SEVERITY_CONFIG) as [Severity, typeof SEVERITY_CONFIG[Severity]][]).map(([key, sev]) => {
               const count = displayIssues.filter(i => i.severity === key).length
+              const isActive = severityTab === key
               return (
-                <button key={key} onClick={() => setSeverityTab(key)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all ${
-                    severityTab === key ? 'shadow-sm' : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
-                  }`}
-                  style={severityTab === key ? {
-                    backgroundColor: sev.headerBg, color: sev.headerText, borderColor: sev.headerBg
-                  } : {}}>
+                <button
+                  key={key}
+                  onClick={() => setSeverityTab(key)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border-2 transition-all"
+                  style={isActive ? {
+                    backgroundColor: sev.headerBg,
+                    color: sev.headerText,
+                    borderColor: sev.headerBg,
+                  } : {
+                    backgroundColor: 'white',
+                    color: '#6b7280',
+                    borderColor: '#e5e7eb',
+                  }}
+                  onMouseEnter={e => {
+                    if (!isActive) {
+                      const btn = e.currentTarget
+                      btn.style.backgroundColor = sev.headerBg + '18'
+                      btn.style.borderColor = sev.headerBg
+                      btn.style.color = sev.headerBg
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (!isActive) {
+                      const btn = e.currentTarget
+                      btn.style.backgroundColor = 'white'
+                      btn.style.borderColor = '#e5e7eb'
+                      btn.style.color = '#6b7280'
+                    }
+                  }}
+                >
                   {sev.icon} {sev.label}
-                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                    severityTab === key ? 'bg-white text-gray-800' : 'bg-gray-100 text-gray-500'
-                  }`}>{count}</span>
+                  {count > 0 && (
+                    <span
+                      className="text-xs px-1.5 py-0.5 rounded-full font-bold"
+                      style={isActive
+                        ? { backgroundColor: 'white', color: '#1f2937' }
+                        : { backgroundColor: '#f3f4f6', color: '#6b7280' }
+                      }>
+                      {count}
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -447,7 +478,6 @@ export default function TreatmentPage() {
                   return (
                     <div key={iss.id} className="bg-white rounded-xl shadow-sm overflow-hidden"
                       style={{ border: `2px solid ${sev.bodyBorder}` }}>
-                      {/* Accent bar tipis */}
                       <div className="h-1" style={{ backgroundColor: sev.headerBg }} />
                       {isEditing ? (
                         <div className="p-4">
@@ -456,7 +486,6 @@ export default function TreatmentPage() {
                         </div>
                       ) : (
                         <div className="p-4 space-y-3">
-                          {/* Top row: emoji + symptom + actions */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-start gap-2 min-w-0">
                               <span className="text-lg flex-shrink-0 mt-0.5">{sev.icon}</span>
@@ -484,14 +513,10 @@ export default function TreatmentPage() {
                               </div>
                             )}
                           </div>
-
-                          {/* Action */}
                           <div className="rounded-lg p-3 border border-gray-100 bg-gray-50">
                             <div className="text-xs font-medium text-gray-400 uppercase mb-1">⚡ Tindakan Segera</div>
                             <div className="text-sm text-gray-700 leading-relaxed">{iss.action}</div>
                           </div>
-
-                          {/* Decision detail */}
                           {iss.decision_detail && (
                             <div className="rounded-lg px-3 py-2 text-xs font-medium"
                               style={{ background: sev.bodyBg, border: `1px solid ${sev.bodyBorder}`, color: sev.bodyText }}>
@@ -514,7 +539,6 @@ export default function TreatmentPage() {
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {activeKey !== 'midsession' && (
         <div className="space-y-4">
-          {/* Panduan Format collapsed */}
           <details className="bg-white rounded-xl shadow-sm overflow-hidden group">
             <summary className="flex items-center justify-between px-5 py-3.5 cursor-pointer select-none list-none border-b border-gray-100 hover:bg-gray-50 transition-colors">
               <h2 className="font-gsans text-base text-indigo-700 uppercase">📖 Panduan Format</h2>
@@ -533,7 +557,6 @@ export default function TreatmentPage() {
             </div>
           </details>
 
-          {/* Content section */}
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100"
               style={{ borderLeftWidth: 4, borderLeftColor: '#4f46e5', borderLeftStyle: 'solid' }}>
