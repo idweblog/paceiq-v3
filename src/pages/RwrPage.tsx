@@ -1228,42 +1228,87 @@ export default function RwrPage() {
               const wp = parsePace(qcWalkPace)
               const rs = parseFloat(qcRunSec)
               const ws = parseFloat(qcWalkSec)
-              if (!rp || !wp || !rs || !ws || rp >= wp) return (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {['Blended Pace', 'HM (21.1 km)', 'FM (42.2 km)', '% Run'].map(l => (
-                    <div key={l} className={cardCls}>
-                      <p className={labelCls}>{l}</p>
-                      <p className="text-lg font-bold text-gray-300">—</p>
-                    </div>
-                  ))}
-                </div>
-              )
-              const distPerCycle = rs / rp + ws / wp
-              const cycleSec = rs + ws
-              const blended = cycleSec / distPerCycle
-              const runPct = (rs / cycleSec * 100).toFixed(1)
-              const hmFinish = (21.1 / distPerCycle) * cycleSec
-              const fmFinish = (42.2 / distPerCycle) * cycleSec
+              const invalid = !rp || !wp || !rs || !ws || rp >= wp
+              const distPerCycle = invalid ? 0 : rs / rp + ws / wp
+              const cycleSec = invalid ? 0 : rs + ws
+              const blended = invalid ? 0 : cycleSec / distPerCycle
+              const runPct = invalid ? 0 : rs / cycleSec * 100
+
+              const distances = [
+                { label: '5K', km: 5.0 },
+                { label: '10K', km: 10.0 },
+                { label: 'HM', km: 21.0975 },
+                { label: 'FM', km: 42.195 },
+                { label: `Custom (${qcCustomDist || '—'} km)`, km: parseFloat(qcCustomDist) || 0 },
+              ]
+
               return (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="bg-indigo-50 rounded-lg p-3">
-                    <p className={labelCls}>Blended Pace</p>
-                    <p className="text-xl font-bold text-indigo-700">{secToMMSS(blended)}<span className="text-sm font-normal">/km</span></p>
-                  </div>
-                  <div className={cardCls}>
-                    <p className={labelCls}>HM (21.1 km)</p>
-                    <p className="text-xl font-bold text-gray-800">{secToHMMSS(hmFinish)}</p>
-                  </div>
-                  <div className={cardCls}>
-                    <p className={labelCls}>FM (42.2 km)</p>
-                    <p className="text-xl font-bold text-gray-800">{secToHMMSS(fmFinish)}</p>
-                  </div>
-                  <div className={cardCls}>
-                    <p className={labelCls}>% Run / Walk</p>
-                    <p className="text-sm font-bold text-gray-800">{runPct}% / {(100 - parseFloat(runPct)).toFixed(1)}%</p>
-                    <div className="h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
-                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${runPct}%` }} />
+                <div className="space-y-4">
+                  {/* Blended pace + % run/walk */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="bg-indigo-50 rounded-lg p-3">
+                      <p className={labelCls}>Blended Pace</p>
+                      <p className="text-2xl font-bold text-indigo-700">
+                        {invalid ? '—' : secToMMSS(blended)}
+                        {!invalid && <span className="text-sm font-normal">/km</span>}
+                      </p>
                     </div>
+                    <div className={cardCls}>
+                      <p className={labelCls}>% Run / Walk</p>
+                      <p className="text-sm font-bold text-gray-800">
+                        {invalid ? '—' : `${runPct.toFixed(1)}% / ${(100 - runPct).toFixed(1)}%`}
+                      </p>
+                      <div className="h-2 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                        <div className="h-full bg-indigo-500 rounded-full transition-all"
+                          style={{ width: invalid ? '0%' : `${runPct}%` }} />
+                      </div>
+                    </div>
+                    <div className="flex items-end">
+                      <div className="w-full">
+                        <label className={labelCls}>Jarak Custom (km)</label>
+                        <input type="number" step="0.1" value={qcCustomDist}
+                          onChange={e => setQcCustomDist(e.target.value)}
+                          className={inputCls} placeholder="30" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Tabel proyeksi per jarak */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-100">
+                          {['Jarak', 'Finish Time', 'Cycles', 'Total Lari', 'Total Jalan'].map(h => (
+                            <th key={h} className="text-left text-xs font-medium text-gray-400 uppercase pb-2 pr-4">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {distances.filter(d => d.km > 0).map(d => {
+                          const finish = invalid ? null : (d.km / distPerCycle) * cycleSec
+                          const cycles = invalid ? null : Math.ceil(d.km / distPerCycle)
+                          const totalRun = finish ? finish * (rs / cycleSec) : null
+                          const totalWalk = finish ? finish * (ws / cycleSec) : null
+                          return (
+                            <tr key={d.label} className="border-b border-gray-50 hover:bg-gray-50">
+                              <td className="py-2 pr-4 font-medium text-gray-700">{d.label}</td>
+                              <td className="py-2 pr-4 font-bold text-indigo-700">
+                                {finish ? secToHMMSS(finish) : '—'}
+                              </td>
+                              <td className="py-2 pr-4 text-gray-700">
+                                {cycles ? `${cycles}×` : '—'}
+                              </td>
+                              <td className="py-2 pr-4 text-gray-600">
+                                {totalRun ? secToHMMSS(totalRun) : '—'}
+                              </td>
+                              <td className="py-2 pr-4 text-gray-600">
+                                {totalWalk ? secToHMMSS(totalWalk) : '—'}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )

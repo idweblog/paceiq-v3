@@ -1092,6 +1092,141 @@ export type Database = {
         }
         Relationships: []
       }
+      rwr_history: {
+        Row: {
+          athlete_id: string
+          blended_pace_sec: number | null
+          calc_date: string
+          created_at: string | null
+          distance_km: number | null
+          id: string
+          label: string | null
+          mode: string
+          notes: string | null
+          proj_finish_sec: number | null
+          run_pace_sec: number | null
+          run_sec: number | null
+          target_finish_sec: number | null
+          walk_pace_sec: number | null
+          walk_sec: number | null
+        }
+        Insert: {
+          athlete_id: string
+          blended_pace_sec?: number | null
+          calc_date?: string
+          created_at?: string | null
+          distance_km?: number | null
+          id?: string
+          label?: string | null
+          mode: string
+          notes?: string | null
+          proj_finish_sec?: number | null
+          run_pace_sec?: number | null
+          run_sec?: number | null
+          target_finish_sec?: number | null
+          walk_pace_sec?: number | null
+          walk_sec?: number | null
+        }
+        Update: {
+          athlete_id?: string
+          blended_pace_sec?: number | null
+          calc_date?: string
+          created_at?: string | null
+          distance_km?: number | null
+          id?: string
+          label?: string | null
+          mode?: string
+          notes?: string | null
+          proj_finish_sec?: number | null
+          run_pace_sec?: number | null
+          run_sec?: number | null
+          target_finish_sec?: number | null
+          walk_pace_sec?: number | null
+          walk_sec?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rwr_history_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rwr_notes: {
+        Row: {
+          athlete_id: string
+          content: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          athlete_id: string
+          content?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          athlete_id?: string
+          content?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rwr_notes_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: true
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rwr_ref_rows: {
+        Row: {
+          aplikasi: string | null
+          athlete_id: string
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          pace_label: string
+          run_sec: number
+          sort_order: number | null
+          walk_sec: number
+        }
+        Insert: {
+          aplikasi?: string | null
+          athlete_id: string
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          pace_label: string
+          run_sec?: number
+          sort_order?: number | null
+          walk_sec?: number
+        }
+        Update: {
+          aplikasi?: string | null
+          athlete_id?: string
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          pace_label?: string
+          run_sec?: number
+          sort_order?: number | null
+          walk_sec?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rwr_ref_rows_athlete_id_fkey"
+            columns: ["athlete_id"]
+            isOneToOne: false
+            referencedRelation: "athletes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       training_load: {
         Row: {
           acwr: number | null
@@ -1451,6 +1586,10 @@ export type Database = {
       get_my_group_athlete_ids: { Args: never; Returns: string[] }
       get_registration_policy: { Args: never; Returns: string }
       has_role: { Args: { role_name: string }; Returns: boolean }
+      is_my_group_athlete: {
+        Args: { target_athlete_id: string }
+        Returns: boolean
+      }
       register_athlete:
         | {
             Args: { p_auth_id: string; p_email: string; p_name: string }
