@@ -1,95 +1,213 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 interface Race {
   id: string
   name: string
   event_date: string
   status: string
-  city?: string
 }
 
-interface Phase {
+interface ProgramSession {
   id: string
-  race_id: string
   athlete_id: string
-  name: string
-  emoji: string
-  color: string
-  focus: string
-  week_start: number
-  week_end: number
-  date_start: string
-  date_end: string
+  race_id: string
+  session_date: string
+  program_type: string
+  notes: string | null
+  details?: SessionDetail[]
+}
+
+interface SessionDetail {
+  id: string
+  session_id: string
+  athlete_id: string
   sort_order: number
+  zone_name: string
+  distance_km: number | null
+  est_duration_min: number | null
 }
 
-interface Milestone {
-  id: string
-  race_id: string
-  athlete_id: string
-  phase_id: string | null
+interface PaceZone {
+  name: string
   label: string
-  icon: string
-  type: 'race' | 'test' | 'assessment'
-  milestone_date: string
-  week_number: number | null
-  description: string | null
+  pct_min: number
+  pct_max: number
+  pace_min_sec: number // sec/km
+  pace_max_sec: number // sec/km
+  color: string
 }
 
-interface PhaseForm {
-  name: string; emoji: string; color: string; focus: string
-  week_start: string; week_end: string; date_start: string; date_end: string; sort_order: string
+interface WeekGroup {
+  week_number: number
+  period_start: string // Monday
+  period_end: string   // Sunday
+  sessions: ProgramSession[]
+  total_km: number
 }
 
-interface MilestoneForm {
-  label: string; icon: string; type: 'race' | 'test' | 'assessment'
-  milestone_date: string; week_number: string; phase_id: string; description: string
+interface SessionForm {
+  session_date: string
+  program_type: string
+  notes: string
 }
 
-const PHASE_BLANK: PhaseForm = { name: '', emoji: '🏃', color: '#6366f1', focus: '', week_start: '', week_end: '', date_start: '', date_end: '', sort_order: '' }
-const MS_BLANK: MilestoneForm = { label: '', icon: '📋', type: 'assessment', milestone_date: '', week_number: '', phase_id: '', description: '' }
-
-const EMOJI_OPTIONS = ['🏃','🔥','💪','🌱','⚡','🏆','🧪','📋','🎯','🗓️','🔁','🏅','🛤️','🧘','🚀','⛽','🧱','🔬','📈','🏁']
-const ICON_OPTIONS  = ['📋','⚡','🏆','🧪','🎯','🔥','💪','✅','🗓️','📈','🏅','🔁','🏁','🧘','🌟','📌','🔔','🎽','🩺','🥇']
-const COLOR_OPTIONS = ['#6366f1','#f97316','#22c55e','#3b82f6','#eab308','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6']
-
-function today() { return new Date().toISOString().slice(0, 10) }
-function daysBetween(a: string, b: string) { return Math.ceil((new Date(b).getTime() - new Date(a).getTime()) / 86400000) }
-function phaseStatus(p: Phase): 'past' | 'active' | 'upcoming' {
-  const t = today()
-  if (t > p.date_end) return 'past'
-  if (t >= p.date_start && t <= p.date_end) return 'active'
-  return 'upcoming'
+interface DetailForm {
+  zone_name: string
+  distance_km: string
 }
-function msStatus(m: Milestone): 'past' | 'today' | 'upcoming' {
-  const t = today()
-  if (m.milestone_date < t) return 'past'
-  if (m.milestone_date === t) return 'today'
-  return 'upcoming'
-}
-function fmtDate(d: string) { return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) }
 
-export default function RoadmapPage() {
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const PROGRAM_TYPES = [
+  'EASY RUN (EZ)',
+  'LONGRUN (LR)',
+  'MEDIUM RUN (MD-R)',
+  'FARTLEK (SPEED PLAY)',
+  'SUB-TEMPO (SPEED)',
+  'TEMPO RUN (SPEED)',
+  'SUB THRESHOLD RUN (SPEED)',
+  'THRESHOLD RUN (SPEED)',
+  'SUPRA-THRESHOLD RUN (SPEED)',
+  'VCR TEST / TIME TRIAL / RACE DAY',
+  'SPESIFIC LONGRUN (S-LR)',
+  'MIX PACE (SPEED)',
+  'STRENGTH - (SENIN)',
+  'RUNNING DRILLS - (Kamis)',
+  'ST / RD (Mandiri)',
+]
+
+// 9 zona VCR — pct range dari locked algorithm
+const ZONE_DEFINITIONS = [
+  { name: 'Recovery',      label: 'Recovery',      pct_min: 0.64, pct_max: 0.68, color: '#94a3b8' },
+  { name: 'Long Run',      label: 'Long Run',       pct_min: 0.69, pct_max: 0.71, color: '#60a5fa' },
+  { name: 'Easy',          label: 'Easy',           pct_min: 0.74, pct_max: 0.76, color: '#34d399' },
+  { name: 'Moderate',      label: 'Moderate',       pct_min: 0.83, pct_max: 0.85, color: '#a3e635' },
+  { name: 'Tempo',         label: 'Tempo',          pct_min: 0.88, pct_max: 0.90, color: '#fbbf24' },
+  { name: 'Threshold',     label: 'Threshold',      pct_min: 0.92, pct_max: 0.94, color: '#f97316' },
+  { name: 'Aerobic Power', label: 'Aerobic Power',  pct_min: 1.00, pct_max: 1.02, color: '#ef4444' },
+  { name: 'VO2Max',        label: 'VO₂Max',         pct_min: 1.03, pct_max: 1.05, color: '#dc2626' },
+  { name: 'Anaerob',       label: 'Anaerob',        pct_min: 1.09, pct_max: 1.15, color: '#7c3aed' },
+]
+
+const SESSION_BLANK: SessionForm = { session_date: '', program_type: 'EASY RUN (EZ)', notes: '' }
+const DETAIL_BLANK: DetailForm   = { zone_name: 'Easy', distance_km: '' }
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtDate(d: string | null) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function fmtDateShort(d: string) {
+  return new Date(d).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
+function secToMMSS(sec: number): string {
+  const m = Math.floor(sec / 60)
+  const s = Math.round(sec % 60)
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
+function fmtDuration(min: number): string {
+  if (min < 60) return `${Math.round(min)} mnt`
+  const h = Math.floor(min / 60)
+  const m = Math.round(min % 60)
+  return m > 0 ? `${h}j ${m}mnt` : `${h}j`
+}
+
+// Get Monday of the week containing date d
+function getMondayOf(d: Date): Date {
+  const day = d.getDay() // 0=Sun
+  const diff = (day === 0 ? -6 : 1 - day)
+  const mon = new Date(d)
+  mon.setDate(d.getDate() + diff)
+  mon.setHours(0, 0, 0, 0)
+  return mon
+}
+
+function toYMD(d: Date): string {
+  return d.toISOString().slice(0, 10)
+}
+
+// Calculate week number from program start date (first Monday on or before first session)
+function calcWeekNumber(sessionDate: string, programStartMonday: string): number {
+  const sess = new Date(sessionDate).getTime()
+  const start = new Date(programStartMonday).getTime()
+  return Math.floor((sess - start) / (7 * 86400000)) + 1
+}
+
+// Group sessions into weeks
+function groupByWeek(sessions: ProgramSession[]): WeekGroup[] {
+  if (!sessions.length) return []
+
+  // Find earliest session date → determine program start Monday
+  const sorted = [...sessions].sort((a, b) => a.session_date.localeCompare(b.session_date))
+  const firstMonday = toYMD(getMondayOf(new Date(sorted[0].session_date)))
+
+  const weekMap: Map<number, WeekGroup> = new Map()
+
+  sessions.forEach(s => {
+    const wn = calcWeekNumber(s.session_date, firstMonday)
+    if (!weekMap.has(wn)) {
+      const mon = new Date(firstMonday)
+      mon.setDate(mon.getDate() + (wn - 1) * 7)
+      const sun = new Date(mon)
+      sun.setDate(mon.getDate() + 6)
+      weekMap.set(wn, {
+        week_number: wn,
+        period_start: toYMD(mon),
+        period_end: toYMD(sun),
+        sessions: [],
+        total_km: 0
+      })
+    }
+    weekMap.get(wn)!.sessions.push(s)
+  })
+
+  // Sort sessions within each week by date
+  weekMap.forEach(wg => {
+    wg.sessions.sort((a, b) => a.session_date.localeCompare(b.session_date))
+    wg.total_km = wg.sessions.reduce((sum, s) => {
+      const detailKm = (s.details || []).reduce((ds, d) => ds + (d.distance_km || 0), 0)
+      return sum + detailKm
+    }, 0)
+  })
+
+  return Array.from(weekMap.values()).sort((a, b) => a.week_number - b.week_number)
+}
+
+// ── Main Component ────────────────────────────────────────────────────────────
+
+export default function ProgramPage() {
   const [athleteId, setAthleteId]   = useState<string | null>(null)
   const [roles, setRoles]           = useState<string[]>([])
   const [races, setRaces]           = useState<Race[]>([])
   const [selectedRaceId, setSelectedRaceId] = useState<string>('')
-  const [phases, setPhases]         = useState<Phase[]>([])
-  const [milestones, setMilestones] = useState<Milestone[]>([])
+  const [sessions, setSessions]     = useState<ProgramSession[]>([])
+  const [paceZones, setPaceZones]   = useState<PaceZone[]>([])
   const [loading, setLoading]       = useState(true)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
-  const [phaseModal, setPhaseModal] = useState<{ open: boolean; editing: Phase | null }>({ open: false, editing: null })
-  const [msModal, setMsModal]       = useState<{ open: boolean; editing: Milestone | null }>({ open: false, editing: null })
-  const [phaseForm, setPhaseForm]   = useState<PhaseForm>(PHASE_BLANK)
-  const [msForm, setMsForm]         = useState<MilestoneForm>(MS_BLANK)
-  const [saving, setSaving]         = useState(false)
-  const [attachLoading, setAttachLoading] = useState(false)
-  const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const canEdit = roles.includes('coach') || roles.includes('admin')
-  const selectedRace = races.find(r => r.id === selectedRaceId)
-  const isArchived = selectedRace ? selectedRace.status === 'done' : false
+  // Selected week for detail view
+  const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
+
+  // Session modal
+  const [sessionModal, setSessionModal] = useState<{ open: boolean; editing: ProgramSession | null }>({ open: false, editing: null })
+  const [sessionForm, setSessionForm]   = useState<SessionForm>(SESSION_BLANK)
+
+  // Detail forms (inline per session)
+  const [detailForms, setDetailForms] = useState<Record<string, DetailForm[]>>({})
+  const [savingDetail, setSavingDetail] = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
+
+  const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const canEdit  = roles.includes('coach') || roles.includes('admin')
+  const selectedRace = races.find(r => r.id === selectedRaceId) || null
+  const isArchived   = selectedRace?.status === 'done'
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -97,6 +215,7 @@ export default function RoadmapPage() {
     toastRef.current = setTimeout(() => setToast(null), 3000)
   }
 
+  // ── Init ──
   useEffect(() => {
     async function init() {
       setLoading(true)
@@ -114,8 +233,9 @@ export default function RoadmapPage() {
         setRoles((roleNames || []).map((r: any) => r.name))
       }
 
+      // Load races
       const { data: raceRows } = await (supabase as any)
-        .from('races').select('id,name,event_date,status,city')
+        .from('races').select('id,name,event_date,status')
         .eq('athlete_id', ath.id)
         .order('event_date', { ascending: true })
       const raceList: Race[] = raceRows || []
@@ -126,622 +246,572 @@ export default function RoadmapPage() {
       const auto        = raceA || firstActive || raceList[0]
       if (auto) setSelectedRaceId(auto.id)
 
+      // Load VCR from latest TT
+      await loadPaceZones(ath.id)
+
       setLoading(false)
     }
     init()
   }, [])
 
-  useEffect(() => {
-    if (!selectedRaceId) { setPhases([]); setMilestones([]); return }
-    loadData(selectedRaceId)
-  }, [selectedRaceId])
+  // ── Load pace zones from VCR ──
+  async function loadPaceZones(athId: string) {
+    const { data: tt } = await (supabase as any)
+      .from('tt_history').select('distance_km,finish_time_sec')
+      .eq('athlete_id', athId)
+      .order('test_date', { ascending: false })
+      .limit(1)
+      .single()
 
-  async function loadData(raceId: string) {
-    const [{ data: ph }, { data: ms }] = await Promise.all([
-      (supabase as any).from('program_phases').select('*').eq('race_id', raceId).order('sort_order'),
-      (supabase as any).from('program_milestones').select('*').eq('race_id', raceId).order('milestone_date')
-    ])
-    setPhases(ph || [])
-    setMilestones(ms || [])
+    // VCR = distance_km * 1000 / finish_time_sec
+    const vcr: number = (tt?.distance_km && tt?.finish_time_sec)
+      ? (tt.distance_km * 1000) / tt.finish_time_sec
+      : 0
+    if (!vcr) { setPaceZones([]); return }
+
+    // VCR = distance_km * 1000 / finish_time_sec → pace_sec_per_km = 1000 / vcr_pct
+    const zones: PaceZone[] = ZONE_DEFINITIONS.map(z => {
+      const pace_min_sec = 1000 / (vcr * z.pct_max) // faster end
+      const pace_max_sec = 1000 / (vcr * z.pct_min) // slower end
+      return { ...z, pace_min_sec, pace_max_sec }
+    })
+    setPaceZones(zones)
   }
 
-  async function handleAttach() {
-    if (!selectedRaceId || !athleteId) return
-    setAttachLoading(true)
-    try {
-      const { data: weeks } = await supabase.from('program_weeks').select('*').eq('athlete_id', athleteId).order('week_number' as any)
-      if (!weeks || weeks.length === 0) { showToast('Belum ada Program Detail untuk di-attach', false); return }
+  // ── Load sessions when race changes ──
+  useEffect(() => {
+    if (!selectedRaceId || !athleteId) { setSessions([]); return }
+    loadSessions(selectedRaceId, athleteId)
+  }, [selectedRaceId, athleteId])
 
-      const phaseMap: Record<string, { weeks: any[] }> = {}
-      weeks.forEach((w: any) => {
-        const key = w.phase_name || `Fase ${w.week_number}`
-        if (!phaseMap[key]) phaseMap[key] = { weeks: [] }
-        phaseMap[key].weeks.push(w)
+  async function loadSessions(raceId: string, athId: string) {
+    const { data: sessRows } = await (supabase as any)
+      .from('program_sessions').select('*')
+      .eq('race_id', raceId)
+      .eq('athlete_id', athId)
+      .order('session_date')
+
+    const sessList: ProgramSession[] = sessRows || []
+
+    // Load details for all sessions in one query
+    if (sessList.length) {
+      const ids = sessList.map(s => s.id)
+      const { data: detailRows } = await (supabase as any)
+        .from('program_session_details').select('*')
+        .in('session_id', ids)
+        .order('sort_order')
+
+      const detailMap: Record<string, SessionDetail[]> = {}
+      ;(detailRows || []).forEach((d: SessionDetail) => {
+        if (!detailMap[d.session_id]) detailMap[d.session_id] = []
+        detailMap[d.session_id].push(d)
       })
 
-      const phaseColors = ['#6366f1','#f97316','#22c55e','#3b82f6','#eab308','#ef4444','#8b5cf6','#06b6d4']
-      const order = phases.length ? Math.max(...phases.map(p => p.sort_order)) + 1 : 0
+      sessList.forEach(s => { s.details = detailMap[s.id] || [] })
+    }
 
-      const inserts = Object.entries(phaseMap).map(([name, val], i) => {
-        const ws       = val.weeks
-        const weekNums = ws.map((w: any) => w.week_number).sort((a: number, b: number) => a - b)
-        const dates    = ws.map((w: any) => ({ s: w.period_start, e: w.period_end })).filter((d: any) => d.s && d.e)
+    setSessions(sessList)
+
+    // Auto-select current week
+    const weeks = groupByWeek(sessList)
+    if (weeks.length) {
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const current  = weeks.find(w => todayStr >= w.period_start && todayStr <= w.period_end)
+      const upcoming = weeks.find(w => w.period_end >= todayStr)
+      setSelectedWeek((current || upcoming || weeks[0]).week_number)
+    }
+  }
+
+  // ── Pace zone lookup ──
+  function getZone(zoneName: string): PaceZone | null {
+    return paceZones.find(z => z.name === zoneName) || null
+  }
+
+  function calcEstDuration(zoneName: string, distKm: number | null): number | null {
+    if (!distKm) return null
+    const zone = getZone(zoneName)
+    if (!zone) return null
+    const avgPaceSec = (zone.pace_min_sec + zone.pace_max_sec) / 2
+    return (avgPaceSec * distKm) / 60 // minutes
+  }
+
+  // ── Session CRUD ──
+  function openSessionModal(editing: ProgramSession | null) {
+    if (editing) {
+      setSessionForm({ session_date: editing.session_date, program_type: editing.program_type, notes: editing.notes || '' })
+    } else {
+      // Default date = today
+      setSessionForm({ ...SESSION_BLANK, session_date: new Date().toISOString().slice(0, 10) })
+    }
+    setSessionModal({ open: true, editing })
+  }
+
+  async function saveSession() {
+    if (!selectedRaceId || !athleteId) return
+    if (!sessionForm.session_date) { showToast('Tanggal wajib diisi', false); return }
+    setSaving(true)
+    const payload = {
+      athlete_id: athleteId,
+      race_id: selectedRaceId,
+      session_date: sessionForm.session_date,
+      program_type: sessionForm.program_type,
+      notes: sessionForm.notes || null
+    }
+    try {
+      if (sessionModal.editing) {
+        await (supabase as any).from('program_sessions').update(payload).eq('id', sessionModal.editing.id)
+        showToast('Sesi diperbarui')
+      } else {
+        await (supabase as any).from('program_sessions').insert(payload)
+        showToast('Sesi ditambahkan')
+      }
+      setSessionModal({ open: false, editing: null })
+      await loadSessions(selectedRaceId, athleteId)
+    } catch (e: any) {
+      showToast('Gagal menyimpan: ' + e.message, false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function deleteSession(id: string) {
+    if (!confirm('Hapus sesi ini beserta semua detailnya?')) return
+    await (supabase as any).from('program_sessions').delete().eq('id', id)
+    await loadSessions(selectedRaceId, athleteId!)
+    showToast('Sesi dihapus')
+  }
+
+  // ── Detail CRUD ──
+  function initDetailForm(sessionId: string) {
+    setDetailForms(prev => ({ ...prev, [sessionId]: [...(prev[sessionId] || []), { ...DETAIL_BLANK }] }))
+  }
+
+  function updateDetailForm(sessionId: string, idx: number, field: keyof DetailForm, value: string) {
+    setDetailForms(prev => {
+      const arr = [...(prev[sessionId] || [])]
+      arr[idx] = { ...arr[idx], [field]: value }
+      return { ...prev, [sessionId]: arr }
+    })
+  }
+
+  function removeDetailForm(sessionId: string, idx: number) {
+    setDetailForms(prev => {
+      const arr = [...(prev[sessionId] || [])]
+      arr.splice(idx, 1)
+      return { ...prev, [sessionId]: arr }
+    })
+  }
+
+  async function saveDetails(session: ProgramSession) {
+    if (!athleteId) return
+    const forms = detailForms[session.id] || []
+    if (!forms.length) return
+
+    setSavingDetail(session.id)
+    try {
+      const existingCount = session.details?.length || 0
+      const inserts = forms.map((f, i) => {
+        const estMin = calcEstDuration(f.zone_name, f.distance_km ? Number(f.distance_km) : null)
         return {
-          race_id: selectedRaceId, athlete_id: athleteId,
-          name, emoji: '🏃', color: phaseColors[i % phaseColors.length], focus: '',
-          week_start: weekNums[0] || 1, week_end: weekNums[weekNums.length - 1] || 1,
-          date_start: dates.length ? dates[0].s : today(),
-          date_end: dates.length ? dates[dates.length - 1].e : today(),
-          sort_order: order + i
+          session_id: session.id,
+          athlete_id: athleteId,
+          sort_order: existingCount + i,
+          zone_name: f.zone_name,
+          distance_km: f.distance_km ? Number(f.distance_km) : null,
+          est_duration_min: estMin
         }
       })
-
-      await (supabase as any).from('program_phases').insert(inserts)
-      await loadData(selectedRaceId)
-      showToast(`${inserts.length} fase berhasil di-generate dari Program Detail`)
+      await (supabase as any).from('program_session_details').insert(inserts)
+      setDetailForms(prev => { const n = { ...prev }; delete n[session.id]; return n })
+      await loadSessions(selectedRaceId, athleteId)
+      showToast('Detail disimpan')
     } catch (e: any) {
-      showToast('Gagal attach: ' + e.message, false)
+      showToast('Gagal: ' + e.message, false)
     } finally {
-      setAttachLoading(false)
+      setSavingDetail(null)
     }
   }
 
-  function openPhaseModal(editing: Phase | null) {
-    if (editing) {
-      setPhaseForm({ name: editing.name, emoji: editing.emoji, color: editing.color, focus: editing.focus || '', week_start: String(editing.week_start), week_end: String(editing.week_end), date_start: editing.date_start, date_end: editing.date_end, sort_order: String(editing.sort_order) })
-    } else {
-      const nextOrder = phases.length ? Math.max(...phases.map(p => p.sort_order)) + 1 : 0
-      setPhaseForm({ ...PHASE_BLANK, sort_order: String(nextOrder) })
-    }
-    setPhaseModal({ open: true, editing })
+  async function deleteDetail(detailId: string) {
+    await (supabase as any).from('program_session_details').delete().eq('id', detailId)
+    await loadSessions(selectedRaceId, athleteId!)
+    showToast('Detail dihapus')
   }
 
-  async function savePhase() {
-    if (!selectedRaceId || !athleteId) return
-    if (!phaseForm.name || !phaseForm.date_start || !phaseForm.date_end) { showToast('Nama, tanggal mulai, dan tanggal selesai wajib diisi', false); return }
-    setSaving(true)
-    const payload = { race_id: selectedRaceId, athlete_id: athleteId, name: phaseForm.name, emoji: phaseForm.emoji, color: phaseForm.color, focus: phaseForm.focus, week_start: Number(phaseForm.week_start) || 1, week_end: Number(phaseForm.week_end) || 1, date_start: phaseForm.date_start, date_end: phaseForm.date_end, sort_order: Number(phaseForm.sort_order) || 0 }
-    try {
-      if (phaseModal.editing) {
-        await (supabase as any).from('program_phases').update(payload).eq('id', phaseModal.editing.id)
-        showToast('Fase diperbarui')
-      } else {
-        await (supabase as any).from('program_phases').insert(payload)
-        showToast('Fase ditambahkan')
-      }
-      setPhaseModal({ open: false, editing: null })
-      await loadData(selectedRaceId)
-    } catch (e: any) {
-      showToast('Gagal menyimpan: ' + e.message, false)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function deletePhase(id: string) {
-    if (!confirm('Hapus fase ini? Milestone yang terkait akan terlepas.')) return
-    await (supabase as any).from('program_phases').delete().eq('id', id)
-    await loadData(selectedRaceId)
-    showToast('Fase dihapus')
-  }
-
-  function openMsModal(editing: Milestone | null) {
-    if (editing) {
-      setMsForm({ label: editing.label, icon: editing.icon, type: editing.type, milestone_date: editing.milestone_date, week_number: editing.week_number != null ? String(editing.week_number) : '', phase_id: editing.phase_id || '', description: editing.description || '' })
-    } else {
-      setMsForm(MS_BLANK)
-    }
-    setMsModal({ open: true, editing })
-  }
-
-  async function saveMilestone() {
-    if (!selectedRaceId || !athleteId) return
-    if (!msForm.label || !msForm.milestone_date) { showToast('Label dan tanggal wajib diisi', false); return }
-    setSaving(true)
-    const payload = { race_id: selectedRaceId, athlete_id: athleteId, phase_id: msForm.phase_id || null, label: msForm.label, icon: msForm.icon, type: msForm.type, milestone_date: msForm.milestone_date, week_number: msForm.week_number ? Number(msForm.week_number) : null, description: msForm.description || null }
-    try {
-      if (msModal.editing) {
-        await (supabase as any).from('program_milestones').update(payload).eq('id', msModal.editing.id)
-        showToast('Milestone diperbarui')
-      } else {
-        await (supabase as any).from('program_milestones').insert(payload)
-        showToast('Milestone ditambahkan')
-      }
-      setMsModal({ open: false, editing: null })
-      await loadData(selectedRaceId)
-    } catch (e: any) {
-      showToast('Gagal menyimpan: ' + e.message, false)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function deleteMilestone(id: string) {
-    if (!confirm('Hapus milestone ini?')) return
-    await (supabase as any).from('program_milestones').delete().eq('id', id)
-    await loadData(selectedRaceId)
-    showToast('Milestone dihapus')
-  }
-
-  function ganttData() {
-    if (!phases.length) return null
-    const allDates = phases.flatMap(p => [p.date_start, p.date_end]).sort()
-    const minDate  = new Date(allDates[0])
-    const maxDate  = new Date(allDates[allDates.length - 1])
-    const totalMs  = maxDate.getTime() - minDate.getTime() || 1
-    return { minDate, maxDate, totalMs }
-  }
-
-  function ganttPct(date: string, gd: { minDate: Date; totalMs: number }) {
-    return ((new Date(date).getTime() - gd.minDate.getTime()) / gd.totalMs) * 100
-  }
-
-  function todayPct(gd: { minDate: Date; maxDate: Date; totalMs: number }) {
-    const t = new Date(today()).getTime()
-    if (t < gd.minDate.getTime()) return -1
-    if (t > gd.maxDate.getTime()) return 101
-    return ((t - gd.minDate.getTime()) / gd.totalMs) * 100
-  }
-
-  function programProgress() {
-    if (!phases.length) return 0
-    const start = phases[0].date_start
-    const end   = phases[phases.length - 1].date_end
-    const t     = today()
-    if (t <= start) return 0
-    if (t >= end)   return 100
-    const elapsed = new Date(t).getTime() - new Date(start).getTime()
-    const total   = new Date(end).getTime() - new Date(start).getTime()
-    return Math.round((elapsed / total) * 100)
-  }
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (loading) return <div className="flex items-center justify-center h-64 text-gray-400 text-sm">Memuat...</div>
 
-  const gd       = ganttData()
-  const todayP   = gd ? todayPct(gd) : -1
-  const progress = programProgress()
-  const raceA    = races.find(r => r.status === 'A')
-  const daysToRaceA = raceA ? daysBetween(today(), raceA.event_date) : null
+  const weeks     = groupByWeek(sessions)
+  const activeWk  = weeks.find(w => w.week_number === selectedWeek) || null
+  const todayStr  = new Date().toISOString().slice(0, 10)
 
   return (
     <div className="max-w-[1400px] mx-auto px-4 py-6 space-y-6">
 
+      {/* Toast */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-white text-sm font-medium ${toast.ok ? 'bg-gray-800' : 'bg-red-600'}`}>
           {toast.msg}
         </div>
       )}
 
-      {/* Header */}
+      {/* ── Header ── */}
       <div className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Roadmap & Timeline</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Fase, milestone, dan visualisasi program per race</p>
+            <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Program Detail</h1>
+            <p className="text-xs text-gray-400 mt-0.5">Rencana latihan harian per race</p>
           </div>
-          <select value={selectedRaceId} onChange={e => setSelectedRaceId(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
-            {races.length === 0 && <option value="">Belum ada race</option>}
-            {races.map(r => (
-              <option key={r.id} value={r.id}>
-                {r.status === 'A' ? '🏆 ' : r.status === 'B' ? '🎯 ' : r.status === 'done' ? '✅ ' : '📅 '}
-                {r.name} · {fmtDate(r.event_date)}{r.status === 'done' ? ' (Arsip)' : ''}
-              </option>
-            ))}
-          </select>
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* VCR badge */}
+            {paceZones.length > 0 && (
+              <div className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-600 px-3 py-1.5 rounded-lg">
+                ⚡ VCR aktif — pace zones terhitung
+              </div>
+            )}
+            {!paceZones.length && (
+              <div className="text-xs bg-amber-50 border border-amber-200 text-amber-600 px-3 py-1.5 rounded-lg">
+                ⚠️ Belum ada data TT — est. waktu tidak tersedia
+              </div>
+            )}
+            <select value={selectedRaceId} onChange={e => setSelectedRaceId(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+              {races.length === 0 && <option value="">Belum ada race</option>}
+              {races.map(r => (
+                <option key={r.id} value={r.id}>
+                  {r.status === 'A' ? '🏆 ' : r.status === 'B' ? '🎯 ' : r.status === 'done' ? '✅ ' : '📅 '}
+                  {r.name}{r.status === 'done' ? ' (Arsip)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         {isArchived && (
           <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-500 flex items-center gap-2">
-            <span>🗄️</span>
-            <span>Race ini sudah selesai — roadmap dalam mode <strong>arsip</strong>, tidak bisa diedit.</span>
+            <span>🗄️</span><span>Race ini sudah selesai — program dalam mode <strong>arsip</strong>.</span>
           </div>
         )}
       </div>
 
       {!selectedRaceId ? (
-        <div className="bg-white rounded-xl shadow-sm p-12 text-center text-gray-400 text-sm">Pilih race untuk melihat roadmap</div>
+        <div className="bg-white rounded-xl shadow-sm p-12 text-center text-gray-400 text-sm">Pilih race untuk melihat program</div>
       ) : (
-        <>
-          {/* Program Summary */}
-          {phases.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Ringkasan Program</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Total Fase</div>
-                  <div className="text-sm font-bold text-gray-800">{phases.length} Fase</div>
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Periode</div>
-                  <div className="text-sm font-bold text-gray-800">{fmtDate(phases[0].date_start)} → {fmtDate(phases[phases.length - 1].date_end)}</div>
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Fase Aktif</div>
-                  <div className="text-sm font-bold text-indigo-600">
-                    {(() => {
-                      const t = today()
-                      const active = phases.find(p => t >= p.date_start && t <= p.date_end)
-                      if (active) return `${active.emoji} ${active.name}`
-                      if (t < phases[0].date_start) return 'Belum mulai'
-                      return 'Selesai'
-                    })()}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Hari ke Race A</div>
-                  <div className={`text-sm font-bold ${daysToRaceA !== null && daysToRaceA <= 14 ? 'text-red-500' : 'text-gray-800'}`}>
-                    {daysToRaceA !== null ? (daysToRaceA <= 0 ? '🔥 Race Day!' : `H-${daysToRaceA}`) : '—'}
-                  </div>
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
-                  <span>Progress Program</span>
-                  <span className="font-bold text-indigo-600">{progress}%</span>
-                </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className="h-full rounded-full transition-all" style={{ width: `${progress}%`, background: 'linear-gradient(90deg,#6366f1,#818cf8)' }} />
-                </div>
-              </div>
-            </div>
-          )}
+        <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
 
-          {/* Gantt Timeline */}
-          <div className="bg-white rounded-xl shadow-sm p-5">
-            <div className="border-b border-indigo-100 pb-2 mb-4 flex items-center justify-between">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase">Timeline Visual</h2>
-              {canEdit && !isArchived && (
-                <button onClick={() => openPhaseModal(null)} className="border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50">+ Tambah Fase</button>
+          {/* ── LEFT: Week List ── */}
+          <div className="space-y-3">
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-gsans text-base text-indigo-700 uppercase">Pekan</h2>
+                {canEdit && !isArchived && (
+                  <button onClick={() => openSessionModal(null)}
+                    className="border border-indigo-500 text-indigo-600 text-xs px-2 py-1 rounded-lg hover:bg-indigo-50">+ Tambah Sesi</button>
+                )}
+              </div>
+
+              {weeks.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-xs space-y-2">
+                  <div className="text-3xl">📅</div>
+                  <div>Belum ada sesi latihan.</div>
+                  {canEdit && !isArchived && <div>Klik + Tambah Sesi untuk mulai.</div>}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {weeks.map(w => {
+                    const isActive   = todayStr >= w.period_start && todayStr <= w.period_end
+                    const isSelected = w.week_number === selectedWeek
+                    const isPast     = todayStr > w.period_end
+                    return (
+                      <div key={w.week_number} onClick={() => setSelectedWeek(w.week_number)}
+                        className={`rounded-lg px-3 py-2.5 cursor-pointer border transition-all ${isSelected ? 'bg-indigo-50 border-indigo-400' : 'border-gray-100 hover:border-indigo-200 hover:bg-gray-50'}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-bold ${isSelected ? 'text-indigo-700' : 'text-gray-700'}`}>
+                              Pekan {w.week_number}
+                            </span>
+                            {isActive && <span className="text-[9px] font-bold text-white bg-indigo-500 px-1.5 py-0.5 rounded-full">AKTIF</span>}
+                            {isPast && !isActive && <span className="text-[9px] text-green-600">✓</span>}
+                          </div>
+                          <span className="text-[10px] text-gray-400 font-medium">{w.total_km.toFixed(1)} km</span>
+                        </div>
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          {fmtDate(w.period_start)} — {fmtDate(w.period_end)}
+                        </div>
+                        <div className="text-[10px] text-gray-500 mt-0.5">{w.sessions.length} sesi</div>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
             </div>
 
-            {phases.length === 0 ? (
-              <div className="text-center py-10 text-gray-400 text-sm space-y-3">
-                <div className="text-4xl">🗺️</div>
-                <div>Belum ada fase. {canEdit ? 'Tambah fase pertama atau generate dari Program Detail.' : 'Coach belum membuat roadmap.'}</div>
-                {canEdit && !isArchived && (
-                  <div className="flex justify-center gap-3 pt-2">
-                    <button onClick={() => openPhaseModal(null)} className="bg-indigo-600 text-white text-xs px-4 py-2 rounded-lg hover:bg-indigo-700">+ Buat Fase Manual</button>
-                    <button onClick={handleAttach} disabled={attachLoading} className="border border-indigo-400 text-indigo-600 text-xs px-4 py-2 rounded-lg hover:bg-indigo-50 disabled:opacity-50">
-                      {attachLoading ? 'Memproses...' : '⚡ Attach dari Program Detail'}
-                    </button>
+            {/* Summary total */}
+            {weeks.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm p-4">
+                <div className="text-xs font-medium text-gray-500 uppercase mb-2">Total Program</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="text-xs text-gray-400">Pekan</div>
+                    <div className="text-sm font-bold text-gray-800">{weeks.length}</div>
                   </div>
-                )}
+                  <div className="bg-gray-50 rounded-lg px-3 py-2">
+                    <div className="text-xs text-gray-400">Total Sesi</div>
+                    <div className="text-sm font-bold text-gray-800">{sessions.length}</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg px-3 py-2 col-span-2">
+                    <div className="text-xs text-gray-400">Total Jarak</div>
+                    <div className="text-sm font-bold text-indigo-600">
+                      {weeks.reduce((s, w) => s + w.total_km, 0).toFixed(1)} km
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── RIGHT: Week Detail ── */}
+          <div className="space-y-4">
+            {!activeWk ? (
+              <div className="bg-white rounded-xl shadow-sm p-12 text-center text-gray-400 text-sm">
+                <div className="text-4xl mb-3">📋</div>
+                <div>Pilih pekan untuk melihat detail sesi</div>
               </div>
             ) : (
               <>
-                <div className="overflow-x-auto">
-                  <div className="min-w-[600px]">
-                    {gd && (
-                      <div className="flex justify-between text-xs text-gray-400 mb-2 pl-[120px]">
-                        <span>{fmtDate(phases[0].date_start)}</span>
-                        <span>{fmtDate(phases[phases.length - 1].date_end)}</span>
+                {/* Week header */}
+                <div className="bg-white rounded-xl shadow-sm p-5">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h2 className="font-gsans text-lg text-indigo-700">
+                        Pekan {activeWk.week_number}
+                        {todayStr >= activeWk.period_start && todayStr <= activeWk.period_end && (
+                          <span className="ml-2 text-xs font-normal text-white bg-indigo-500 px-2 py-0.5 rounded-full">AKTIF</span>
+                        )}
+                      </h2>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {fmtDate(activeWk.period_start)} — {fmtDate(activeWk.period_end)}
                       </div>
-                    )}
-                    <div className="space-y-2">
-                      {phases.map(p => {
-                        const left  = gd ? ganttPct(p.date_start, gd) : 0
-                        const right = gd ? ganttPct(p.date_end, gd) : 100
-                        const width = right - left
-                        const st    = phaseStatus(p)
-                        const pMs   = milestones.filter(m => m.phase_id === p.id)
-                        return (
-                          <div key={p.id} className="flex items-center gap-2">
-                            <div className="w-[116px] flex-shrink-0 text-right">
-                              <span className="text-xs font-medium text-gray-600 truncate block">{p.emoji} {p.name}</span>
-                              <span className="text-[10px] text-gray-400">W{p.week_start}–W{p.week_end}</span>
+                    </div>
+                    <div className="flex gap-4 text-center text-xs">
+                      <div>
+                        <div className="text-sm font-bold text-gray-800">{activeWk.sessions.length}</div>
+                        <div className="text-gray-400">Sesi</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-indigo-600">{activeWk.total_km.toFixed(1)} km</div>
+                        <div className="text-gray-400">Total Jarak</div>
+                      </div>
+                      <div>
+                        <div className="text-sm font-bold text-gray-800">
+                          {fmtDuration(activeWk.sessions.reduce((s, sess) =>
+                            s + (sess.details || []).reduce((ds, d) => ds + (d.est_duration_min || 0), 0), 0))}
+                        </div>
+                        <div className="text-gray-400">Est. Durasi</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sessions */}
+                <div className="space-y-4">
+                  {activeWk.sessions.map(sess => {
+                    const sessKm      = (sess.details || []).reduce((s, d) => s + (d.distance_km || 0), 0)
+                    const sessMinutes = (sess.details || []).reduce((s, d) => s + (d.est_duration_min || 0), 0)
+                    const pendingForms = detailForms[sess.id] || []
+
+                    return (
+                      <div key={sess.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                        {/* Session header */}
+                        <div className="px-5 py-4 border-b border-gray-100">
+                          <div className="flex items-start justify-between flex-wrap gap-2">
+                            <div>
+                              <div className="text-[11px] font-bold text-indigo-500 uppercase tracking-wider mb-0.5">
+                                {fmtDateShort(sess.session_date)}
+                              </div>
+                              <div className="text-sm font-bold text-gray-800">{sess.program_type}</div>
+                              {sess.notes && <div className="text-xs text-gray-500 mt-1 italic">{sess.notes}</div>}
                             </div>
-                            <div className="flex-1 relative h-7">
-                              <div className="absolute inset-y-0 w-full bg-gray-100 rounded-full" />
-                              <div className="absolute inset-y-1 rounded-full transition-all"
-                                style={{ left: `${left}%`, width: `${width}%`, background: st === 'past' ? '#d1d5db' : p.color, opacity: st === 'upcoming' ? 0.6 : 1 }} />
-                              {gd && pMs.map(m => {
-                                const mp = ganttPct(m.milestone_date, gd)
-                                if (mp < 0 || mp > 100) return null
-                                const mst = msStatus(m)
-                                return (
-                                  <div key={m.id} title={`${m.icon} ${m.label} · ${fmtDate(m.milestone_date)}`}
-                                    className="absolute top-0 -translate-x-1/2 cursor-pointer group" style={{ left: `${mp}%` }}>
-                                    <div className="w-3 h-3 rotate-45 border-2 border-white"
-                                      style={{ background: mst === 'past' ? '#9ca3af' : mst === 'today' ? '#ef4444' : p.color }} />
-                                    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 hidden group-hover:block bg-gray-800 text-white text-[10px] rounded px-2 py-1 whitespace-nowrap z-10">
-                                      {m.icon} {m.label}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                              {todayP >= 0 && todayP <= 100 && (
-                                <div className="absolute inset-y-0 w-0.5 bg-red-400 z-10" style={{ left: `${todayP}%` }}>
-                                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 text-[8px] text-red-400 font-bold whitespace-nowrap">TODAY</div>
+                            <div className="flex items-center gap-4 text-center text-xs">
+                              <div>
+                                <div className="text-sm font-bold text-indigo-600">{sessKm.toFixed(1)} km</div>
+                                <div className="text-gray-400">Total Jarak</div>
+                              </div>
+                              {sessMinutes > 0 && (
+                                <div>
+                                  <div className="text-sm font-bold text-gray-700">{fmtDuration(sessMinutes)}</div>
+                                  <div className="text-gray-400">Est. Durasi</div>
+                                </div>
+                              )}
+                              {canEdit && !isArchived && (
+                                <div className="flex gap-1">
+                                  <button onClick={() => openSessionModal(sess)}
+                                    className="border border-indigo-500 text-indigo-600 text-xs px-2 py-0.5 rounded-lg hover:bg-indigo-50">Edit</button>
+                                  <button onClick={() => deleteSession(sess.id)}
+                                    className="border border-red-200 text-red-500 text-xs px-2 py-0.5 rounded-lg hover:bg-red-50">Hapus</button>
                                 </div>
                               )}
                             </div>
                           </div>
-                        )
-                      })}
-                    </div>
-                    <div className="flex gap-4 mt-4 text-[10px] text-gray-400 flex-wrap">
-                      <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-indigo-500" /> Aktif</span>
-                      <span className="flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-gray-300" /> Selesai</span>
-                      <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rotate-45 border border-indigo-500" /> Milestone</span>
-                      <span className="flex items-center gap-1"><span className="inline-block w-0.5 h-3 bg-red-400" /> Hari ini</span>
-                    </div>
-                  </div>
-                </div>
-                {canEdit && !isArchived && (
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <button onClick={handleAttach} disabled={attachLoading}
-                      className="border border-gray-300 text-gray-600 text-xs px-3 py-1.5 rounded-lg hover:bg-gray-50 disabled:opacity-50">
-                      {attachLoading ? 'Memproses...' : '⚡ Re-generate dari Program Detail'}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
+                        </div>
 
-          {/* Phase Cards */}
-          {phases.length > 0 && (
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Detail Fase</h2>
-              <div className="space-y-3">
-                {phases.map(p => {
-                  const st  = phaseStatus(p)
-                  const pMs = milestones.filter(m => m.phase_id === p.id)
-                  return (
-                    <div key={p.id} className="rounded-xl border p-4"
-                      style={{ borderColor: st === 'active' ? p.color : '#e5e7eb', borderWidth: st === 'active' ? 2 : 1, background: st === 'active' ? p.color + '08' : st === 'past' ? '#f9fafb' : 'white' }}>
-                      <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg flex-shrink-0 border-2"
-                          style={{ background: p.color + '20', borderColor: p.color }}>{p.emoji}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between flex-wrap gap-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-bold text-gray-800">{p.name}</span>
-                              <span className="text-xs text-gray-400">W{p.week_start}–W{p.week_end}</span>
-                              {st === 'active'   && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: p.color + '20', color: p.color }}>● AKTIF</span>}
-                              {st === 'past'     && <span className="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">✓ SELESAI</span>}
-                              {st === 'upcoming' && <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">UPCOMING</span>}
+                        {/* Detail rows */}
+                        <div className="px-5 py-3">
+                          {/* Header row */}
+                          {((sess.details || []).length > 0 || pendingForms.length > 0) && (
+                            <div className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 mb-2 px-1">
+                              <div className="text-[10px] font-medium text-gray-400 uppercase">Sesi / Zona</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Range Pace</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Jarak</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Est. Waktu</div>
+                              <div />
                             </div>
-                            {canEdit && !isArchived && (
-                              <div className="flex gap-1">
-                                <button onClick={() => openPhaseModal(p)} className="border border-indigo-500 text-indigo-600 text-xs px-2 py-0.5 rounded-lg hover:bg-indigo-50">Edit</button>
-                                <button onClick={() => deletePhase(p.id)} className="border border-red-200 text-red-500 text-xs px-2 py-0.5 rounded-lg hover:bg-red-50">Hapus</button>
+                          )}
+
+                          {/* Existing details */}
+                          {(sess.details || []).map((det, idx) => {
+                            const zone    = getZone(det.zone_name)
+                            const estMin  = det.est_duration_min || calcEstDuration(det.zone_name, det.distance_km)
+                            const paceStr = zone ? `${secToMMSS(zone.pace_min_sec)}–${secToMMSS(zone.pace_max_sec)}/km` : '—'
+                            return (
+                              <div key={det.id}
+                                className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 items-center py-2 border-b border-gray-50 last:border-0">
+                                {/* Zone pill */}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-medium text-gray-400">{idx + 1}.</span>
+                                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                                    style={{ background: zone?.color + '20' || '#f3f4f6', color: zone?.color || '#6b7280' }}>
+                                    <span className="w-2 h-2 rounded-full inline-block" style={{ background: zone?.color || '#9ca3af' }} />
+                                    {det.zone_name}
+                                  </span>
+                                </div>
+                                {/* Pace range */}
+                                <div className="text-xs text-center font-mono text-gray-600">{paceStr}</div>
+                                {/* Distance */}
+                                <div className="text-xs text-center font-bold text-gray-800">
+                                  {det.distance_km != null ? `${det.distance_km} km` : '—'}
+                                </div>
+                                {/* Est time */}
+                                <div className="text-xs text-center font-bold" style={{ color: zone?.color || '#6b7280' }}>
+                                  {estMin != null ? fmtDuration(estMin) : '—'}
+                                </div>
+                                {/* Delete */}
+                                {canEdit && !isArchived && (
+                                  <button onClick={() => deleteDetail(det.id)}
+                                    className="text-red-300 hover:text-red-500 text-xs text-center">✕</button>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-400 mt-0.5">{fmtDate(p.date_start)} → {fmtDate(p.date_end)}</div>
-                          {p.focus && <div className="text-xs text-gray-600 mt-2 italic">"{p.focus}"</div>}
-                          {pMs.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mt-3">
-                              {pMs.map(m => (
-                                <span key={m.id} className="text-[11px] px-2 py-0.5 rounded-full border font-medium"
-                                  style={{ background: p.color + '15', color: p.color, borderColor: p.color + '40' }}>
-                                  {m.icon} {m.label}
-                                </span>
-                              ))}
+                            )
+                          })}
+
+                          {/* Pending new detail forms */}
+                          {pendingForms.map((f, idx) => {
+                            const zone   = getZone(f.zone_name)
+                            const estMin = calcEstDuration(f.zone_name, f.distance_km ? Number(f.distance_km) : null)
+                            return (
+                              <div key={idx} className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 items-center py-2 border-b border-indigo-50 bg-indigo-50/30 rounded-lg px-1 mb-1">
+                                {/* Zone select */}
+                                <select value={f.zone_name}
+                                  onChange={e => updateDetailForm(sess.id, idx, 'zone_name', e.target.value)}
+                                  className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                                  style={{ color: zone?.color || '#374151' }}>
+                                  {ZONE_DEFINITIONS.map(z => (
+                                    <option key={z.name} value={z.name}>{z.name}</option>
+                                  ))}
+                                </select>
+                                {/* Pace preview */}
+                                <div className="text-[10px] text-center font-mono text-gray-500">
+                                  {zone ? `${secToMMSS(zone.pace_min_sec)}–${secToMMSS(zone.pace_max_sec)}` : '—'}
+                                </div>
+                                {/* Distance input */}
+                                <input type="number" step="0.1" value={f.distance_km}
+                                  onChange={e => updateDetailForm(sess.id, idx, 'distance_km', e.target.value)}
+                                  placeholder="km" className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-300" />
+                                {/* Est time preview */}
+                                <div className="text-[10px] text-center font-bold" style={{ color: zone?.color || '#6b7280' }}>
+                                  {estMin != null ? fmtDuration(estMin) : '—'}
+                                </div>
+                                {/* Remove row */}
+                                <button onClick={() => removeDetailForm(sess.id, idx)}
+                                  className="text-red-300 hover:text-red-500 text-xs text-center">✕</button>
+                              </div>
+                            )
+                          })}
+
+                          {/* Empty state */}
+                          {!(sess.details || []).length && !pendingForms.length && (
+                            <div className="text-center py-4 text-gray-400 text-xs">Belum ada detail sesi.</div>
+                          )}
+
+                          {/* Add detail row / save */}
+                          {canEdit && !isArchived && (
+                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                              <button onClick={() => initDetailForm(sess.id)}
+                                className="text-xs border border-dashed border-indigo-300 text-indigo-500 px-3 py-1.5 rounded-lg hover:bg-indigo-50 flex items-center gap-1">
+                                + Tambah Baris
+                              </button>
+                              {pendingForms.length > 0 && (
+                                <button onClick={() => saveDetails(sess)}
+                                  disabled={savingDetail === sess.id}
+                                  className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                                  {savingDetail === sess.id ? 'Menyimpan...' : '✓ Simpan Detail'}
+                                </button>
+                              )}
+                              {pendingForms.length > 0 && (
+                                <button onClick={() => setDetailForms(prev => { const n = { ...prev }; delete n[sess.id]; return n })}
+                                  className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+                                  Batal
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
                       </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Milestones Table */}
-          <div className="bg-white rounded-xl shadow-sm p-5">
-            <div className="border-b border-indigo-100 pb-2 mb-4 flex items-center justify-between">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase">Key Milestones</h2>
-              {canEdit && !isArchived && (
-                <button onClick={() => openMsModal(null)} className="border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50">+ Tambah Milestone</button>
-              )}
-            </div>
-            {milestones.length === 0 ? (
-              <div className="text-center py-8 text-gray-400 text-sm">Belum ada milestone.{canEdit && !isArchived ? ' Tambah milestone pertama.' : ''}</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left border-b border-gray-100">
-                      <th className="text-xs font-medium text-gray-500 uppercase pb-2 pr-4">Tanggal</th>
-                      <th className="text-xs font-medium text-gray-500 uppercase pb-2 pr-4">Minggu</th>
-                      <th className="text-xs font-medium text-gray-500 uppercase pb-2 pr-4">Fase</th>
-                      <th className="text-xs font-medium text-gray-500 uppercase pb-2 pr-4">Milestone</th>
-                      <th className="text-xs font-medium text-gray-500 uppercase pb-2 pr-4">Tipe</th>
-                      <th className="text-xs font-medium text-gray-500 uppercase pb-2 pr-4">Status</th>
-                      {canEdit && !isArchived && <th className="pb-2" />}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {milestones.map(m => {
-                      const st  = msStatus(m)
-                      const ph  = phases.find(p => p.id === m.phase_id)
-                      const typeBadge = m.type === 'race' ? { label: '🏆 Race', color: '#ef4444' } : m.type === 'test' ? { label: '⚡ Test', color: '#f59e0b' } : { label: '📋 Assessment', color: '#6366f1' }
-                      return (
-                        <tr key={m.id} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="py-2.5 pr-4 text-xs text-gray-600 whitespace-nowrap">{fmtDate(m.milestone_date)}</td>
-                          <td className="py-2.5 pr-4 text-xs font-bold text-gray-700">{m.week_number ? `W${m.week_number}` : '—'}</td>
-                          <td className="py-2.5 pr-4 text-xs text-gray-500">{ph ? `${ph.emoji} ${ph.name}` : '—'}</td>
-                          <td className="py-2.5 pr-4">
-                            <div className="text-sm font-bold text-gray-800">{m.icon} {m.label}</div>
-                            {m.description && <div className="text-xs text-gray-400 mt-0.5">{m.description}</div>}
-                          </td>
-                          <td className="py-2.5 pr-4">
-                            <span className="text-[11px] px-2 py-0.5 rounded-full border font-medium"
-                              style={{ background: typeBadge.color + '15', color: typeBadge.color, borderColor: typeBadge.color + '40' }}>
-                              {typeBadge.label}
-                            </span>
-                          </td>
-                          <td className="py-2.5 pr-4 text-xs">
-                            {st === 'today'    && <span className="text-red-500 font-bold">● HARI INI</span>}
-                            {st === 'past'     && <span className="text-green-600">✅ Selesai</span>}
-                            {st === 'upcoming' && <span className="text-gray-400">○ Upcoming</span>}
-                          </td>
-                          {canEdit && !isArchived && (
-                            <td className="py-2.5 text-right whitespace-nowrap">
-                              <button onClick={() => openMsModal(m)} className="border border-indigo-500 text-indigo-600 text-xs px-2 py-0.5 rounded-lg hover:bg-indigo-50 mr-1">Edit</button>
-                              <button onClick={() => deleteMilestone(m.id)} className="border border-red-200 text-red-500 text-xs px-2 py-0.5 rounded-lg hover:bg-red-50">Hapus</button>
-                            </td>
-                          )}
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    )
+                  })}
+                </div>
+              </>
             )}
-          </div>
-        </>
-      )}
-
-      {/* Phase Modal */}
-      {phaseModal.open && (
-        <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-gsans text-lg text-indigo-700">{phaseModal.editing ? 'Edit Fase' : 'Tambah Fase'}</h3>
-              <button onClick={() => setPhaseModal({ open: false, editing: null })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Emoji</div>
-                <div className="flex flex-wrap gap-2">
-                  {EMOJI_OPTIONS.map(e => (
-                    <button key={e} onClick={() => setPhaseForm(f => ({ ...f, emoji: e }))}
-                      className={`w-8 h-8 rounded-lg text-base flex items-center justify-center border transition-all ${phaseForm.emoji === e ? 'border-indigo-500 bg-indigo-50 scale-110' : 'border-gray-200 hover:border-indigo-300'}`}>{e}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Warna</div>
-                <div className="flex flex-wrap gap-2">
-                  {COLOR_OPTIONS.map(c => (
-                    <button key={c} onClick={() => setPhaseForm(f => ({ ...f, color: c }))}
-                      className={`w-7 h-7 rounded-full border-2 transition-all ${phaseForm.color === c ? 'scale-125 border-gray-400' : 'border-transparent'}`}
-                      style={{ background: c }} />
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Nama Fase *</div>
-                <input value={phaseForm.name} onChange={e => setPhaseForm(f => ({ ...f, name: e.target.value }))}
-                  placeholder="cth. Base 1, Build 2, Taper..."
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Fokus Latihan</div>
-                <input value={phaseForm.focus} onChange={e => setPhaseForm(f => ({ ...f, focus: e.target.value }))}
-                  placeholder="cth. Membangun aerobic base, Easy pace dominan"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Minggu Mulai</div>
-                  <input type="number" value={phaseForm.week_start} onChange={e => setPhaseForm(f => ({ ...f, week_start: e.target.value }))}
-                    placeholder="1" min={1} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Minggu Selesai</div>
-                  <input type="number" value={phaseForm.week_end} onChange={e => setPhaseForm(f => ({ ...f, week_end: e.target.value }))}
-                    placeholder="4" min={1} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal Mulai *</div>
-                  <input type="date" value={phaseForm.date_start} onChange={e => setPhaseForm(f => ({ ...f, date_start: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal Selesai *</div>
-                  <input type="date" value={phaseForm.date_end} onChange={e => setPhaseForm(f => ({ ...f, date_end: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Urutan</div>
-                <input type="number" value={phaseForm.sort_order} onChange={e => setPhaseForm(f => ({ ...f, sort_order: e.target.value }))}
-                  placeholder="0" min={0} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
-            </div>
-            <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
-              <button onClick={() => setPhaseModal({ open: false, editing: null })} className="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg hover:bg-gray-50">Batal</button>
-              <button onClick={savePhase} disabled={saving} className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
-                {saving ? 'Menyimpan...' : 'Simpan'}
-              </button>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Milestone Modal */}
-      {msModal.open && (
+      {/* ── Session Modal ── */}
+      {sessionModal.open && (
         <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md">
             <div className="p-5 border-b border-gray-100 flex items-center justify-between">
-              <h3 className="font-gsans text-lg text-indigo-700">{msModal.editing ? 'Edit Milestone' : 'Tambah Milestone'}</h3>
-              <button onClick={() => setMsModal({ open: false, editing: null })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              <h3 className="font-gsans text-lg text-indigo-700">{sessionModal.editing ? 'Edit Sesi' : 'Tambah Sesi'}</h3>
+              <button onClick={() => setSessionModal({ open: false, editing: null })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="p-5 space-y-4">
               <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Icon</div>
-                <div className="flex flex-wrap gap-2">
-                  {ICON_OPTIONS.map(ic => (
-                    <button key={ic} onClick={() => setMsForm(f => ({ ...f, icon: ic }))}
-                      className={`w-8 h-8 rounded-lg text-base flex items-center justify-center border transition-all ${msForm.icon === ic ? 'border-indigo-500 bg-indigo-50 scale-110' : 'border-gray-200 hover:border-indigo-300'}`}>{ic}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Label *</div>
-                <input value={msForm.label} onChange={e => setMsForm(f => ({ ...f, label: e.target.value }))}
-                  placeholder="cth. Magic Mile #1, 10K TT, Race B..."
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal *</div>
+                <input type="date" value={sessionForm.session_date}
+                  onChange={e => setSessionForm(f => ({ ...f, session_date: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
               <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tipe</div>
-                <div className="flex gap-2">
-                  {(['race','test','assessment'] as const).map(t => (
-                    <button key={t} onClick={() => setMsForm(f => ({ ...f, type: t }))}
-                      className={`flex-1 text-xs py-2 rounded-lg border font-medium transition-all ${msForm.type === t ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-200 text-gray-600 hover:border-indigo-300'}`}>
-                      {t === 'race' ? '🏆 Race' : t === 'test' ? '⚡ Test' : '📋 Assessment'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal *</div>
-                  <input type="date" value={msForm.milestone_date} onChange={e => setMsForm(f => ({ ...f, milestone_date: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Minggu ke-</div>
-                  <input type="number" value={msForm.week_number} onChange={e => setMsForm(f => ({ ...f, week_number: e.target.value }))}
-                    placeholder="cth. 5" min={1} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Fase</div>
-                <select value={msForm.phase_id} onChange={e => setMsForm(f => ({ ...f, phase_id: e.target.value }))}
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Jenis Program *</div>
+                <select value={sessionForm.program_type}
+                  onChange={e => setSessionForm(f => ({ ...f, program_type: e.target.value }))}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                  <option value="">— Tidak terikat fase —</option>
-                  {phases.map(p => <option key={p.id} value={p.id}>{p.emoji} {p.name}</option>)}
+                  {PROGRAM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Deskripsi</div>
-                <textarea value={msForm.description} onChange={e => setMsForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="cth. Test kecepatan akhir Base 1, hasil dipakai update pace zones"
-                  rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Catatan</div>
+                <textarea value={sessionForm.notes}
+                  onChange={e => setSessionForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Catatan tambahan untuk sesi ini..."
+                  rows={3} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex gap-2 justify-end">
-              <button onClick={() => setMsModal({ open: false, editing: null })} className="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg hover:bg-gray-50">Batal</button>
-              <button onClick={saveMilestone} disabled={saving} className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+              <button onClick={() => setSessionModal({ open: false, editing: null })}
+                className="border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg hover:bg-gray-50">Batal</button>
+              <button onClick={saveSession} disabled={saving}
+                className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50">
                 {saving ? 'Menyimpan...' : 'Simpan'}
               </button>
             </div>
