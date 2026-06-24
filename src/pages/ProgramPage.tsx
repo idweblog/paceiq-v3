@@ -627,11 +627,12 @@ export default function ProgramPage() {
               {/* Detail section */}
               <div>
                 <div className="text-xs font-medium text-gray-500 uppercase mb-3">Detail Sesi</div>
-                <div className="grid grid-cols-[1fr_56px_90px_70px_80px_80px_28px] gap-2 mb-2">
+                <div className="grid grid-cols-[1fr_56px_90px_70px_90px_80px_80px_28px] gap-2 mb-2">
                   <div className="text-xs font-medium text-gray-500 uppercase">Zona</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Rep</div>
-                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Jarak</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Nilai</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Satuan</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Avg. Pace</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Est. Jarak</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Est. Waktu</div>
                   <div />
@@ -642,7 +643,7 @@ export default function ProgramPage() {
                     const val = Number(d.value_input) || 0
                     const out = calcDetail(d.zone_name, rep, d.unit, val || null)
                     return (
-                      <div key={idx} className="grid grid-cols-[1fr_56px_90px_70px_80px_80px_28px] gap-2 items-center">
+                      <div key={idx} className="grid grid-cols-[1fr_56px_90px_70px_90px_80px_80px_28px] gap-2 items-center">
                         <select value={d.zone_name}
                           onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], zone_name: e.target.value }; return { ...f, details } })}
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
@@ -653,7 +654,7 @@ export default function ProgramPage() {
                           placeholder="1" className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
                         <input type="number" step={d.unit === 'km' ? '0.01' : '1'} value={d.value_input}
                           onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], value_input: e.target.value }; return { ...f, details } })}
-                          placeholder={d.unit === 'km' ? '0.0' : d.unit === 'detik' ? 'detik' : 'menit'}
+                          placeholder={d.unit === 'km' ? '0.0' : d.unit === 'detik' ? 'dtk' : 'mnt'}
                           className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
                         <select value={d.unit}
                           onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], unit: e.target.value, value_input: '' }; return { ...f, details } })}
@@ -662,6 +663,9 @@ export default function ProgramPage() {
                           <option value="detik">detik</option>
                           <option value="menit">menit</option>
                         </select>
+                        <div className="text-xs font-mono text-gray-500 text-center">
+                          {(() => { const z = getZone(d.zone_name); return z ? `${secToMMSS((z.pace_min_sec + z.pace_max_sec) / 2)}/km` : '—' })()}
+                        </div>
                         <div className="text-xs font-bold text-gray-700 text-center">{out ? `~${out.totalKm.toFixed(2)} km` : '—'}</div>
                         <div className="text-xs font-bold text-gray-700 text-center">{out ? fmtDuration(out.totalMin) : '—'}</div>
                         {sessionForm.details.length > 1
@@ -675,8 +679,8 @@ export default function ProgramPage() {
 
                 {/* Total */}
                 {sessionForm.details.length > 0 && (
-                  <div className="grid grid-cols-[1fr_56px_90px_70px_80px_80px_28px] gap-2 items-center mt-3 pt-3 border-t border-gray-100">
-                    <div className="text-xs font-bold text-gray-500 col-span-4 text-right">Total</div>
+                  <div className="grid grid-cols-[1fr_56px_90px_70px_90px_80px_80px_28px] gap-2 items-center mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-xs font-bold text-gray-500 col-span-5 text-right">Total</div>
                     {(() => {
                       let km = 0, min = 0
                       sessionForm.details.forEach(d => {
