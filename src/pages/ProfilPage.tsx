@@ -17,6 +17,7 @@ interface AthleteSettings {
   cedera: string | null
   start_training_date: string | null
   gender: string | null
+  hrv_baseline: number | null
 }
 
 interface TtEntry {
@@ -308,7 +309,7 @@ const TT_DISTANCES: Record<string, number> = {
 const emptySettings: AthleteSettings = {
   lthr: null, resting_hr: null, max_hr: null, weight_kg: null,
   height_cm: null, domisili: null, birth_date: null, cedera: null,
-  start_training_date: null, gender: null,
+  start_training_date: null, gender: null, hrv_baseline: null,
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -420,7 +421,7 @@ export default function ProfilPage() {
       setLoading(true)
       const [sRes, ttRes, sesRes, hrRes, lrRes, racesRes, fitRes] = await Promise.all([
         supabase.from('athlete_settings')
-          .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date,gender')
+          .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date,gender,hrv_baseline')
           .eq('athlete_id', athleteId as string).maybeSingle(),
         supabase.from('tt_history')
           .select('id,tt_date,distance_km,finish_time_sec,tt_type,hr_avg,hr_partial_avg,lthr_calculated,vdot,notes')
@@ -519,6 +520,8 @@ export default function ProfilPage() {
       cedera: settings.cedera ?? 'Tidak ada',
       start_training_date: settings.start_training_date ?? '',
       gender: settings.gender ?? 'male',
+      resting_hr: settings.resting_hr?.toString() ?? '',
+      hrv_baseline: settings.hrv_baseline?.toString() ?? '',
     })
     setEditMode(true)
     setPwMsg(null)
@@ -543,15 +546,17 @@ export default function ProfilPage() {
       cedera: p.cedera || 'Tidak ada',
       start_training_date: p.start_training_date || null,
       gender: p.gender || 'male',
+      resting_hr: p.resting_hr ? parseInt(p.resting_hr) : null,
+      hrv_baseline: p.hrv_baseline ? parseFloat(p.hrv_baseline) : null,
       updated_at: new Date().toISOString(),
     }
-    const { error: settErr } = await supabase.from('athlete_settings')
+    const { error: settErr } = await (supabase as any).from('athlete_settings')
       .upsert(payload, { onConflict: 'athlete_id' })
     setSaving(false)
     if (settErr) { setError(settErr.message); return }
     setEditMode(false)
     const { data } = await supabase.from('athlete_settings')
-      .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date,gender')
+      .select('lthr,resting_hr,max_hr,weight_kg,height_cm,domisili,birth_date,cedera,start_training_date,gender,hrv_baseline')
       .eq('athlete_id', athleteId as string).maybeSingle()
     if (data) setSettings(data as unknown as AthleteSettings)
   }
@@ -701,7 +706,8 @@ export default function ProfilPage() {
             { label: 'BMI', val: bmiData ? `${bmiData.bmi} (${bmiData.label})` : '—', color: bmiData?.color },
             { label: 'Training Age', val: taStr },
             { label: 'LTHR / MaxHR', val: `${lthrRef ?? '—'} / ${maxHR ?? '—'} bpm` },
-            { label: 'HRrest (avg EWS)', val: rhrAvg ? `${rhrAvg} bpm` : '—' },
+            { label: 'RHR Baseline', val: settings.resting_hr ? `${settings.resting_hr} bpm` : (rhrAvg ? `${rhrAvg} bpm (avg EWS)` : '—') },
+            { label: 'HRV Baseline', val: settings.hrv_baseline ? `${settings.hrv_baseline} ms` : '— (belum diisi)' },
             { label: 'HR Reserve', val: hrr ? `${hrr} bpm` : '—' },
             { label: 'Status Cedera', val: settings.cedera ?? '—', color: settings.cedera === 'Tidak ada' ? '#10b981' : '#ef4444' },
           ].map(f => (
@@ -728,6 +734,8 @@ export default function ProfilPage() {
               { key: 'domisili',            label: 'Domisili',                  ph: 'Makassar',            type: 'text' },
               { key: 'cedera',              label: 'Status Cedera',             ph: 'Tidak ada',           type: 'text' },
               { key: 'start_training_date', label: 'Mulai Latihan Terprogram',  ph: '',                    type: 'date' },
+              { key: 'resting_hr',          label: 'RHR Baseline (bpm)',        ph: '55',                  type: 'number' },
+              { key: 'hrv_baseline',        label: 'HRV Baseline (ms)',         ph: '50',                  type: 'number' },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
@@ -753,6 +761,12 @@ export default function ProfilPage() {
                 )}
                 {f.key === 'start_training_date' && editForm.start_training_date && (
                   <div className="text-xs text-indigo-600 mt-1">Training Age: {calcTrainingAge(editForm.start_training_date)}</div>
+                )}
+                {f.key === 'resting_hr' && (
+                  <div className="text-xs text-gray-400 mt-1">Dipakai sebagai baseline EWS lapis 1 (Kiviniemi 2007)</div>
+                )}
+                {f.key === 'hrv_baseline' && (
+                  <div className="text-xs text-gray-400 mt-1">Isi dari rata-rata HRV pagi 7 hari pertama program</div>
                 )}
               </div>
             ))}

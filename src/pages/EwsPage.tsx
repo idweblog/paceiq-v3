@@ -82,34 +82,46 @@ function trendArrow(current: number | null, baseline: number | null, higherIsBet
 function calculateEWS(
   dateStr: string, rhr: number, hrv: number,
   sleep: number, sleepQual: number, doms: number, energy: number,
-  history: EwsEntry[], _profileHRrest: number
+  history: EwsEntry[], profileHRrest: number, profileHRVBase: number | null
 ): EwsResult {
   const past = history.filter(e => e.entry_date < dateStr).sort((a, b) => b.entry_date.localeCompare(a.entry_date))
 
-  // Baseline strategy (Kiviniemi et al. 2007 / Plews et al. 2013):
-  // Measure deviation relative to individual baseline, not population norms.
-  // Entri ke-1 : baseline = nilai hari itu sendiri (scoreRHR/HRV = 0, no false alarm)
-  // Entri ke-2+: blended avg entri sebelumnya (70%) + hari itu (30%)
-  // Entri ke-3+: rolling avg 5 entri terakhir (fully data-driven)
-  let baseRhr = rhr   // default: hari itu sendiri (entri pertama)
-  let baseHrv = hrv   // default: hari itu sendiri (entri pertama)
-  let baseSource = 'hari ini (entri pertama — baseline akan akurat setelah 5–7 entri)'
+  // ── Baseline 3 Lapis (Kiviniemi 2007 / Plews 2013 / Whoop onboarding) ──────
+  // Lapis 1 (entri 1–7)   : profil RHR + HRV Baseline dari athlete_settings
+  //                          Jika profil belum diisi → nilai hari itu (no false alarm)
+  // Lapis 2 (entri 8–20)  : blended 50% profil + 50% rolling data
+  // Lapis 3 (entri 21+)   : 100% rolling avg 30 hari (fully data-driven individual)
 
-  if (past.length >= 3) {
-    const last5 = past.slice(0, 5)
-    const rhrV = last5.map(e => e.resting_hr).filter((v): v is number => v != null)
-    const hrvV = last5.map(e => e.hrv).filter((v): v is number => v != null)
-    if (rhrV.length) baseRhr = rhrV.reduce((a, b) => a + b, 0) / rhrV.length
-    if (hrvV.length) baseHrv = hrvV.reduce((a, b) => a + b, 0) / hrvV.length
-    baseSource = `rolling avg ${Math.min(past.length, 5)} entri terakhir`
-  } else if (past.length > 0) {
+  const profileRhr = profileHRrest || rhr  // fallback ke hari ini jika profil kosong
+  const profileHrv = profileHRVBase || hrv // fallback ke hari ini jika profil kosong
+
+  let baseRhr: number
+  let baseHrv: number
+  let baseSource: string
+
+  if (past.length >= 21) {
+    // Lapis 3: rolling avg 30 hari — sepenuhnya data individual
+    const last30 = past.slice(0, 30)
+    const rhrV = last30.map(e => e.resting_hr).filter((v): v is number => v != null)
+    const hrvV = last30.map(e => e.hrv).filter((v): v is number => v != null)
+    baseRhr = rhrV.length ? rhrV.reduce((a, b) => a + b, 0) / rhrV.length : profileRhr
+    baseHrv = hrvV.length ? hrvV.reduce((a, b) => a + b, 0) / hrvV.length : profileHrv
+    baseSource = `rolling avg ${Math.min(past.length, 30)} hari (Lapis 3 — fully individual)`
+  } else if (past.length >= 8) {
+    // Lapis 2: blended 50% profil + 50% rolling data
     const rhrV = past.map(e => e.resting_hr).filter((v): v is number => v != null)
     const hrvV = past.map(e => e.hrv).filter((v): v is number => v != null)
-    const avgPastRhr = rhrV.length ? rhrV.reduce((a, b) => a + b, 0) / rhrV.length : rhr
-    const avgPastHrv = hrvV.length ? hrvV.reduce((a, b) => a + b, 0) / hrvV.length : hrv
-    baseRhr = avgPastRhr * 0.7 + rhr * 0.3
-    baseHrv = avgPastHrv * 0.7 + hrv * 0.3
-    baseSource = `${past.length} entri (blended, baseline berkembang)`
+    const rollingRhr = rhrV.length ? rhrV.reduce((a, b) => a + b, 0) / rhrV.length : profileRhr
+    const rollingHrv = hrvV.length ? hrvV.reduce((a, b) => a + b, 0) / hrvV.length : profileHrv
+    baseRhr = (profileRhr * 0.5) + (rollingRhr * 0.5)
+    baseHrv = (profileHrv * 0.5) + (rollingHrv * 0.5)
+    baseSource = `blended profil 50% + rolling ${past.length} entri 50% (Lapis 2)`
+  } else {
+    // Lapis 1: profil baseline (atau hari ini jika profil kosong)
+    baseRhr = profileRhr
+    baseHrv = profileHrv
+    const src = (profileHRrest && profileHRVBase) ? 'profil RHR & HRV Baseline' : profileHRrest ? 'profil RHR + HRV hari ini' : profileHRVBase ? 'profil HRV + RHR hari ini' : 'nilai hari ini (isi RHR & HRV Baseline di Profil)'
+    baseSource = `${src} (Lapis 1 — ${past.length === 0 ? 'entri pertama' : past.length + ' entri, akumulasi data'})`
   }
 
   let scoreRhr = 0, scoreHrv = 0
@@ -133,7 +145,8 @@ export default function EwsPage() {
   const [form, setForm]             = useState<EwsForm>(FORM_BLANK)
   const [editingId, setEditingId]   = useState<string | null>(null)
   const [result, setResult]         = useState<EwsResult | null>(null)
-  const [profileHRrest, setProfileHRrest] = useState(55)
+  const [profileHRrest, setProfileHRrest]   = useState(55)
+  const [profileHRVBase, setProfileHRVBase]   = useState<number | null>(null)
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
@@ -157,8 +170,9 @@ export default function EwsPage() {
       const { data: ath } = await supabase.from('athletes').select('id').eq('auth_id', user.id).single()
       if (!ath) return
       setAthleteId(ath.id)
-      const { data: settings } = await supabase.from('athlete_settings').select('resting_hr').eq('athlete_id', ath.id).single()
+      const { data: settings } = await supabase.from('athlete_settings').select('resting_hr,hrv_baseline').eq('athlete_id', ath.id).single()
       if ((settings as any)?.resting_hr) setProfileHRrest((settings as any).resting_hr)
+      if ((settings as any)?.hrv_baseline) setProfileHRVBase((settings as any).hrv_baseline)
       await loadEntries(ath.id)
       setLoading(false)
     }
@@ -181,7 +195,7 @@ export default function EwsPage() {
     if (!form.entry_date || isNaN(rhr) || isNaN(hrv) || isNaN(sleep) || isNaN(sq) || isNaN(doms) || isNaN(energy)) {
       setResult(null); return
     }
-    setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest))
+    setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest, profileHRVBase))
   }, [form, entries, profileHRrest])
 
   function handleSleepStr(val: string) {
@@ -202,7 +216,7 @@ export default function EwsPage() {
     const energy = form.motivation ? parseFloat(form.motivation) : null
     let score: number | null = null
     if (rhr && hrv && sleep != null && sq != null && doms != null && energy != null)
-      score = calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest).totalScore
+      score = calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest, profileHRVBase).totalScore
     const payload = {
       athlete_id: athleteId, entry_date: form.entry_date,
       resting_hr: rhr || null, hrv: hrv || null, sleep_hours: sleep,
