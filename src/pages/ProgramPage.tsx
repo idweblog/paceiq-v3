@@ -601,7 +601,7 @@ export default function ProgramPage() {
       {/* Session Modal */}
       {sessionModal.open && (
         <div className="fixed inset-0 bg-black/40 z-40 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
             <div className="p-5 border-b border-gray-100 flex items-center justify-between">
               <h3 className="font-gsans text-lg text-indigo-700">{sessionModal.editing ? 'Edit Sesi' : 'Tambah Sesi'}</h3>
               <button onClick={() => setSessionModal({ open: false, editing: null })} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
@@ -627,7 +627,7 @@ export default function ProgramPage() {
               {/* Detail section */}
               <div>
                 <div className="text-xs font-medium text-gray-500 uppercase mb-3">Detail Sesi</div>
-                <div className="grid grid-cols-[1.5fr_48px_80px_72px_82px_76px_76px_28px] gap-2 mb-2">
+                <div className="grid grid-cols-[2fr_52px_84px_80px_88px_82px_82px_28px] gap-2 mb-2">
                   <div className="text-xs font-medium text-gray-500 uppercase">Zona</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Rep</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Nilai</div>
@@ -643,7 +643,7 @@ export default function ProgramPage() {
                     const val = Number(d.value_input) || 0
                     const out = calcDetail(d.zone_name, rep, d.unit, val || null)
                     return (
-                      <div key={idx} className="grid grid-cols-[1.5fr_48px_80px_72px_82px_76px_76px_28px] gap-2 items-center">
+                      <div key={idx} className="grid grid-cols-[2fr_52px_84px_80px_88px_82px_82px_28px] gap-2 items-center">
                         <select value={d.zone_name}
                           onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], zone_name: e.target.value }; return { ...f, details } })}
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
@@ -679,7 +679,7 @@ export default function ProgramPage() {
 
                 {/* Total */}
                 {sessionForm.details.length > 0 && (
-                  <div className="grid grid-cols-[1.5fr_48px_80px_72px_82px_76px_76px_28px] gap-2 items-center mt-3 pt-3 border-t border-gray-100">
+                  <div className="grid grid-cols-[2fr_52px_84px_80px_88px_82px_82px_28px] gap-2 items-center mt-3 pt-3 border-t border-gray-100">
                     <div className="text-xs font-bold text-gray-500 col-span-5 text-right">Total</div>
                     {(() => {
                       let km = 0, min = 0
