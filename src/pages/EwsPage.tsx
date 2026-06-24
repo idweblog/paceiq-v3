@@ -275,20 +275,20 @@ export default function EwsPage() {
   const avgEnergy  = avg(filtered.map(e => e.motivation))
   const avgRhr     = avg(filtered.map(e => e.resting_hr))
 
-  const avgPhysioScore = avgFatigue != null
-    ? avg(filtered.filter(e => e.composite_score != null).map(e => {
-        const rhr = e.resting_hr ?? 0, hrv = e.hrv ?? 0
-        if (!rhr || !hrv) return null
-        const past5 = entries.filter(x => x.entry_date < e.entry_date)
-          .sort((a, b) => b.entry_date.localeCompare(a.entry_date)).slice(0, 5)
-        // Consistent with algorithm: entri pertama baseline = nilai hari itu
-        const bRhr = past5.length >= 1 ? (avg(past5.map(x => x.resting_hr)) ?? rhr) : rhr
-        const bHrv = past5.length >= 1 ? (avg(past5.map(x => x.hrv)) ?? hrv) : hrv
-        const sRhr = Math.min(Math.max(((rhr - bRhr) / bRhr) * 200, 0), 100)
-        const sHrv = Math.min(Math.max(((hrv - bHrv) / bHrv) * -200, 0), 100)
-        return (0.6 * sHrv) + (0.4 * sRhr)
-      }))
-    : null
+  const avgPhysioScore = (() => {
+    const vals = filtered.filter(e => e.composite_score != null).map(e => {
+      const rhr = e.resting_hr ?? 0, hrv = e.hrv ?? 0
+      if (!rhr || !hrv) return null
+      const past5 = entries.filter(x => x.entry_date < e.entry_date)
+        .sort((a, b) => b.entry_date.localeCompare(a.entry_date)).slice(0, 5)
+      const bRhr = past5.length >= 1 ? (avg(past5.map(x => x.resting_hr)) ?? rhr) : rhr
+      const bHrv = past5.length >= 1 ? (avg(past5.map(x => x.hrv)) ?? hrv) : hrv
+      const sRhr = Math.min(Math.max(((rhr - bRhr) / bRhr) * 200, 0), 100)
+      const sHrv = Math.min(Math.max(((hrv - bHrv) / bHrv) * -200, 0), 100)
+      return (0.6 * sHrv) + (0.4 * sRhr)
+    }).filter((v): v is number => v !== null)
+    return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0
+  })()
 
   // Streak
   const sortedDesc = [...entries].sort((a, b) => b.entry_date.localeCompare(a.entry_date))
