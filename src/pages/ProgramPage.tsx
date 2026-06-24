@@ -627,12 +627,13 @@ export default function ProgramPage() {
               {/* Detail section */}
               <div>
                 <div className="text-xs font-medium text-gray-500 uppercase mb-3">Detail Sesi</div>
-                <div className="grid grid-cols-[1fr_56px_80px_100px_90px_28px] gap-2 mb-2">
+                <div className="grid grid-cols-[1fr_56px_90px_70px_80px_80px_28px] gap-2 mb-2">
                   <div className="text-xs font-medium text-gray-500 uppercase">Zona</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Rep</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Jarak</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Satuan</div>
-                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Jarak (km)</div>
-                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Est. Jarak / Waktu</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Est. Jarak</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Est. Waktu</div>
                   <div />
                 </div>
                 <div className="space-y-2">
@@ -641,7 +642,7 @@ export default function ProgramPage() {
                     const val = Number(d.value_input) || 0
                     const out = calcDetail(d.zone_name, rep, d.unit, val || null)
                     return (
-                      <div key={idx} className="grid grid-cols-[1fr_56px_80px_100px_90px_28px] gap-2 items-center">
+                      <div key={idx} className="grid grid-cols-[1fr_56px_90px_70px_80px_80px_28px] gap-2 items-center">
                         <select value={d.zone_name}
                           onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], zone_name: e.target.value }; return { ...f, details } })}
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
@@ -650,6 +651,10 @@ export default function ProgramPage() {
                         <input type="number" min="1" value={d.repetitions}
                           onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], repetitions: e.target.value }; return { ...f, details } })}
                           placeholder="1" className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                        <input type="number" step={d.unit === 'km' ? '0.01' : '1'} value={d.value_input}
+                          onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], value_input: e.target.value }; return { ...f, details } })}
+                          placeholder={d.unit === 'km' ? '0.0' : d.unit === 'detik' ? 'detik' : 'menit'}
+                          className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
                         <select value={d.unit}
                           onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], unit: e.target.value, value_input: '' }; return { ...f, details } })}
                           className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
@@ -657,14 +662,8 @@ export default function ProgramPage() {
                           <option value="detik">detik</option>
                           <option value="menit">menit</option>
                         </select>
-                        <input type="number" step={d.unit === 'km' ? '0.01' : '1'} value={d.value_input}
-                          onChange={e => setSessionForm(f => { const details = [...f.details]; details[idx] = { ...details[idx], value_input: e.target.value }; return { ...f, details } })}
-                          placeholder={d.unit === 'km' ? '0.0' : d.unit === 'detik' ? 'detik' : 'menit'}
-                          className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-                        <div className="text-center">
-                          <div className="text-xs font-bold text-gray-700">{out ? `~${out.totalKm.toFixed(2)} km` : '—'}</div>
-                          <div className="text-[10px] text-gray-400">{out ? fmtDuration(out.totalMin) : ''}</div>
-                        </div>
+                        <div className="text-xs font-bold text-gray-700 text-center">{out ? `~${out.totalKm.toFixed(2)} km` : '—'}</div>
+                        <div className="text-xs font-bold text-gray-700 text-center">{out ? fmtDuration(out.totalMin) : '—'}</div>
                         {sessionForm.details.length > 1
                           ? <button onClick={() => setSessionForm(f => ({ ...f, details: f.details.filter((_, i) => i !== idx) }))}
                               className="border border-red-200 text-red-400 hover:bg-red-50 rounded-lg w-6 h-6 flex items-center justify-center text-xs">✕</button>
@@ -676,21 +675,19 @@ export default function ProgramPage() {
 
                 {/* Total */}
                 {sessionForm.details.length > 0 && (
-                  <div className="grid grid-cols-[1fr_56px_80px_100px_90px_28px] gap-2 items-center mt-3 pt-3 border-t border-gray-100">
+                  <div className="grid grid-cols-[1fr_56px_90px_70px_80px_80px_28px] gap-2 items-center mt-3 pt-3 border-t border-gray-100">
                     <div className="text-xs font-bold text-gray-500 col-span-4 text-right">Total</div>
-                    <div className="text-center">
-                      {(() => {
-                        let km = 0, min = 0
-                        sessionForm.details.forEach(d => {
-                          const out = calcDetail(d.zone_name, Number(d.repetitions) || 1, d.unit, Number(d.value_input) || null)
-                          if (out) { km += out.totalKm; min += out.totalMin }
-                        })
-                        return <>
-                          <div className="text-sm font-bold text-indigo-700">~{km.toFixed(2)} km</div>
-                          <div className="text-xs text-indigo-500">{min > 0 ? fmtDuration(min) : '—'}</div>
-                        </>
-                      })()}
-                    </div>
+                    {(() => {
+                      let km = 0, min = 0
+                      sessionForm.details.forEach(d => {
+                        const out = calcDetail(d.zone_name, Number(d.repetitions) || 1, d.unit, Number(d.value_input) || null)
+                        if (out) { km += out.totalKm; min += out.totalMin }
+                      })
+                      return <>
+                        <div className="text-sm font-bold text-indigo-700 text-center">~{km.toFixed(2)} km</div>
+                        <div className="text-sm font-bold text-indigo-700 text-center">{min > 0 ? fmtDuration(min) : '—'}</div>
+                      </>
+                    })()}
                     <div />
                   </div>
                 )}
