@@ -828,33 +828,28 @@ export default function ProgramPage() {
 
               {/* Detail rows */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs font-medium text-gray-500 uppercase">Detail Sesi</div>
-                  <div className="text-[10px] text-gray-400">Zona Pace → Jarak → Est. Waktu</div>
-                </div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-3">Detail Sesi</div>
 
                 {/* Column headers */}
-                <div className="grid grid-cols-[1fr_90px_80px_24px] gap-2 mb-1 px-1">
-                  <div className="text-[10px] font-medium text-gray-400 uppercase">Zona</div>
-                  <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Jarak (km)</div>
-                  <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Est. Waktu</div>
+                <div className="grid grid-cols-[1fr_110px_90px_28px] gap-3 mb-2">
+                  <div className="text-xs font-medium text-gray-500 uppercase">Zona Pace</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Jarak (km)</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Est. Waktu</div>
                   <div />
                 </div>
 
                 <div className="space-y-2">
                   {sessionForm.details.map((d, idx) => {
-                    const zone   = getZone(d.zone_name)
                     const estMin = calcEstDuration(d.zone_name, d.distance_km ? Number(d.distance_km) : null)
                     return (
-                      <div key={idx} className="grid grid-cols-[1fr_90px_80px_24px] gap-2 items-center">
+                      <div key={idx} className="grid grid-cols-[1fr_110px_90px_28px] gap-3 items-center">
                         <select value={d.zone_name}
                           onChange={e => setSessionForm(f => {
                             const details = [...f.details]
                             details[idx] = { ...details[idx], zone_name: e.target.value }
                             return { ...f, details }
                           })}
-                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
-                          style={{ color: zone?.color || '#374151' }}>
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
                           {ZONE_DEFINITIONS.map(z => <option key={z.name} value={z.name}>{z.name}</option>)}
                         </select>
                         <input type="number" step="0.1" value={d.distance_km}
@@ -864,15 +859,15 @@ export default function ProgramPage() {
                             return { ...f, details }
                           })}
                           placeholder="0.0"
-                          className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-300" />
-                        <div className="text-xs text-center font-bold" style={{ color: zone?.color || '#9ca3af' }}>
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                        <div className="text-sm font-bold text-gray-700 text-center">
                           {estMin != null ? fmtDuration(estMin) : '—'}
                         </div>
                         {sessionForm.details.length > 1 ? (
                           <button onClick={() => setSessionForm(f => {
                             const details = f.details.filter((_, i) => i !== idx)
                             return { ...f, details }
-                          })} className="text-red-300 hover:text-red-500 text-xs text-center">✕</button>
+                          })} className="border border-red-200 text-red-400 hover:bg-red-50 rounded-lg w-6 h-6 flex items-center justify-center text-xs">✕</button>
                         ) : <div />}
                       </div>
                     )
@@ -881,12 +876,12 @@ export default function ProgramPage() {
 
                 {/* Total row */}
                 {sessionForm.details.length > 0 && (
-                  <div className="grid grid-cols-[1fr_90px_80px_24px] gap-2 items-center mt-2 pt-2 border-t border-gray-100">
-                    <div className="text-[11px] font-bold text-gray-500 text-right pr-2">Total</div>
-                    <div className="text-xs text-center font-bold text-indigo-700">
+                  <div className="grid grid-cols-[1fr_110px_90px_28px] gap-3 items-center mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-xs font-bold text-gray-500 text-right">Total</div>
+                    <div className="text-sm font-bold text-indigo-700 text-center">
                       {sessionForm.details.reduce((s, d) => s + (Number(d.distance_km) || 0), 0).toFixed(1)} km
                     </div>
-                    <div className="text-xs text-center font-bold text-indigo-700">
+                    <div className="text-sm font-bold text-indigo-700 text-center">
                       {(() => {
                         const total = sessionForm.details.reduce((s, d) =>
                           s + (calcEstDuration(d.zone_name, d.distance_km ? Number(d.distance_km) : null) || 0), 0)
@@ -898,7 +893,7 @@ export default function ProgramPage() {
                 )}
 
                 <button onClick={() => setSessionForm(f => ({ ...f, details: [...f.details, { ...DETAIL_BLANK }] }))}
-                  className="mt-2 text-xs border border-dashed border-indigo-300 text-indigo-500 px-3 py-1.5 rounded-lg hover:bg-indigo-50 w-full">
+                  className="mt-3 border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50 w-full">
                   + Tambah Baris Detail
                 </button>
               </div>
