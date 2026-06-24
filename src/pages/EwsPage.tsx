@@ -155,10 +155,11 @@ export default function EwsPage() {
     init()
   }, [])
 
-  async function loadEntries(_athId: string) {
-    const { data, error } = await (supabase as any)
-      .from('ews_entries').select('*').order('entry_date', { ascending: false })
-    if (error) console.error('EWS load error:', error)
+  async function loadEntries(athId: string) {
+    const { data } = await (supabase as any)
+      .from('ews_entries').select('*')
+      .eq('athlete_id', athId)
+      .order('entry_date', { ascending: false })
     setEntries(data || [])
   }
 
