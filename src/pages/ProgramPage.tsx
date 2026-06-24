@@ -75,25 +75,20 @@ function fmtDuration(min: number): string {
   const h = Math.floor(min / 60); const m = Math.round(min % 60)
   return m > 0 ? `${h}j ${m}mnt` : `${h}j`
 }
-function getMondayOf(d: Date): Date {
-  const day = d.getDay(); const diff = (day === 0 ? -6 : 1 - day)
-  const mon = new Date(d); mon.setDate(d.getDate() + diff); mon.setHours(0,0,0,0); return mon
-}
 function toYMD(d: Date): string { return d.toISOString().slice(0, 10) }
 function groupByWeek(sessions: ProgramSession[]): WeekGroup[] {
   if (!sessions.length) return []
   const sorted = [...sessions].sort((a, b) => a.session_date.localeCompare(b.session_date))
-  // Anchor = Monday of the week containing the first session
-  const anchorMonday = getMondayOf(new Date(sorted[0].session_date))
-  const anchorMs = anchorMonday.getTime()
+  // Anchor = first session date itself (not rolled back to Monday)
+  const anchorMs = new Date(sorted[0].session_date).getTime()
   const weekMap: Map<number, WeekGroup> = new Map()
   sessions.forEach(s => {
     const sessMs = new Date(s.session_date).getTime()
     const wn = Math.floor((sessMs - anchorMs) / (7 * 86400000)) + 1
     if (!weekMap.has(wn)) {
-      const mon = new Date(anchorMs + (wn - 1) * 7 * 86400000)
-      const sun = new Date(mon.getTime() + 6 * 86400000)
-      weekMap.set(wn, { week_number: wn, period_start: toYMD(mon), period_end: toYMD(sun), sessions: [], total_km: 0 })
+      const start = new Date(anchorMs + (wn - 1) * 7 * 86400000)
+      const end   = new Date(start.getTime() + 6 * 86400000)
+      weekMap.set(wn, { week_number: wn, period_start: toYMD(start), period_end: toYMD(end), sessions: [], total_km: 0 })
     }
     weekMap.get(wn)!.sessions.push(s)
   })
