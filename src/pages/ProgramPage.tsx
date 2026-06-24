@@ -26,6 +26,8 @@ interface SessionDetail {
   athlete_id: string
   sort_order: number
   zone_name: string
+  repetitions: number
+  distance_per_rep: number | null
   distance_km: number | null
   est_duration_min: number | null
 }
@@ -57,7 +59,8 @@ interface SessionForm {
 
 interface DetailForm {
   zone_name: string
-  distance_km: string
+  repetitions: string
+  distance_per_rep: string
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -94,8 +97,8 @@ const ZONE_DEFINITIONS = [
   { name: 'Anaerob',       label: 'Anaerob',        pct_min: 1.09, pct_max: 1.15, color: '#7c3aed' },
 ]
 
-const SESSION_BLANK: SessionForm = { session_date: '', program_type: 'EASY RUN (EZ)', notes: '', details: [{ zone_name: 'Easy', distance_km: '' }] }
-const DETAIL_BLANK: DetailForm   = { zone_name: 'Easy', distance_km: '' }
+const SESSION_BLANK: SessionForm = { session_date: '', program_type: 'EASY RUN (EZ)', notes: '', details: [{ zone_name: 'Easy', repetitions: '1', distance_per_rep: '' }] }
+const DETAIL_BLANK: DetailForm   = { zone_name: 'Easy', repetitions: '1', distance_per_rep: '' }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -329,13 +332,14 @@ export default function ProgramPage() {
     return paceZones.find(z => z.name === zoneName) || null
   }
 
-  function calcEstDuration(zoneName: string, distKm: number | null): number | null {
-    if (!distKm) return null
+  function calcEstDuration(zoneName: string, totalKm: number | null): number | null {
+    if (!totalKm) return null
     const zone = getZone(zoneName)
     if (!zone) return null
     const avgPaceSec = (zone.pace_min_sec + zone.pace_max_sec) / 2
-    return (avgPaceSec * distKm) / 60 // minutes
+    return (avgPaceSec * totalKm) / 60 // minutes
   }
+
 
   // ── Session CRUD ──
   function openSessionModal(editing: ProgramSession | null) {
@@ -344,7 +348,7 @@ export default function ProgramPage() {
         session_date: editing.session_date,
         program_type: editing.program_type,
         notes: editing.notes || '',
-        details: [{ zone_name: 'Easy', distance_km: '' }]
+        details: [{ zone_name: 'Easy', repetitions: '1', distance_per_rep: '' }]
       })
     } else {
       setSessionForm({ ...SESSION_BLANK, session_date: new Date().toISOString().slice(0, 10) })
@@ -355,7 +359,7 @@ export default function ProgramPage() {
   async function saveSession() {
     if (!selectedRaceId || !athleteId) return
     if (!sessionForm.session_date) { showToast('Tanggal wajib diisi', false); return }
-    const validDetails = sessionForm.details.filter(d => d.distance_km && Number(d.distance_km) > 0)
+    const validDetails = sessionForm.details.filter(d => d.distance_per_rep && Number(d.distance_per_rep) > 0)
     setSaving(true)
     const payload = {
       athlete_id: athleteId,
@@ -378,13 +382,18 @@ export default function ProgramPage() {
       // Save details
       if (validDetails.length && sessionId) {
         const detailInserts = validDetails.map((d, i) => {
-          const estMin = calcEstDuration(d.zone_name, Number(d.distance_km))
+          const rep    = Number(d.repetitions) || 1
+          const distPR = Number(d.distance_per_rep) || 0
+          const totalKm = rep * distPR
+          const estMin = calcEstDuration(d.zone_name, totalKm || null)
           return {
             session_id: sessionId,
             athlete_id: athleteId,
             sort_order: i,
             zone_name: d.zone_name,
-            distance_km: Number(d.distance_km),
+            repetitions: rep,
+            distance_per_rep: distPR || null,
+            distance_km: totalKm || null,
             est_duration_min: estMin
           }
         })
@@ -436,13 +445,18 @@ export default function ProgramPage() {
     try {
       const existingCount = session.details?.length || 0
       const inserts = forms.map((f, i) => {
-        const estMin = calcEstDuration(f.zone_name, f.distance_km ? Number(f.distance_km) : null)
+        const rep    = Number(f.repetitions) || 1
+        const distPR = Number(f.distance_per_rep) || 0
+        const totalKm = rep * distPR
+        const estMin = calcEstDuration(f.zone_name, totalKm || null)
         return {
           session_id: session.id,
           athlete_id: athleteId,
           sort_order: existingCount + i,
           zone_name: f.zone_name,
-          distance_km: f.distance_km ? Number(f.distance_km) : null,
+          repetitions: rep,
+          distance_per_rep: distPR || null,
+          distance_km: totalKm || null,
           est_duration_min: estMin
         }
       })
@@ -684,11 +698,12 @@ export default function ProgramPage() {
                         <div className="px-5 py-3">
                           {/* Header row */}
                           {((sess.details || []).length > 0 || pendingForms.length > 0) && (
-                            <div className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 mb-2 px-1">
-                              <div className="text-[10px] font-medium text-gray-400 uppercase">Sesi / Zona</div>
+                            <div className="grid grid-cols-[1fr_60px_90px_80px_90px_28px] gap-2 mb-2 px-1">
+                              <div className="text-[10px] font-medium text-gray-400 uppercase">Zona</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Rep</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Jarak/Rep</div>
                               <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Range Pace</div>
-                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Jarak</div>
-                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Est. Waktu</div>
+                              <div className="text-[10px] font-medium text-gray-400 uppercase text-right">Total / Est.</div>
                               <div />
                             </div>
                           )}
@@ -696,29 +711,37 @@ export default function ProgramPage() {
                           {/* Existing details */}
                           {(sess.details || []).map((det, idx) => {
                             const zone    = getZone(det.zone_name)
-                            const estMin  = det.est_duration_min || calcEstDuration(det.zone_name, det.distance_km)
+                            const rep     = det.repetitions || 1
+                            const distPR  = det.distance_per_rep
+                            const totalKm = det.distance_km
+                            const estMin  = det.est_duration_min || calcEstDuration(det.zone_name, totalKm)
                             const paceStr = zone ? `${secToMMSS(zone.pace_min_sec)}–${secToMMSS(zone.pace_max_sec)}/km` : '—'
                             return (
                               <div key={det.id}
-                                className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 items-center py-2 border-b border-gray-50 last:border-0">
+                                className="grid grid-cols-[1fr_60px_90px_80px_90px_28px] gap-2 items-center py-2 border-b border-gray-50 last:border-0">
                                 {/* Zone pill */}
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] font-medium text-gray-400">{idx + 1}.</span>
                                   <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-                                    style={{ background: zone?.color + '20' || '#f3f4f6', color: zone?.color || '#6b7280' }}>
+                                    style={{ background: (zone?.color || '#6b7280') + '20', color: zone?.color || '#6b7280' }}>
                                     <span className="w-2 h-2 rounded-full inline-block" style={{ background: zone?.color || '#9ca3af' }} />
                                     {det.zone_name}
                                   </span>
                                 </div>
-                                {/* Pace range */}
-                                <div className="text-xs text-center font-mono text-gray-600">{paceStr}</div>
-                                {/* Distance */}
-                                <div className="text-xs text-center font-bold text-gray-800">
-                                  {det.distance_km != null ? `${det.distance_km} km` : '—'}
+                                {/* Repetisi */}
+                                <div className="text-xs text-center font-bold text-gray-700">
+                                  {rep > 1 ? `${rep}×` : '—'}
                                 </div>
-                                {/* Est time */}
-                                <div className="text-xs text-center font-bold" style={{ color: zone?.color || '#6b7280' }}>
-                                  {estMin != null ? fmtDuration(estMin) : '—'}
+                                {/* Jarak/rep */}
+                                <div className="text-xs text-center text-gray-600">
+                                  {distPR != null ? `${distPR} km` : '—'}
+                                </div>
+                                {/* Pace range */}
+                                <div className="text-xs text-center font-mono text-gray-500">{paceStr}</div>
+                                {/* Total & Est time */}
+                                <div className="text-right">
+                                  <div className="text-xs font-bold text-gray-800">{totalKm != null ? `${totalKm} km` : '—'}</div>
+                                  <div className="text-[10px] text-gray-400">{estMin != null ? fmtDuration(estMin) : '—'}</div>
                                 </div>
                                 {/* Delete */}
                                 {canEdit && !isArchived && (
@@ -731,30 +754,37 @@ export default function ProgramPage() {
 
                           {/* Pending new detail forms */}
                           {pendingForms.map((f, idx) => {
-                            const zone   = getZone(f.zone_name)
-                            const estMin = calcEstDuration(f.zone_name, f.distance_km ? Number(f.distance_km) : null)
+                            const zone    = getZone(f.zone_name)
+                            const rep     = Number(f.repetitions) || 1
+                            const distPR  = Number(f.distance_per_rep) || 0
+                            const totalKm = rep * distPR
+                            const estMin  = calcEstDuration(f.zone_name, totalKm || null)
                             return (
-                              <div key={idx} className="grid grid-cols-[1fr_100px_100px_90px_28px] gap-2 items-center py-2 border-b border-indigo-50 bg-indigo-50/30 rounded-lg px-1 mb-1">
+                              <div key={idx} className="grid grid-cols-[1fr_60px_90px_80px_90px_28px] gap-2 items-center py-2 bg-indigo-50/40 rounded-lg px-1 mb-1">
                                 {/* Zone select */}
                                 <select value={f.zone_name}
                                   onChange={e => updateDetailForm(sess.id, idx, 'zone_name', e.target.value)}
-                                  className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
-                                  style={{ color: zone?.color || '#374151' }}>
+                                  className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-300">
                                   {ZONE_DEFINITIONS.map(z => (
                                     <option key={z.name} value={z.name}>{z.name}</option>
                                   ))}
                                 </select>
+                                {/* Rep input */}
+                                <input type="number" min="1" value={f.repetitions}
+                                  onChange={e => updateDetailForm(sess.id, idx, 'repetitions', e.target.value)}
+                                  placeholder="1" className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-300" />
+                                {/* Distance/rep input */}
+                                <input type="number" step="0.01" value={f.distance_per_rep}
+                                  onChange={e => updateDetailForm(sess.id, idx, 'distance_per_rep', e.target.value)}
+                                  placeholder="km" className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-300" />
                                 {/* Pace preview */}
                                 <div className="text-[10px] text-center font-mono text-gray-500">
                                   {zone ? `${secToMMSS(zone.pace_min_sec)}–${secToMMSS(zone.pace_max_sec)}` : '—'}
                                 </div>
-                                {/* Distance input */}
-                                <input type="number" step="0.1" value={f.distance_km}
-                                  onChange={e => updateDetailForm(sess.id, idx, 'distance_km', e.target.value)}
-                                  placeholder="km" className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-center focus:outline-none focus:ring-1 focus:ring-indigo-300" />
-                                {/* Est time preview */}
-                                <div className="text-[10px] text-center font-bold" style={{ color: zone?.color || '#6b7280' }}>
-                                  {estMin != null ? fmtDuration(estMin) : '—'}
+                                {/* Total & est preview */}
+                                <div className="text-right">
+                                  <div className="text-xs font-bold text-gray-700">{totalKm > 0 ? `${totalKm.toFixed(2)} km` : '—'}</div>
+                                  <div className="text-[10px] text-gray-400">{estMin != null ? fmtDuration(estMin) : '—'}</div>
                                 </div>
                                 {/* Remove row */}
                                 <button onClick={() => removeDetailForm(sess.id, idx)}
@@ -831,19 +861,25 @@ export default function ProgramPage() {
               <div>
                 <div className="text-xs font-medium text-gray-500 uppercase mb-3">Detail Sesi</div>
 
-                {/* Column headers */}
-                <div className="grid grid-cols-[1fr_110px_90px_28px] gap-3 mb-2">
-                  <div className="text-xs font-medium text-gray-500 uppercase">Zona Pace</div>
-                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Jarak (km)</div>
+
+
+                {/* Column sub-headers */}
+                <div className="grid grid-cols-[1fr_70px_100px_90px_28px] gap-2 mb-1">
+                  <div className="text-xs font-medium text-gray-500 uppercase">Zona</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Rep</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase text-center">Jarak/Rep</div>
                   <div className="text-xs font-medium text-gray-500 uppercase text-center">Est. Waktu</div>
                   <div />
                 </div>
 
                 <div className="space-y-2">
                   {sessionForm.details.map((d, idx) => {
-                    const estMin = calcEstDuration(d.zone_name, d.distance_km ? Number(d.distance_km) : null)
+                    const rep     = Number(d.repetitions) || 1
+                    const distPR  = Number(d.distance_per_rep) || 0
+                    const totalKm = rep * distPR
+                    const estMin  = calcEstDuration(d.zone_name, totalKm || null)
                     return (
-                      <div key={idx} className="grid grid-cols-[1fr_110px_90px_28px] gap-3 items-center">
+                      <div key={idx} className="grid grid-cols-[1fr_70px_100px_90px_28px] gap-2 items-center">
                         <select value={d.zone_name}
                           onChange={e => setSessionForm(f => {
                             const details = [...f.details]
@@ -853,14 +889,22 @@ export default function ProgramPage() {
                           className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
                           {ZONE_DEFINITIONS.map(z => <option key={z.name} value={z.name}>{z.name}</option>)}
                         </select>
-                        <input type="number" step="0.1" value={d.distance_km}
+                        <input type="number" min="1" value={d.repetitions}
                           onChange={e => setSessionForm(f => {
                             const details = [...f.details]
-                            details[idx] = { ...details[idx], distance_km: e.target.value }
+                            details[idx] = { ...details[idx], repetitions: e.target.value }
                             return { ...f, details }
                           })}
-                          placeholder="0.0"
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                          placeholder="1"
+                          className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                        <input type="number" step="0.01" value={d.distance_per_rep}
+                          onChange={e => setSessionForm(f => {
+                            const details = [...f.details]
+                            details[idx] = { ...details[idx], distance_per_rep: e.target.value }
+                            return { ...f, details }
+                          })}
+                          placeholder="km"
+                          className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm text-center text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300" />
                         <div className="text-sm font-bold text-gray-700 text-center">
                           {estMin != null ? fmtDuration(estMin) : '—'}
                         </div>
@@ -877,15 +921,17 @@ export default function ProgramPage() {
 
                 {/* Total row */}
                 {sessionForm.details.length > 0 && (
-                  <div className="grid grid-cols-[1fr_110px_90px_28px] gap-3 items-center mt-3 pt-3 border-t border-gray-100">
-                    <div className="text-xs font-bold text-gray-500 text-right">Total</div>
+                  <div className="grid grid-cols-[1fr_70px_100px_90px_28px] gap-2 items-center mt-3 pt-3 border-t border-gray-100">
+                    <div className="text-xs font-bold text-gray-500 col-span-2 text-right">Total</div>
                     <div className="text-sm font-bold text-indigo-700 text-center">
-                      {sessionForm.details.reduce((s, d) => s + (Number(d.distance_km) || 0), 0).toFixed(1)} km
+                      {sessionForm.details.reduce((s, d) => s + (Number(d.repetitions) || 1) * (Number(d.distance_per_rep) || 0), 0).toFixed(2)} km
                     </div>
                     <div className="text-sm font-bold text-indigo-700 text-center">
                       {(() => {
-                        const total = sessionForm.details.reduce((s, d) =>
-                          s + (calcEstDuration(d.zone_name, d.distance_km ? Number(d.distance_km) : null) || 0), 0)
+                        const total = sessionForm.details.reduce((s, d) => {
+                          const km = (Number(d.repetitions) || 1) * (Number(d.distance_per_rep) || 0)
+                          return s + (calcEstDuration(d.zone_name, km || null) || 0)
+                        }, 0)
                         return total > 0 ? fmtDuration(total) : '—'
                       })()}
                     </div>
