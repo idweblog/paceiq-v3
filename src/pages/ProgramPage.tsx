@@ -115,11 +115,20 @@ export default function ProgramPage() {
   const [detailForms, setDetailForms]   = useState<Record<string, DetailForm[]>>({})
   const [savingDetail, setSavingDetail] = useState<string | null>(null)
   const [saving, setSaving]             = useState(false)
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set())
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const canEdit      = roles.includes('coach') || roles.includes('admin')
   const selectedRace = races.find(r => r.id === selectedRaceId) || null
   const isArchived   = selectedRace?.status === 'done'
+
+  function toggleSession(id: string) {
+    setExpandedSessions(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -414,17 +423,33 @@ export default function ProgramPage() {
               </div>
             ) : (
               <>
-                {/* Week header */}
+                {/* Week header with prev/next */}
                 <div className="bg-white rounded-xl shadow-sm p-5">
                   <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                      <h2 className="font-gsans text-lg text-indigo-700">
-                        Pekan {activeWk.week_number}
-                        {todayStr >= activeWk.period_start && todayStr <= activeWk.period_end && (
-                          <span className="ml-2 text-xs font-normal text-white bg-indigo-500 px-2 py-0.5 rounded-full">AKTIF</span>
-                        )}
-                      </h2>
-                      <div className="text-xs text-gray-400 mt-0.5">{fmtDate(activeWk.period_start)} — {fmtDate(activeWk.period_end)}</div>
+                    <div className="flex items-center gap-3">
+                      {/* Prev week */}
+                      <button
+                        onClick={() => { const idx = weeks.findIndex(w => w.week_number === activeWk.week_number); if (idx > 0) setSelectedWeek(weeks[idx-1].week_number) }}
+                        disabled={weeks.findIndex(w => w.week_number === activeWk.week_number) === 0}
+                        className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed">
+                        ←
+                      </button>
+                      <div>
+                        <h2 className="font-gsans text-lg text-indigo-700">
+                          Pekan {activeWk.week_number}
+                          {todayStr >= activeWk.period_start && todayStr <= activeWk.period_end && (
+                            <span className="ml-2 text-xs font-normal text-white bg-indigo-500 px-2 py-0.5 rounded-full">AKTIF</span>
+                          )}
+                        </h2>
+                        <div className="text-xs text-gray-400 mt-0.5">{fmtDate(activeWk.period_start)} — {fmtDate(activeWk.period_end)}</div>
+                      </div>
+                      {/* Next week */}
+                      <button
+                        onClick={() => { const idx = weeks.findIndex(w => w.week_number === activeWk.week_number); if (idx < weeks.length - 1) setSelectedWeek(weeks[idx+1].week_number) }}
+                        disabled={weeks.findIndex(w => w.week_number === activeWk.week_number) === weeks.length - 1}
+                        className="w-8 h-8 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed">
+                        →
+                      </button>
                     </div>
                     <div className="flex gap-4 text-center text-xs">
                       <div>
@@ -442,46 +467,55 @@ export default function ProgramPage() {
                         </div>
                         <div className="text-gray-400">Est. Durasi</div>
                       </div>
+                      <div>
+                        <button onClick={() => setExpandedSessions(prev => {
+                          const allIds = new Set(activeWk.sessions.map(s => s.id))
+                          const allExpanded = activeWk.sessions.every(s => prev.has(s.id))
+                          if (allExpanded) return new Set([...prev].filter(id => !allIds.has(id)))
+                          return new Set([...prev, ...allIds])
+                        })} className="text-xs border border-gray-200 text-gray-500 px-2 py-1 rounded-lg hover:bg-gray-50 mt-1">
+                          {activeWk.sessions.every(s => expandedSessions.has(s.id)) ? '▲ Tutup Semua' : '▼ Buka Semua'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 {/* Session cards */}
-                <div className="space-y-4">
+                <div className="space-y-2">
                   {activeWk.sessions.map(sess => {
                     const sessKm = (sess.details || []).reduce((s, d) => s + (d.distance_km || 0), 0)
                     const sessMin = (sess.details || []).reduce((s, d) => s + (d.est_duration_min || 0), 0)
                     const pendingForms = detailForms[sess.id] || []
+                    const isExpanded = expandedSessions.has(sess.id)
                     return (
                       <div key={sess.id} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                        {/* Session header */}
-                        <div className="px-5 py-4 border-b border-gray-100">
-                          <div className="flex items-start justify-between flex-wrap gap-2">
-                            <div>
-                              <div className="text-[11px] font-bold text-indigo-500 uppercase tracking-wider mb-0.5">{fmtDateShort(sess.session_date)}</div>
-                              <div className="text-sm font-bold text-gray-800">{sess.program_type}</div>
-                              {sess.notes && <div className="text-xs text-gray-500 mt-1 italic">{sess.notes}</div>}
-                            </div>
-                            <div className="flex items-center gap-4 text-center text-xs">
-                              <div>
-                                <div className="text-sm font-bold text-indigo-600">~{sessKm.toFixed(2)} km</div>
-                                <div className="text-gray-400">Est. Jarak</div>
-                              </div>
-                              {sessMin > 0 && (
-                                <div>
-                                  <div className="text-sm font-bold text-gray-700">{fmtDuration(sessMin)}</div>
-                                  <div className="text-gray-400">Est. Waktu</div>
-                                </div>
-                              )}
-                              {canEdit && !isArchived && (
-                                <div className="flex gap-1">
-                                  <button onClick={() => openSessionModal(sess)} className="border border-indigo-500 text-indigo-600 text-xs px-2 py-0.5 rounded-lg hover:bg-indigo-50">Edit</button>
-                                  <button onClick={() => deleteSession(sess.id)} className="border border-red-200 text-red-500 text-xs px-2 py-0.5 rounded-lg hover:bg-red-50">Hapus</button>
-                                </div>
-                              )}
+                        {/* Session header — always visible, click to expand */}
+                        <div
+                          className="px-5 py-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                          onClick={() => toggleSession(sess.id)}>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-gray-300 text-xs flex-shrink-0">{isExpanded ? '▲' : '▼'}</span>
+                            <div className="min-w-0">
+                              <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">{fmtDateShort(sess.session_date)}</div>
+                              <div className="text-sm font-bold text-gray-800 truncate">{sess.program_type}</div>
                             </div>
                           </div>
+                          <div className="flex items-center gap-4 flex-shrink-0">
+                            <div className="text-right">
+                              <div className="text-sm font-bold text-indigo-600">~{sessKm.toFixed(1)} km</div>
+                              <div className="text-[10px] text-gray-400">{sessMin > 0 ? fmtDuration(sessMin) : '—'}</div>
+                            </div>
+                            {canEdit && !isArchived && (
+                              <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                                <button onClick={() => openSessionModal(sess)} className="border border-indigo-500 text-indigo-600 text-xs px-2 py-0.5 rounded-lg hover:bg-indigo-50">Edit</button>
+                                <button onClick={() => deleteSession(sess.id)} className="border border-red-200 text-red-500 text-xs px-2 py-0.5 rounded-lg hover:bg-red-50">Hapus</button>
+                              </div>
+                            )}
+                          </div>
                         </div>
+                        {/* Expandable detail */}
+                        {isExpanded && <div className="border-t border-gray-100">
 
                         {/* Detail table */}
                         <div className="px-5 py-3">
@@ -583,6 +617,7 @@ export default function ProgramPage() {
                             </div>
                           )}
                         </div>
+                        </div>}
                       </div>
                     )
                   })}
