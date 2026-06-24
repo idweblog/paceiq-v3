@@ -82,10 +82,18 @@ function trendArrow(current: number | null, baseline: number | null, higherIsBet
 function calculateEWS(
   dateStr: string, rhr: number, hrv: number,
   sleep: number, sleepQual: number, doms: number, energy: number,
-  history: EwsEntry[], profileHRrest: number
+  history: EwsEntry[], _profileHRrest: number
 ): EwsResult {
   const past = history.filter(e => e.entry_date < dateStr).sort((a, b) => b.entry_date.localeCompare(a.entry_date))
-  let baseRhr = profileHRrest || 55, baseHrv = 50, baseSource = 'default profil'
+
+  // Baseline strategy (Kiviniemi et al. 2007 / Plews et al. 2013):
+  // Measure deviation relative to individual baseline, not population norms.
+  // Entri ke-1 : baseline = nilai hari itu sendiri (scoreRHR/HRV = 0, no false alarm)
+  // Entri ke-2+: blended avg entri sebelumnya (70%) + hari itu (30%)
+  // Entri ke-3+: rolling avg 5 entri terakhir (fully data-driven)
+  let baseRhr = rhr   // default: hari itu sendiri (entri pertama)
+  let baseHrv = hrv   // default: hari itu sendiri (entri pertama)
+  let baseSource = 'hari ini (entri pertama — baseline akan akurat setelah 5–7 entri)'
 
   if (past.length >= 3) {
     const last5 = past.slice(0, 5)
@@ -93,13 +101,15 @@ function calculateEWS(
     const hrvV = last5.map(e => e.hrv).filter((v): v is number => v != null)
     if (rhrV.length) baseRhr = rhrV.reduce((a, b) => a + b, 0) / rhrV.length
     if (hrvV.length) baseHrv = hrvV.reduce((a, b) => a + b, 0) / hrvV.length
-    baseSource = `rata-rata ${Math.min(past.length, 5)} entri terakhir`
+    baseSource = `rolling avg ${Math.min(past.length, 5)} entri terakhir`
   } else if (past.length > 0) {
     const rhrV = past.map(e => e.resting_hr).filter((v): v is number => v != null)
     const hrvV = past.map(e => e.hrv).filter((v): v is number => v != null)
-    if (rhrV.length) baseRhr = (rhrV.reduce((a, b) => a + b, 0) / rhrV.length * 0.7) + (profileHRrest * 0.3)
-    if (hrvV.length) baseHrv = (hrvV.reduce((a, b) => a + b, 0) / hrvV.length * 0.7) + (50 * 0.3)
-    baseSource = `${past.length} entri (blended dengan profil)`
+    const avgPastRhr = rhrV.length ? rhrV.reduce((a, b) => a + b, 0) / rhrV.length : rhr
+    const avgPastHrv = hrvV.length ? hrvV.reduce((a, b) => a + b, 0) / hrvV.length : hrv
+    baseRhr = avgPastRhr * 0.7 + rhr * 0.3
+    baseHrv = avgPastHrv * 0.7 + hrv * 0.3
+    baseSource = `${past.length} entri (blended, baseline berkembang)`
   }
 
   let scoreRhr = 0, scoreHrv = 0
@@ -269,9 +279,11 @@ export default function EwsPage() {
     ? avg(filtered.filter(e => e.composite_score != null).map(e => {
         const rhr = e.resting_hr ?? 0, hrv = e.hrv ?? 0
         if (!rhr || !hrv) return null
-        const all5 = entries.filter(x => x.entry_date < e.entry_date).slice(0, 5)
-        const bRhr = avg(all5.map(x => x.resting_hr)) ?? profileHRrest
-        const bHrv = avg(all5.map(x => x.hrv)) ?? 50
+        const past5 = entries.filter(x => x.entry_date < e.entry_date)
+          .sort((a, b) => b.entry_date.localeCompare(a.entry_date)).slice(0, 5)
+        // Consistent with algorithm: entri pertama baseline = nilai hari itu
+        const bRhr = past5.length >= 1 ? (avg(past5.map(x => x.resting_hr)) ?? rhr) : rhr
+        const bHrv = past5.length >= 1 ? (avg(past5.map(x => x.hrv)) ?? hrv) : hrv
         const sRhr = Math.min(Math.max(((rhr - bRhr) / bRhr) * 200, 0), 100)
         const sHrv = Math.min(Math.max(((hrv - bHrv) / bHrv) * -200, 0), 100)
         return (0.6 * sHrv) + (0.4 * sRhr)
