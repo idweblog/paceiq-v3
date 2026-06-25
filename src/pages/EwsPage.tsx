@@ -263,6 +263,24 @@ export default function EwsPage() {
     await loadEntries(athleteId!); showToast('Entri dihapus')
   }
 
+  // ── Recalculate all entries ──
+  async function recalculateAll() {
+    if (!athleteId) return
+    if (!confirm(`Recalculate composite_score untuk ${entries.length} entri menggunakan baseline profil aktif?`)) return
+    let updated = 0
+    for (const e of entries) {
+      const rhr = e.resting_hr, hrv = e.hrv
+      const sleep = e.sleep_hours, sq = e.sleep_quality
+      const doms = e.muscle_soreness, energy = e.motivation
+      if (!rhr || !hrv || sleep == null || sq == null || doms == null || energy == null) continue
+      const res = calculateEWS(e.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest, profileHRVBase)
+      await (supabase as any).from('ews_entries').update({ composite_score: res.totalScore }).eq('id', e.id)
+      updated++
+    }
+    await loadEntries(athleteId)
+    showToast(`${updated} entri berhasil di-recalculate`)
+  }
+
   // ── Derived data ──────────────────────────────────────────────────────────
 
   const getWeekKey = useCallback((dateStr: string) => {
@@ -293,10 +311,26 @@ export default function EwsPage() {
     const vals = filtered.filter(e => e.composite_score != null).map(e => {
       const rhr = e.resting_hr ?? 0, hrv = e.hrv ?? 0
       if (!rhr || !hrv) return null
-      const past5 = entries.filter(x => x.entry_date < e.entry_date)
-        .sort((a, b) => b.entry_date.localeCompare(a.entry_date)).slice(0, 5)
-      const bRhr = past5.length >= 1 ? (avg(past5.map(x => x.resting_hr)) ?? rhr) : rhr
-      const bHrv = past5.length >= 1 ? (avg(past5.map(x => x.hrv)) ?? hrv) : hrv
+      // Mirror 3-layer baseline logic
+      const past = entries.filter(x => x.entry_date < e.entry_date)
+        .sort((a, b) => b.entry_date.localeCompare(a.entry_date))
+      const profRhr = profileHRrest || rhr
+      const profHrv = profileHRVBase || hrv
+      let bRhr: number, bHrv: number
+      if (past.length >= 21) {
+        const last30 = past.slice(0, 30)
+        bRhr = avg(last30.map(x => x.resting_hr)) ?? profRhr
+        bHrv = avg(last30.map(x => x.hrv)) ?? profHrv
+      } else if (past.length >= 8) {
+        const rollingRhr = avg(past.map(x => x.resting_hr)) ?? profRhr
+        const rollingHrv = avg(past.map(x => x.hrv)) ?? profHrv
+        bRhr = profRhr * 0.5 + rollingRhr * 0.5
+        bHrv = profHrv * 0.5 + rollingHrv * 0.5
+      } else {
+        // Lapis 1 — pakai profil baseline
+        bRhr = profRhr
+        bHrv = profHrv
+      }
       const sRhr = Math.min(Math.max(((rhr - bRhr) / bRhr) * 200, 0), 100)
       const sHrv = Math.min(Math.max(((hrv - bHrv) / bHrv) * -200, 0), 100)
       return (0.6 * sHrv) + (0.4 * sRhr)
@@ -743,8 +777,14 @@ export default function EwsPage() {
 
           {/* History Table */}
           <div className="bg-white rounded-xl shadow-sm p-5">
-            <div className="border-b border-indigo-100 pb-2 mb-4">
+            <div className="border-b border-indigo-100 pb-2 mb-4 flex items-center justify-between">
               <h2 className="font-gsans text-xl text-indigo-700 uppercase">Riwayat EWS & Fatigue Score</h2>
+              {entries.length > 0 && (
+                <button onClick={recalculateAll}
+                  className="border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50">
+                  🔄 Recalculate Semua
+                </button>
+              )}
             </div>
 
             {/* Controls */}
