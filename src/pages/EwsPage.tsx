@@ -560,6 +560,13 @@ export default function EwsPage() {
           {/* Distribusi Status */}
           <div className="bg-white rounded-xl shadow-sm p-5">
             <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Distribusi Status</h2>
+            {/* Zone reference badges */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {[['#eef2ff','#6366f1','≤15 Sangat Prima'],['#ecfdf5','#065f46','≤30 Kondisi Baik'],['#fffbeb','#92400e','≤45 Waspada'],['#fef2f2','#991b1b','≤60 Kelelahan Tinggi'],['#1e293b','#f8fafc','>60 Danger Zone']].map(([bg,col,lbl]) => (
+                <span key={lbl} className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
+              ))}
+            </div>
+
             {filtered.length === 0 ? (
               <div className="text-center py-6 text-gray-400 text-xs">Belum ada data untuk periode ini.</div>
             ) : (
@@ -621,11 +628,7 @@ export default function EwsPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {[['#eef2ff','#6366f1','≤15 Sangat Prima'],['#ecfdf5','#065f46','≤30 Kondisi Baik'],['#fffbeb','#92400e','≤45 Waspada'],['#fef2f2','#991b1b','≤60 Kelelahan Tinggi'],['#1e293b','#f8fafc','>60 Danger Zone']].map(([bg,col,lbl]) => (
-                    <span key={lbl} className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
-                  ))}
-                </div>
+
               </>
             )}
           </div>
