@@ -196,7 +196,7 @@ export default function EwsPage() {
       setResult(null); return
     }
     setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest, profileHRVBase))
-  }, [form, entries, profileHRrest])
+  }, [form, entries, profileHRrest, profileHRVBase])
 
   function handleSleepStr(val: string) {
     let c = val.replace(/\D/g, '')
@@ -621,6 +621,28 @@ export default function EwsPage() {
                   className="border border-red-200 text-red-600 text-xs px-3 py-1 rounded-lg hover:bg-red-50">Batal</button>
               </div>
             )}
+
+            {/* Baseline info — selalu tampil */}
+            <div className="mb-4 px-4 py-3 bg-indigo-50 border border-indigo-100 rounded-lg">
+              <div className="text-xs font-bold text-indigo-600 uppercase mb-1">Baseline EWS Aktif</div>
+              <div className="flex flex-wrap gap-4 text-xs text-gray-700">
+                <span>💓 RHR Baseline: <strong className="text-indigo-700">{profileHRrest} bpm</strong></span>
+                <span>📡 HRV Baseline: <strong className="text-indigo-700">{profileHRVBase != null ? `${profileHRVBase} ms` : 'belum diisi'}</strong></span>
+                <span className="text-gray-400">
+                  {entries.length === 0
+                    ? '— Lapis 1 (entri pertama)'
+                    : entries.length < 8
+                    ? `— Lapis 1 (${entries.length} entri, akumulasi data)`
+                    : entries.length < 21
+                    ? `— Lapis 2 (blended profil + rolling ${entries.length} entri)`
+                    : `— Lapis 3 (rolling avg ${Math.min(entries.length, 30)} hari)`
+                  }
+                </span>
+              </div>
+              {!profileHRVBase && (
+                <div className="text-xs text-amber-600 mt-1">⚠️ HRV Baseline belum diisi — isi di Profil → Edit Profil untuk hasil EWS lebih akurat</div>
+              )}
+            </div>
 
             {/* Row 1 */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
