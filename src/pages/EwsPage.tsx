@@ -561,7 +561,7 @@ export default function EwsPage() {
           <div className="bg-white rounded-xl shadow-sm p-5">
             <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Distribusi Status</h2>
             {/* Zone reference badges */}
-            <div className="flex flex-wrap gap-2 mb-3">
+            <div className="flex flex-wrap gap-2 mb-5">
               {[['#eef2ff','#6366f1','≤15 Sangat Prima'],['#ecfdf5','#065f46','≤30 Kondisi Baik'],['#fffbeb','#92400e','≤45 Waspada'],['#fef2f2','#991b1b','≤60 Kelelahan Tinggi'],['#1e293b','#f8fafc','>60 Danger Zone']].map(([bg,col,lbl]) => (
                 <span key={lbl} className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
               ))}
@@ -602,7 +602,7 @@ export default function EwsPage() {
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap gap-4 mb-4 text-xs font-semibold">
+                <div className="flex flex-wrap gap-4 mb-6 text-xs font-semibold">
                   {[['#6366f1','Fatigue Score'],['#ef4444','RHR (bpm)'],['#10b981','HRV (ms)'],['#f59e0b','Energy (×10)']].map(([c,l]) => (
                     <span key={l} className="flex items-center gap-1.5">
                       <span className="inline-block w-4 h-0.5 rounded" style={{ background: c }} />{l}
