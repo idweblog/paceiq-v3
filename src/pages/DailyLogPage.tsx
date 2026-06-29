@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -775,7 +775,7 @@ export default function DailyLogPage() {
   }
 
   // ── Available program sessions for linking (same calendar week, not yet linked) ──
-  const availableProgramSessions = useCallback((): ProgramSession[] => {
+  function availableProgramSessions(): ProgramSession[] {
     if (!form.session_date) return []
     const mon = getMondayOfWeek(form.session_date)
     const sun = getSundayOfWeek(form.session_date)
@@ -789,20 +789,20 @@ export default function DailyLogPage() {
       ps.session_date <= sun &&
       !linkedIds.has(ps.id)
     )
-  }, [form.session_date, programSessions, sessions, editingId])
+  }
 
-  // ── Live calculation ──
-  const liveCalc = useCallback((): CalcResult | null => {
-    if (!form.duration_min || !form.rpe) return null
+  // ── Live calculation (useEffect pattern, sama seperti EWS) ──
+  const [calc, setCalc] = useState<CalcResult | null>(null)
+
+  useEffect(() => {
+    if (!form.duration_min || !form.rpe) { setCalc(null); return }
     const refHRrest = settings?.resting_hr || 55
     const refMaxHR  = maxHR || 180
     const refLthr   = lthr || (refMaxHR * 0.87)
     const ewsScore  = getEWSForDate(form.session_date)
     const sortedAsc = [...sessions].sort((a, b) => a.session_date.localeCompare(b.session_date))
-    return calcTrainingLoad(form, tlSettings, refMaxHR, refHRrest, refLthr, ewsScore, vcr, sortedAsc)
+    setCalc(calcTrainingLoad(form, tlSettings, refMaxHR, refHRrest, refLthr, ewsScore, vcr, sortedAsc))
   }, [form, settings, maxHR, lthr, vcr, tlSettings, sessions, ewsEntries])
-
-  const calc = liveCalc()
 
   // ── Auto-fill from linked program session ──
   useEffect(() => {
@@ -1023,17 +1023,22 @@ export default function DailyLogPage() {
                 ⚙️ Parameter TL
               </button>
             )}
+            <button onClick={() => { setTab('input'); setForm(FORM_BLANK); setEditingId(null) }}
+              className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700">
+              + Input Log
+            </button>
           </div>
         </div>
-        {/* Tab */}
-        <div className="flex gap-2 mt-4">
-          {(['dashboard', 'input'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-lg text-xs font-medium transition-all ${tab === t ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
-              {t === 'dashboard' ? '📊 Dashboard & Tren' : '✏️ Input & Riwayat'}
-            </button>
-          ))}
-        </div>
+      </div>
+
+      {/* Tabs — pola EWS */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        {(['dashboard', 'input'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${tab === t ? 'bg-white text-indigo-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            {t === 'dashboard' ? '📊 Dashboard & Tren' : '✏️ Input & Riwayat'}
+          </button>
+        ))}
       </div>
 
       {/* ================================================================ */}
