@@ -37,6 +37,7 @@ interface AthleteProfile {
   height_cm: number | null
   birth_date: string | null
   gender: string | null
+  resting_hr: number | null
 }
 
 interface Race {
@@ -203,14 +204,14 @@ function segGap(left: number | null, right: number | null): { pct: number; flag:
 }
 
 // ─────────────────────────────────────────────
-// EMPTY FORM
+// EMPTY FORM  (resting_hr dihapus dari form)
 // ─────────────────────────────────────────────
 const emptyForm = {
   recorded_date: new Date().toISOString().split('T')[0],
   weight_kg: '', body_fat_pct: '', skeletal_muscle_pct: '',
   visceral_fat_index: '', bmr_kcal: '', body_water_pct: '',
   lean_body_mass_kg: '', smi: '', health_score: '', protein_pct: '',
-  waist_cm: '', resting_hr: '',
+  waist_cm: '',
   seg_arm_left: '', seg_arm_right: '', seg_trunk: '',
   seg_leg_left: '', seg_leg_right: '',
   notes: '',
@@ -228,8 +229,9 @@ export default function BodyMetricsPage() {
   const canEdit = roles.includes('coach') || roles.includes('admin') || roles.includes('athlete')
 
   const [logs, setLogs] = useState<BodyMetric[]>([])
-  const [profile, setProfile] = useState<AthleteProfile>({ height_cm: null, birth_date: null, gender: null })
+  const [profile, setProfile] = useState<AthleteProfile>({ height_cm: null, birth_date: null, gender: null, resting_hr: null })
   const [races, setRaces] = useState<Race[]>([])
+  const [ewsRHR, setEwsRHR] = useState<number | null>(null)  // rata-rata RHR 7 hari dari EWS
   const [loading, setLoading] = useState(true)
 
   const [activeTab, setActiveTab] = useState<'overview' | 'input' | 'history'>('overview')
@@ -243,8 +245,13 @@ export default function BodyMetricsPage() {
   useEffect(() => {
     if (!athleteId || !user) return
     let cancelled = false
-    Promise.all([loadLogs(cancelled), loadProfile(cancelled), loadRaces(cancelled), loadRoles(cancelled)])
-      .then(() => { if (!cancelled) setLoading(false) })
+    Promise.all([
+      loadLogs(cancelled),
+      loadProfile(cancelled),
+      loadRaces(cancelled),
+      loadRoles(cancelled),
+      loadEwsRHR(cancelled),
+    ]).then(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [athleteId, user])
 
@@ -270,11 +277,12 @@ export default function BodyMetricsPage() {
   async function loadProfile(cancelled = false) {
     if (!athleteId) return
     const { data } = await supabase.from('athlete_settings')
-      .select('height_cm, birth_date, gender').eq('athlete_id', athleteId).single()
+      .select('height_cm, birth_date, gender, resting_hr').eq('athlete_id', athleteId).single()
     if (!cancelled && data) setProfile({
       height_cm: data.height_cm,
       birth_date: data.birth_date,
       gender: (data as unknown as { gender: string | null }).gender,
+      resting_hr: (data as unknown as { resting_hr: number | null }).resting_hr,
     })
   }
 
@@ -286,6 +294,31 @@ export default function BodyMetricsPage() {
       .order('event_date', { ascending: true })
     if (!cancelled && data) setRaces(data as Race[])
   }
+
+  // Ambil rata-rata RHR 7 hari terakhir dari ews_entries
+  async function loadEwsRHR(cancelled = false) {
+    if (!athleteId) return
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 7)
+    const cutoffStr = cutoff.toISOString().split('T')[0]
+    const { data } = await supabase
+      .from('ews_entries')
+      .select('resting_hr')
+      .eq('athlete_id', athleteId)
+      .gte('entry_date', cutoffStr)
+      .not('resting_hr', 'is', null)
+    if (!cancelled && data && data.length > 0) {
+      const valid = data.map((d: { resting_hr: number }) => d.resting_hr).filter((v: number) => v > 0 && v < 200)
+      if (valid.length > 0) {
+        const avg = Math.round(valid.reduce((a: number, b: number) => a + b, 0) / valid.length)
+        setEwsRHR(avg)
+      }
+    }
+  }
+
+  // RHR efektif: prioritas EWS, fallback athlete_settings
+  const effectiveRHR = ewsRHR ?? profile.resting_hr ?? null
+  const rhrSource = ewsRHR ? 'Rata-rata 7 hari EWS' : profile.resting_hr ? 'Profil Atlet' : null
 
   async function handleSave() {
     if (!athleteId) return
@@ -305,7 +338,8 @@ export default function BodyMetricsPage() {
       health_score: form.health_score ? parseFloat(form.health_score) : null,
       protein_pct: form.protein_pct ? parseFloat(form.protein_pct) : null,
       waist_cm: form.waist_cm ? parseFloat(form.waist_cm) : null,
-      resting_hr: form.resting_hr ? parseInt(form.resting_hr) : null,
+      // resting_hr tidak lagi diisi manual — kolom tetap di DB tapi diisi null
+      resting_hr: null,
       seg_arm_left: form.seg_arm_left ? parseFloat(form.seg_arm_left) : null,
       seg_arm_right: form.seg_arm_right ? parseFloat(form.seg_arm_right) : null,
       seg_trunk: form.seg_trunk ? parseFloat(form.seg_trunk) : null,
@@ -513,13 +547,22 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                         { label: 'SMI', value: latest.smi ? `${latest.smi}` : '—', color: '#6b7280' },
                         { label: 'Health Score', value: latest.health_score ? `${latest.health_score}` : '—', color: '#4f46e5' },
                         { label: 'Lingkar Perut', value: latest.waist_cm ? `${latest.waist_cm} cm` : '—', color: '#6b7280' },
-                        { label: 'Resting HR', value: latest.resting_hr ? `${latest.resting_hr} bpm` : '—', color: '#ef4444' },
                       ].map(c => (
                         <div key={c.label} className={cardCls}>
                           <p className={labelCls}>{c.label}</p>
                           <p className="text-sm font-bold" style={{ color: c.color }}>{c.value}</p>
                         </div>
                       ))}
+                      {/* Resting HR — dari EWS / profil, bukan dari body_metrics */}
+                      <div className={cardCls}>
+                        <p className={labelCls}>Resting HR</p>
+                        <p className="text-sm font-bold" style={{ color: effectiveRHR ? '#ef4444' : '#6b7280' }}>
+                          {effectiveRHR ? `${effectiveRHR} bpm` : '—'}
+                        </p>
+                        {rhrSource && (
+                          <p className="text-xs text-gray-400 mt-0.5">{rhrSource}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -747,7 +790,7 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
             </div>
           </div>
 
-          {/* Form — Data Komposisi */}
+          {/* Form — Data Komposisi (resting_hr dihapus dari form) */}
           <p className="text-xs font-medium text-gray-500 uppercase mb-3">Data Komposisi Tubuh</p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
             {[
@@ -763,7 +806,6 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
               { key: 'smi', label: 'SMI', type: 'number', ph: '8.2' },
               { key: 'health_score', label: 'Health Score', type: 'number', ph: '79' },
               { key: 'waist_cm', label: 'Lingkar Perut (cm)', type: 'number', ph: '82' },
-              { key: 'resting_hr', label: 'Resting HR (bpm)', type: 'number', ph: '52' },
             ].map(f => (
               <div key={f.key}>
                 <label className={labelCls}>{f.label}</label>
@@ -773,6 +815,15 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                   className={inputCls} />
               </div>
             ))}
+          </div>
+
+          {/* Info: Resting HR otomatis dari EWS */}
+          <div className="mb-5 p-3 bg-blue-50 rounded-lg border border-blue-100 text-xs text-blue-700">
+            <span className="font-medium">Resting HR</span> diambil otomatis dari data EWS (rata-rata 7 hari terakhir).
+            {effectiveRHR
+              ? <span className="ml-1">Nilai saat ini: <strong>{effectiveRHR} bpm</strong> ({rhrSource})</span>
+              : <span className="ml-1 text-blue-500">Belum ada data EWS — input RHR pagi di halaman EWS Tracker.</span>
+            }
           </div>
 
           {/* Form — Segmental Analysis */}
@@ -856,7 +907,7 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['Tanggal','Berat','BF%','Fat Mass','Lean Mass','BMI','SM%','VFI','BMR','Waist','RHR','Score','Arm L/R','Leg L/R',''].map(h => (
+                    {['Tanggal','Berat','BF%','Fat Mass','Lean Mass','BMI','SM%','VFI','BMR','Waist','Score','Arm L/R','Leg L/R',''].map(h => (
                       <th key={h} className="text-left text-xs font-medium text-gray-400 uppercase pb-2 pr-3 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -884,7 +935,6 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                         <td className="py-2 pr-3">{l.visceral_fat_index ?? '—'}</td>
                         <td className="py-2 pr-3">{l.bmr_kcal ?? '—'}</td>
                         <td className="py-2 pr-3">{l.waist_cm ? `${l.waist_cm}` : '—'}</td>
-                        <td className="py-2 pr-3">{l.resting_hr ?? '—'}</td>
                         <td className="py-2 pr-3">{l.health_score ?? '—'}</td>
                         <td className="py-2 pr-3 text-xs">
                           {l.seg_arm_left || l.seg_arm_right
