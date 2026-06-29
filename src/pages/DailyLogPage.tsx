@@ -34,13 +34,13 @@ interface ProgramSession {
 }
 
 interface EwsEntry {
-  date: string
-  rhr: number
-  hrv: number
-  sleep: number
-  qual: number
-  doms: number
-  energy: number
+  entry_date: string
+  resting_hr: number | null
+  hrv: number | null
+  sleep_hours: number | null
+  sleep_quality: number | null
+  muscle_soreness: number | null
+  motivation: number | null
 }
 
 interface TrainingSession {
@@ -726,8 +726,9 @@ export default function DailyLogPage() {
 
   async function loadEws(athId: string) {
     const { data } = await (supabase as any)
-      .from('ews_entries').select('date,rhr,hrv,sleep,qual,doms,energy')
-      .eq('athlete_id', athId).order('date', { ascending: true })
+      .from('ews_entries')
+      .select('entry_date,resting_hr,hrv,sleep_hours,sleep_quality,muscle_soreness,motivation')
+      .eq('athlete_id', athId).order('entry_date', { ascending: true })
     setEwsEntries(data || [])
   }
 
@@ -749,29 +750,39 @@ export default function DailyLogPage() {
   // ── EWS score for a given date ──
   function getEWSForDate(dateStr: string): number {
     if (!ewsEntries.length || !settings) return 0
-    const entry = ewsEntries.find(e => e.date === dateStr)
+    const entry = ewsEntries.find(e => e.entry_date === dateStr)
     if (!entry) return 0
+
+    const rhr    = entry.resting_hr
+    const hrv    = entry.hrv
+    const sleep  = entry.sleep_hours
+    const qual   = entry.sleep_quality
+    const doms   = entry.muscle_soreness
+    const energy = entry.motivation
+
+    if (!rhr || !hrv || sleep == null || qual == null || doms == null || energy == null) return 0
 
     const baselineRHR = settings.resting_hr || 55
     const baselineHRV = settings.hrv_baseline || 60
 
-    // Lapis 2/3 blended baseline (simplified — use last 30 days avg if ≥8 entries)
-    const before = ewsEntries.filter(e => e.date < dateStr)
+    const before = ewsEntries.filter(e => e.entry_date < dateStr)
     let effRHR = baselineRHR, effHRV = baselineHRV
-    if (before.length >= 8) {
+    if (before.length >= 21) {
       const last30 = before.slice(-30)
-      effRHR = last30.reduce((s, e) => s + e.rhr, 0) / last30.length
-      effHRV = last30.reduce((s, e) => s + e.hrv, 0) / last30.length
-      if (before.length < 20) {
-        effRHR = effRHR * 0.5 + baselineRHR * 0.5
-        effHRV = effHRV * 0.5 + baselineHRV * 0.5
-      }
+      const rhrVals = last30.map(e => e.resting_hr).filter((v): v is number => v != null)
+      const hrvVals = last30.map(e => e.hrv).filter((v): v is number => v != null)
+      effRHR = rhrVals.length ? rhrVals.reduce((a, b) => a + b, 0) / rhrVals.length : baselineRHR
+      effHRV = hrvVals.length ? hrvVals.reduce((a, b) => a + b, 0) / hrvVals.length : baselineHRV
+    } else if (before.length >= 8) {
+      const rhrVals = before.map(e => e.resting_hr).filter((v): v is number => v != null)
+      const hrvVals = before.map(e => e.hrv).filter((v): v is number => v != null)
+      const rollingRHR = rhrVals.length ? rhrVals.reduce((a, b) => a + b, 0) / rhrVals.length : baselineRHR
+      const rollingHRV = hrvVals.length ? hrvVals.reduce((a, b) => a + b, 0) / hrvVals.length : baselineHRV
+      effRHR = rollingRHR * 0.5 + baselineRHR * 0.5
+      effHRV = rollingHRV * 0.5 + baselineHRV * 0.5
     }
 
-    return calcEWSScore(
-      entry.rhr, entry.hrv, entry.sleep, entry.qual,
-      entry.doms, entry.energy, effRHR, effHRV
-    )
+    return calcEWSScore(rhr, hrv, sleep, qual, doms, energy, effRHR, effHRV)
   }
 
   // ── Available program sessions for linking (same calendar week, not yet linked) ──
@@ -1368,137 +1379,139 @@ export default function DailyLogPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 resize-none" />
               </div>
 
-              {/* Live Output */}
-              {calc && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-xs font-medium text-gray-500 uppercase">Output Kalkulasi</div>
-                    <button onClick={() => setShowDetail(d => !d)}
-                      className="text-xs text-indigo-500 hover:underline">
-                      {showDetail ? '▲ Sembunyikan detail' : '▼ Detail lengkap (28 metrik)'}
-                    </button>
-                  </div>
-
-                  {/* 4 Panel Utama */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                    {/* Panel A: Load */}
-                    <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
-                      <div className="text-xs font-bold text-indigo-700 uppercase mb-2">⚡ Load</div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Daily TL</span>
-                        <span className="text-lg font-bold text-indigo-700">{Math.round(calc.dailyTL)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Kategori</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${calc.dailyCat === 'Severe' ? 'bg-red-100 text-red-600' : calc.dailyCat === 'Hard' ? 'bg-orange-100 text-orange-600' : calc.dailyCat === 'Moderate' ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'}`}>{calc.dailyCat}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Plan vs Actual</span>
-                        <span className="text-xs font-bold text-gray-700">{calc.planVsActual}</span>
-                      </div>
-                    </div>
-
-                    {/* Panel B: Physiology */}
-                    <div className="bg-green-50 rounded-xl p-4 space-y-2">
-                      <div className="text-xs font-bold text-green-700 uppercase mb-2">💓 Physiology</div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">HR Zone</span>
-                        <span className="text-sm font-bold text-gray-800">Z{calc.hrZone} ({calc.hrIntPct.toFixed(0)}% LTHR)</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Pace Zone</span>
-                        <span className="text-xs font-bold text-gray-700">{calc.paceZoneName}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Stimulus</span>
-                        <span className="text-xs font-medium text-gray-600">{calc.stimulus}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Eff. Tag</span>
-                        <span className={`text-xs font-bold ${calc.effTag === 'Highly Efficient' ? 'text-green-600' : calc.effTag === 'Cardiac Drift' ? 'text-amber-600' : calc.effTag === 'Heat/Fatigue Affected' ? 'text-red-500' : 'text-gray-600'}`}>{calc.effTag}</span>
-                      </div>
-                    </div>
-
-                    {/* Panel C: Risk */}
-                    <div className="bg-red-50 rounded-xl p-4 space-y-2">
-                      <div className="text-xs font-bold text-red-700 uppercase mb-2">⚠️ Risk</div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Risk Flag</span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${riskColor(calc.riskFlag)}`}>{calc.riskFlag}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Deload Signal</span>
-                        <span className={`text-xs font-bold ${calc.deloadSig === 'YES' ? 'text-red-600' : 'text-green-600'}`}>{calc.deloadSig}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">3-Day Risk</span>
-                        <span className="text-xs font-medium text-gray-600">{calc.threeDayLabel}</span>
-                      </div>
-                    </div>
-
-                    {/* Panel D: Recovery */}
-                    <div className="bg-amber-50 rounded-xl p-4 space-y-2">
-                      <div className="text-xs font-bold text-amber-700 uppercase mb-2">🔄 Recovery</div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Recovery Need</span>
-                        <span className="text-xs font-bold text-gray-800">{calc.recoveryNeed}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">RQS</span>
-                        <span className="text-xs font-bold text-gray-700">{calc.rqs.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-gray-500">Next Rec.</span>
-                        <span className="text-xs font-medium text-indigo-600">{calc.nextRec}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Detail 28 Metrik */}
-                  {showDetail && (
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <div className="text-xs font-bold text-gray-600 uppercase mb-3">Detail Lengkap — 28 Metrik</div>
-                      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
-                        {[
-                          { label: 'HR Intensity', val: `${calc.hrIntPct.toFixed(1)}%` },
-                          { label: 'HR Zone', val: `Z${calc.hrZone}` },
-                          { label: 'sRPE Load', val: calc.srpeLoad.toFixed(1) },
-                          { label: 'HR Load', val: calc.hrLoad.toFixed(1) },
-                          { label: 'Base Load', val: calc.baseLoad.toFixed(1) },
-                          { label: 'Fatigue Mult', val: `×${calc.fatigueMult.toFixed(2)}` },
-                          { label: 'Drift Penalty', val: `×${calc.driftPenalty.toFixed(2)}` },
-                          { label: 'MaxHR Penalty', val: `×${calc.maxHRPenalty.toFixed(2)}` },
-                          { label: 'Daily TL', val: Math.round(calc.dailyTL) },
-                          { label: 'Category', val: calc.dailyCat },
-                          { label: 'Daily Status', val: calc.planVsActual },
-                          { label: 'Readiness', val: `${calc.readiness.toFixed(1)}` },
-                          { label: 'Load Dev %', val: `${calc.loadDevPct.toFixed(1)}%` },
-                          { label: 'Rec Need', val: calc.recoveryNeed },
-                          { label: 'Sess Quality', val: calc.sessionQuality },
-                          { label: 'Eff. Index', val: calc.effIdx.toFixed(3) },
-                          { label: 'Session Type', val: calc.stimulus },
-                          { label: 'Eff. Tag', val: calc.effTag },
-                          { label: 'Risk Flag', val: calc.riskFlag },
-                          { label: '3-Day Risk', val: calc.threeDayLabel },
-                          { label: 'Next Rec', val: calc.nextRec },
-                          { label: 'ATL (EWMA7)', val: Math.round(calc.atl) },
-                          { label: 'CTL (EWMA28)', val: Math.round(calc.ctl) },
-                          { label: 'ACWR Ratio', val: calc.acwr.toFixed(2) },
-                          { label: 'Form (TSB)', val: Math.round(calc.tsb) },
-                          { label: 'Z-Score', val: calc.zScore.toFixed(2) },
-                          { label: 'Pers. Load', val: calc.personalLoad },
-                          { label: 'Deload Sig', val: calc.deloadSig },
-                        ].map(item => (
-                          <div key={item.label} className="bg-white rounded-lg p-2 border border-gray-100">
-                            <div className="text-[9px] font-bold text-gray-400 uppercase mb-0.5">{item.label}</div>
-                            <div className="text-xs font-bold text-gray-700 truncate">{item.val}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+              {/* Live Output — selalu tampil */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs font-medium text-gray-500 uppercase">Output Kalkulasi</div>
+                  <button onClick={() => setShowDetail(d => !d)}
+                    className="text-xs text-indigo-500 hover:underline">
+                    {showDetail ? '▲ Sembunyikan detail' : '▼ Detail lengkap (28 metrik)'}
+                  </button>
                 </div>
-              )}
+
+                {/* 4 Panel Utama — selalu tampil */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  {/* Panel A: Load */}
+                  <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+                    <div className="text-xs font-bold text-indigo-700 uppercase mb-2">⚡ Load</div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Daily TL</span>
+                      <span className="text-lg font-bold text-indigo-700">{calc ? Math.round(calc.dailyTL) : '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Kategori</span>
+                      {calc ? (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${calc.dailyCat === 'Severe' ? 'bg-red-100 text-red-600' : calc.dailyCat === 'Hard' ? 'bg-orange-100 text-orange-600' : calc.dailyCat === 'Moderate' ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'}`}>{calc.dailyCat}</span>
+                      ) : <span className="text-xs text-gray-300">—</span>}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Plan vs Actual</span>
+                      <span className="text-xs font-bold text-gray-700">{calc ? calc.planVsActual : '—'}</span>
+                    </div>
+                  </div>
+
+                  {/* Panel B: Physiology */}
+                  <div className="bg-green-50 rounded-xl p-4 space-y-2">
+                    <div className="text-xs font-bold text-green-700 uppercase mb-2">💓 Physiology</div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">HR Zone</span>
+                      <span className="text-sm font-bold text-gray-800">{calc ? `Z${calc.hrZone} (${calc.hrIntPct.toFixed(0)}% LTHR)` : '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Pace Zone</span>
+                      <span className="text-xs font-bold text-gray-700">{calc ? calc.paceZoneName : '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Stimulus</span>
+                      <span className="text-xs font-medium text-gray-600">{calc ? calc.stimulus : '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Eff. Tag</span>
+                      <span className={`text-xs font-bold ${calc?.effTag === 'Highly Efficient' ? 'text-green-600' : calc?.effTag === 'Cardiac Drift' ? 'text-amber-600' : calc?.effTag === 'Heat/Fatigue Affected' ? 'text-red-500' : 'text-gray-600'}`}>{calc ? calc.effTag : '—'}</span>
+                    </div>
+                  </div>
+
+                  {/* Panel C: Risk */}
+                  <div className="bg-red-50 rounded-xl p-4 space-y-2">
+                    <div className="text-xs font-bold text-red-700 uppercase mb-2">⚠️ Risk</div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Risk Flag</span>
+                      {calc ? (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${riskColor(calc.riskFlag)}`}>{calc.riskFlag}</span>
+                      ) : <span className="text-xs text-gray-300">—</span>}
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Deload Signal</span>
+                      <span className={`text-xs font-bold ${calc?.deloadSig === 'YES' ? 'text-red-600' : calc?.deloadSig === 'NO' ? 'text-green-600' : 'text-gray-300'}`}>{calc ? calc.deloadSig : '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">3-Day Risk</span>
+                      <span className="text-xs font-medium text-gray-600">{calc ? calc.threeDayLabel : '—'}</span>
+                    </div>
+                  </div>
+
+                  {/* Panel D: Recovery */}
+                  <div className="bg-amber-50 rounded-xl p-4 space-y-2">
+                    <div className="text-xs font-bold text-amber-700 uppercase mb-2">🔄 Recovery</div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Recovery Need</span>
+                      <span className="text-xs font-bold text-gray-800">{calc ? calc.recoveryNeed : '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">RQS</span>
+                      <span className="text-xs font-bold text-gray-700">{calc ? calc.rqs.toFixed(2) : '—'}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-500">Next Rec.</span>
+                      <span className="text-xs font-medium text-indigo-600">{calc ? calc.nextRec : '—'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detail 28 Metrik */}
+                {showDetail && (
+                  <div className="bg-gray-50 rounded-xl p-4">
+                    <div className="text-xs font-bold text-gray-600 uppercase mb-3">Detail Lengkap — 28 Metrik</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-2">
+                      {[
+                        { label: 'HR Intensity',  val: calc ? `${calc.hrIntPct.toFixed(1)}%` : '—' },
+                        { label: 'HR Zone',        val: calc ? `Z${calc.hrZone}` : '—' },
+                        { label: 'sRPE Load',      val: calc ? calc.srpeLoad.toFixed(1) : '—' },
+                        { label: 'HR Load',        val: calc ? calc.hrLoad.toFixed(1) : '—' },
+                        { label: 'Base Load',      val: calc ? calc.baseLoad.toFixed(1) : '—' },
+                        { label: 'Fatigue Mult',   val: calc ? `×${calc.fatigueMult.toFixed(2)}` : '—' },
+                        { label: 'Drift Penalty',  val: calc ? `×${calc.driftPenalty.toFixed(2)}` : '—' },
+                        { label: 'MaxHR Penalty',  val: calc ? `×${calc.maxHRPenalty.toFixed(2)}` : '—' },
+                        { label: 'Daily TL',       val: calc ? Math.round(calc.dailyTL) : '—' },
+                        { label: 'Category',       val: calc ? calc.dailyCat : '—' },
+                        { label: 'Daily Status',   val: calc ? calc.planVsActual : '—' },
+                        { label: 'Readiness',      val: calc ? `${calc.readiness.toFixed(1)}` : '—' },
+                        { label: 'Load Dev %',     val: calc ? `${calc.loadDevPct.toFixed(1)}%` : '—' },
+                        { label: 'Rec Need',       val: calc ? calc.recoveryNeed : '—' },
+                        { label: 'Sess Quality',   val: calc ? calc.sessionQuality : '—' },
+                        { label: 'Eff. Index',     val: calc ? calc.effIdx.toFixed(3) : '—' },
+                        { label: 'Session Type',   val: calc ? calc.stimulus : '—' },
+                        { label: 'Eff. Tag',       val: calc ? calc.effTag : '—' },
+                        { label: 'Risk Flag',      val: calc ? calc.riskFlag : '—' },
+                        { label: '3-Day Risk',     val: calc ? calc.threeDayLabel : '—' },
+                        { label: 'Next Rec',       val: calc ? calc.nextRec : '—' },
+                        { label: 'ATL (EWMA7)',    val: calc ? Math.round(calc.atl) : '—' },
+                        { label: 'CTL (EWMA28)',   val: calc ? Math.round(calc.ctl) : '—' },
+                        { label: 'ACWR Ratio',     val: calc ? calc.acwr.toFixed(2) : '—' },
+                        { label: 'Form (TSB)',     val: calc ? Math.round(calc.tsb) : '—' },
+                        { label: 'Z-Score',        val: calc ? calc.zScore.toFixed(2) : '—' },
+                        { label: 'Pers. Load',     val: calc ? calc.personalLoad : '—' },
+                        { label: 'Deload Sig',     val: calc ? calc.deloadSig : '—' },
+                      ].map(item => (
+                        <div key={item.label} className="bg-white rounded-lg p-2 border border-gray-100">
+                          <div className="text-[9px] font-bold text-gray-400 uppercase mb-0.5">{item.label}</div>
+                          <div className="text-xs font-bold text-gray-700 truncate">{item.val}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Actions */}
               <div className="flex gap-2 pt-2">
