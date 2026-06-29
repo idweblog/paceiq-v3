@@ -1259,40 +1259,27 @@ export default function DailyLogPage() {
               {/* Row 2: Data Aktual */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Durasi *</div>
-                  {/* Dua input tersinkron: menit (angka) + jam:menit (HH:MM) */}
-                  <div className="flex gap-1">
-                    <input
-                      type="number" min="0" value={form.duration_min} placeholder="menit"
-                      onChange={e => setForm(f => ({ ...f, duration_min: e.target.value }))}
-                      className="w-1/2 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    />
-                    <input
-                      type="text" placeholder="j:mm"
-                      value={form.duration_min
-                        ? (() => {
-                            const tot = Math.round(parseFloat(form.duration_min) || 0)
-                            const h = Math.floor(tot / 60)
-                            const m = tot % 60
-                            return h > 0 ? `${h}:${String(m).padStart(2, '0')}` : m > 0 ? `0:${String(m).padStart(2, '0')}` : ''
-                          })()
-                        : ''
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Durasi (menit) *</div>
+                  {/* Single input: angka = menit langsung, format j:mm atau j:mm:ss = dikonversi ke menit */}
+                  <input
+                    type="text" inputMode="decimal" placeholder="77 atau 1:17"
+                    value={form.duration_min}
+                    onChange={e => {
+                      const val = e.target.value
+                      // Jika mengandung ':', konversi j:mm atau j:mm:ss → menit
+                      if (val.includes(':')) {
+                        const parts = val.split(':').map(p => parseInt(p) || 0)
+                        let totalMin = 0
+                        if (parts.length === 2) totalMin = parts[0] * 60 + parts[1]
+                        if (parts.length === 3) totalMin = parts[0] * 60 + parts[1] + Math.round(parts[2] / 60)
+                        setForm(f => ({ ...f, duration_min: totalMin > 0 ? String(totalMin) : val }))
+                      } else {
+                        setForm(f => ({ ...f, duration_min: val }))
                       }
-                      onChange={e => {
-                        const val = e.target.value.trim()
-                        // Terima format J:MM atau JJ:MM
-                        const match = val.match(/^(\d+):(\d{0,2})$/)
-                        if (match) {
-                          const totalMin = parseInt(match[1]) * 60 + (parseInt(match[2]) || 0)
-                          setForm(f => ({ ...f, duration_min: totalMin > 0 ? String(totalMin) : '' }))
-                        } else if (val === '' || val === '0:' || val === '0') {
-                          setForm(f => ({ ...f, duration_min: '' }))
-                        }
-                      }}
-                      className="w-1/2 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-400 mt-0.5">menit · atau j:mm (mis. 1:45)</p>
+                    }}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                  />
+                  <p className="text-xs text-gray-400 mt-0.5">Angka = menit · atau ketik j:mm (mis. 1:17)</p>
                 </div>
                 <div>
                   <div className="text-xs font-medium text-gray-500 uppercase mb-1">Jarak (km)</div>
