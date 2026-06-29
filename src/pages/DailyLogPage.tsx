@@ -41,6 +41,7 @@ interface EwsEntry {
   sleep_quality: number | null
   muscle_soreness: number | null
   motivation: number | null
+  composite_score: number | null
 }
 
 interface TrainingSession {
@@ -264,21 +265,6 @@ function getHRZone(avgHR: number, lthr: number): number {
   if (pct >= 0.85) return 3
   if (pct >= 0.82) return 2
   return 1
-}
-
-// EWS Score calculation (v2.11 locked: 35% physio + 30% sleep + 20% DOMS + 15% energy)
-function calcEWSScore(
-  rhr: number, hrv: number, sleep: number, qual: number,
-  doms: number, energy: number,
-  baselineRHR: number, baselineHRV: number
-): number {
-  const rhrDelta = rhr - baselineRHR
-  const hrvDelta = baselineHRV - hrv  // lower HRV = more fatigue
-  const physioRaw = Math.max(0, Math.min(100, (rhrDelta * 3) + (hrvDelta * 2)))
-  const sleepRaw  = Math.max(0, Math.min(100, ((8 - sleep) * 10) + ((5 - qual) * 6)))
-  const domsRaw   = Math.max(0, Math.min(100, doms * 20))
-  const energyRaw = Math.max(0, Math.min(100, (5 - energy) * 20))
-  return physioRaw * 0.35 + sleepRaw * 0.30 + domsRaw * 0.20 + energyRaw * 0.15
 }
 
 // Week label
@@ -748,41 +734,11 @@ export default function DailyLogPage() {
   }
 
   // ── EWS score for a given date ──
+  // Ambil langsung composite_score dari DB — konsisten dengan EWS Tracker
   function getEWSForDate(dateStr: string): number {
-    if (!ewsEntries.length || !settings) return 0
     const entry = ewsEntries.find(e => e.entry_date === dateStr)
-    if (!entry) return 0
-
-    const rhr    = entry.resting_hr
-    const hrv    = entry.hrv
-    const sleep  = entry.sleep_hours
-    const qual   = entry.sleep_quality
-    const doms   = entry.muscle_soreness
-    const energy = entry.motivation
-
-    if (!rhr || !hrv || sleep == null || qual == null || doms == null || energy == null) return 0
-
-    const baselineRHR = settings.resting_hr || 55
-    const baselineHRV = settings.hrv_baseline || 60
-
-    const before = ewsEntries.filter(e => e.entry_date < dateStr)
-    let effRHR = baselineRHR, effHRV = baselineHRV
-    if (before.length >= 21) {
-      const last30 = before.slice(-30)
-      const rhrVals = last30.map(e => e.resting_hr).filter((v): v is number => v != null)
-      const hrvVals = last30.map(e => e.hrv).filter((v): v is number => v != null)
-      effRHR = rhrVals.length ? rhrVals.reduce((a, b) => a + b, 0) / rhrVals.length : baselineRHR
-      effHRV = hrvVals.length ? hrvVals.reduce((a, b) => a + b, 0) / hrvVals.length : baselineHRV
-    } else if (before.length >= 8) {
-      const rhrVals = before.map(e => e.resting_hr).filter((v): v is number => v != null)
-      const hrvVals = before.map(e => e.hrv).filter((v): v is number => v != null)
-      const rollingRHR = rhrVals.length ? rhrVals.reduce((a, b) => a + b, 0) / rhrVals.length : baselineRHR
-      const rollingHRV = hrvVals.length ? hrvVals.reduce((a, b) => a + b, 0) / hrvVals.length : baselineHRV
-      effRHR = rollingRHR * 0.5 + baselineRHR * 0.5
-      effHRV = rollingHRV * 0.5 + baselineHRV * 0.5
-    }
-
-    return calcEWSScore(rhr, hrv, sleep, qual, doms, energy, effRHR, effHRV)
+    if (!entry || entry.composite_score == null) return 0
+    return entry.composite_score
   }
 
   // ── Available program sessions for linking (same calendar week, not yet linked) ──
