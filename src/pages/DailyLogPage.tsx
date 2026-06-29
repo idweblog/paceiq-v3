@@ -806,7 +806,8 @@ export default function DailyLogPage() {
   const [calc, setCalc] = useState<CalcResult | null>(null)
 
   useEffect(() => {
-    if (!form.duration_min || !form.rpe) { setCalc(null); return }
+    // Minimal: durasi wajib untuk apapun. RPE tidak wajib — pace & zone tetap tampil tanpa RPE.
+    if (!form.duration_min) { setCalc(null); return }
     const refHRrest = settings?.resting_hr || 55
     const refMaxHR  = maxHR || 180
     const refLthr   = lthr || (refMaxHR * 0.87)
@@ -1258,10 +1259,40 @@ export default function DailyLogPage() {
               {/* Row 2: Data Aktual */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Durasi (menit) *</div>
-                  <input type="number" value={form.duration_min} placeholder="65"
-                    onChange={e => setForm(f => ({ ...f, duration_min: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Durasi *</div>
+                  {/* Dua input tersinkron: menit (angka) + jam:menit (HH:MM) */}
+                  <div className="flex gap-1">
+                    <input
+                      type="number" min="0" value={form.duration_min} placeholder="menit"
+                      onChange={e => setForm(f => ({ ...f, duration_min: e.target.value }))}
+                      className="w-1/2 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    />
+                    <input
+                      type="text" placeholder="j:mm"
+                      value={form.duration_min
+                        ? (() => {
+                            const tot = Math.round(parseFloat(form.duration_min) || 0)
+                            const h = Math.floor(tot / 60)
+                            const m = tot % 60
+                            return h > 0 ? `${h}:${String(m).padStart(2, '0')}` : m > 0 ? `0:${String(m).padStart(2, '0')}` : ''
+                          })()
+                        : ''
+                      }
+                      onChange={e => {
+                        const val = e.target.value.trim()
+                        // Terima format J:MM atau JJ:MM
+                        const match = val.match(/^(\d+):(\d{0,2})$/)
+                        if (match) {
+                          const totalMin = parseInt(match[1]) * 60 + (parseInt(match[2]) || 0)
+                          setForm(f => ({ ...f, duration_min: totalMin > 0 ? String(totalMin) : '' }))
+                        } else if (val === '' || val === '0:' || val === '0') {
+                          setForm(f => ({ ...f, duration_min: '' }))
+                        }
+                      }}
+                      className="w-1/2 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-0.5">menit · atau j:mm (mis. 1:45)</p>
                 </div>
                 <div>
                   <div className="text-xs font-medium text-gray-500 uppercase mb-1">Jarak (km)</div>
@@ -1270,7 +1301,7 @@ export default function DailyLogPage() {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
                 </div>
                 <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Pace Aktual</div>
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">Avg Pace</div>
                   <div className="w-full border border-gray-100 bg-gray-50 rounded-lg px-3 py-2 text-sm text-indigo-600 font-bold">
                     {calc?.pace ? `${calc.pace}/km` : '—'}
                   </div>
