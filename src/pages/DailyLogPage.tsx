@@ -1260,26 +1260,24 @@ export default function DailyLogPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                   <div className="text-xs font-medium text-gray-500 uppercase mb-1">Durasi (menit) *</div>
-                  {/* Single input: angka = menit langsung, format j:mm atau j:mm:ss = dikonversi ke menit */}
+                  {/* Single input: angka = menit. Format j:mm atau j:mm:ss dikonversi saat onBlur */}
                   <input
                     type="text" inputMode="decimal" placeholder="77 atau 1:17"
                     value={form.duration_min}
-                    onChange={e => {
-                      const val = e.target.value
-                      // Jika mengandung ':', konversi j:mm atau j:mm:ss → menit
+                    onChange={e => setForm(f => ({ ...f, duration_min: e.target.value }))}
+                    onBlur={e => {
+                      const val = e.target.value.trim()
                       if (val.includes(':')) {
                         const parts = val.split(':').map(p => parseInt(p) || 0)
                         let totalMin = 0
                         if (parts.length === 2) totalMin = parts[0] * 60 + parts[1]
                         if (parts.length === 3) totalMin = parts[0] * 60 + parts[1] + Math.round(parts[2] / 60)
-                        setForm(f => ({ ...f, duration_min: totalMin > 0 ? String(totalMin) : val }))
-                      } else {
-                        setForm(f => ({ ...f, duration_min: val }))
+                        setForm(f => ({ ...f, duration_min: totalMin > 0 ? String(totalMin) : '' }))
                       }
                     }}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300"
                   />
-                  <p className="text-xs text-gray-400 mt-0.5">Angka = menit · atau ketik j:mm (mis. 1:17)</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Angka = menit · atau j:mm (mis. 1:17), konversi otomatis saat pindah field</p>
                 </div>
                 <div>
                   <div className="text-xs font-medium text-gray-500 uppercase mb-1">Jarak (km)</div>
