@@ -185,7 +185,6 @@ const PROGRAM_TYPES = [
 ]
 
 const PERCEIVED_FEELS = ['Luar Biasa', 'Baik', 'Biasa', 'Berat', 'Sangat Berat']
-const HEAT_CONDITIONS = ['Low', 'Mod', 'High']
 const PAGE_SIZE = 14
 
 const VCR_ZONES = [
@@ -1168,12 +1167,37 @@ export default function DailyLogPage() {
 
             <div className="space-y-4">
               {/* Row 1: Identitas */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                   <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal *</div>
                   <input type="date" value={form.session_date}
                     onChange={e => setForm(f => ({ ...f, session_date: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">EWS Fatigue Pull</div>
+                  {(() => {
+                    const ewsVal = getEWSForDate(form.session_date)
+                    const hasEws = form.session_date && ewsVal > 0
+                    const colorCls = !hasEws ? 'border-gray-100 bg-gray-50 text-gray-400'
+                      : ewsVal > 45 ? 'bg-red-50 text-red-600 border-red-200'
+                      : ewsVal > 30 ? 'bg-amber-50 text-amber-600 border-amber-200'
+                      : ewsVal > 15 ? 'bg-green-50 text-green-600 border-green-200'
+                      : 'bg-indigo-50 text-indigo-600 border-indigo-200'
+                    const label = !hasEws ? '—'
+                      : ewsVal > 45 ? `${ewsVal.toFixed(1)} — Kelelahan Tinggi`
+                      : ewsVal > 30 ? `${ewsVal.toFixed(1)} — Waspada`
+                      : ewsVal > 15 ? `${ewsVal.toFixed(1)} — Kondisi Baik`
+                      : `${ewsVal.toFixed(1)} — Sangat Prima`
+                    return (
+                      <div className={`w-full border rounded-lg px-3 py-2 text-sm font-bold ${colorCls}`}>
+                        {label}
+                      </div>
+                    )
+                  })()}
+                  {!getEWSForDate(form.session_date) && form.session_date && (
+                    <p className="text-xs text-gray-400 mt-0.5">Belum ada data EWS hari ini</p>
+                  )}
                 </div>
                 <div>
                   <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tipe Sesi *</div>
@@ -1292,7 +1316,7 @@ export default function DailyLogPage() {
               </div>
 
               {/* Row 4: Subjektif */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
                   <div className="text-xs font-medium text-gray-500 uppercase mb-1">RPE (1–10) *</div>
                   <input type="number" min="1" max="10" value={form.rpe} placeholder="6"
@@ -1312,14 +1336,10 @@ export default function DailyLogPage() {
                   <select value={form.heat_condition}
                     onChange={e => setForm(f => ({ ...f, heat_condition: e.target.value }))}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
-                    {HEAT_CONDITIONS.map(h => <option key={h} value={h}>{h === 'Low' ? 'Low (Normal)' : h === 'Mod' ? 'Moderate (Panas)' : 'High (Sangat Panas)'}</option>)}
+                    <option value="Low">Low (Normal) — &lt;24°C</option>
+                    <option value="Mod">Moderate — 24–32°C</option>
+                    <option value="High">High (Sangat Panas) — &gt;32°C</option>
                   </select>
-                </div>
-                <div>
-                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">EWS Fatigue Pull</div>
-                  <div className={`w-full border rounded-lg px-3 py-2 text-sm font-bold ${calc ? (calc.ewsScore > 45 ? 'bg-red-50 text-red-600 border-red-200' : calc.ewsScore > 30 ? 'bg-amber-50 text-amber-600 border-amber-200' : calc.ewsScore > 15 ? 'bg-green-50 text-green-600 border-green-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200') : 'border-gray-100 bg-gray-50 text-gray-400'}`}>
-                    {calc ? `${calc.ewsScore.toFixed(1)} — ${calc.ewsScore > 45 ? 'Kelelahan Tinggi' : calc.ewsScore > 30 ? 'Waspada' : calc.ewsScore > 15 ? 'Kondisi Baik' : 'Sangat Prima'}` : '—'}
-                  </div>
                 </div>
               </div>
 
