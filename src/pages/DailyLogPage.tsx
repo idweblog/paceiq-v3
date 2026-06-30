@@ -49,10 +49,10 @@ interface TrainingSession {
   athlete_id: string
   session_date: string
   session_type: string
-  duration_min: number | null
+  duration_sec: number | null
   distance_km: number | null
-  avg_hr: number | null
-  max_hr: number | null
+  hr_avg: number | null
+  hr_max: number | null
   hr_part1: number | null
   hr_part2: number | null
   hr_drift_pct: number | null
@@ -524,9 +524,9 @@ function calcWeeklySummary(sessions: TrainingSession[]) {
     const n = sesi.length
     const weeklyTL   = sesi.reduce((s, x) => s + (x.daily_tl || 0), 0)
     const avgDailyTL = weeklyTL / n
-    const totalMin   = sesi.reduce((s, x) => s + (x.duration_min || 0), 0)
+    const totalMin   = sesi.reduce((s, x) => s + (x.duration_sec ? x.duration_sec / 60 : 0), 0)
     const totalKm    = sesi.reduce((s, x) => s + (x.distance_km || 0), 0)
-    const easyMin    = sesi.filter(x => x.session_type?.includes('EZ') || x.session_type?.includes('EASY') || x.session_type?.includes('Recovery')).reduce((s, x) => s + (x.duration_min || 0), 0)
+    const easyMin    = sesi.filter(x => x.session_type?.includes('EZ') || x.session_type?.includes('EASY') || x.session_type?.includes('Recovery')).reduce((s, x) => s + (x.duration_sec ? x.duration_sec / 60 : 0), 0)
     const easyPct    = totalMin > 0 ? (easyMin / totalMin) * 100 : 0
     const avgFatigue = sesi.reduce((s, x) => s + (x.fatigue_score || 0), 0) / n
     const hardSessions = sesi.filter(x => (x.rpe || 0) > 7 || (x.daily_tl || 0) > 600).length
@@ -800,10 +800,10 @@ export default function DailyLogPage() {
         session_date:          form.session_date,
         session_type:          form.session_type,
         program_session_id:    form.program_session_id || null,
-        duration_min:          parseFloat(form.duration_min) || null,
+        duration_sec:          form.duration_min ? Math.round(parseFloat(form.duration_min) * 60) : null,
         distance_km:           parseFloat(form.distance_km)  || null,
-        avg_hr:                parseFloat(form.avg_hr)       || null,
-        max_hr:                parseFloat(form.max_hr)       || null,
+        hr_avg:                parseFloat(form.avg_hr)       || null,
+        hr_max:                parseFloat(form.max_hr)       || null,
         hr_part1:              parseFloat(form.hr_part1)     || null,
         hr_part2:              parseFloat(form.hr_part2)     || null,
         hr_drift_pct:          c.hr_drift_pct || null,
@@ -814,7 +814,6 @@ export default function DailyLogPage() {
         sup_bcaa:              form.sup_bcaa,
         sup_creatine:          form.sup_creatine,
         notes:                 form.notes || null,
-        pace:                  c.pace || null,
         daily_tl:              Math.round(c.dailyTL),
         atl:                   Math.round(c.atl),
         ctl:                   Math.round(c.ctl),
@@ -880,10 +879,10 @@ export default function DailyLogPage() {
       session_date:       s.session_date,
       session_type:       s.session_type,
       program_session_id: s.program_session_id || '',
-      duration_min:       s.duration_min?.toString() || '',
+      duration_min:       s.duration_sec ? String(Math.round(s.duration_sec / 60)) : '',
       distance_km:        s.distance_km?.toString() || '',
-      avg_hr:             s.avg_hr?.toString() || '',
-      max_hr:             s.max_hr?.toString() || '',
+      avg_hr:             s.hr_avg?.toString() || '',
+      max_hr:             s.hr_max?.toString() || '',
       hr_part1:           s.hr_part1?.toString() || '',
       hr_part2:           s.hr_part2?.toString() || '',
       rpe:                s.rpe?.toString() || '',
@@ -1080,7 +1079,7 @@ export default function DailyLogPage() {
                 },
                 {
                   label: 'Total Durasi',
-                  val: `${Math.round(thisWeekSessions.reduce((s, x) => s + (x.duration_min || 0), 0))} mnt`,
+                  val: `${Math.round(thisWeekSessions.reduce((s, x) => s + (x.duration_sec ? x.duration_sec / 60 : 0), 0))} mnt`,
                   color: 'text-gray-800',
                 },
                 {
@@ -1559,9 +1558,9 @@ export default function DailyLogPage() {
                               <span className="truncate block text-gray-700">{s.session_type}</span>
                             </td>
                             <td className="py-2.5 px-2 text-gray-700">{s.distance_km ? `${s.distance_km.toFixed(1)} km` : '—'}</td>
-                            <td className="py-2.5 px-2 text-gray-700">{s.duration_min ? `${s.duration_min} mnt` : '—'}</td>
+                            <td className="py-2.5 px-2 text-gray-700">{s.duration_sec ? `${Math.round(s.duration_sec / 60)} mnt` : '—'}</td>
                             <td className="py-2.5 px-2 font-mono text-gray-700">{s.pace ? `${s.pace}/km` : '—'}</td>
-                            <td className="py-2.5 px-2 text-gray-700">{s.avg_hr ? `${s.avg_hr} bpm` : '—'}</td>
+                            <td className="py-2.5 px-2 text-gray-700">{s.hr_avg ? `${s.hr_avg} bpm` : '—'}</td>
                             <td className="py-2.5 px-2 text-gray-700">{s.rpe ?? '—'}</td>
                             <td className="py-2.5 px-2 font-bold text-indigo-600">{s.daily_tl ? Math.round(s.daily_tl) : '—'}</td>
                             <td className="py-2.5 px-2">
