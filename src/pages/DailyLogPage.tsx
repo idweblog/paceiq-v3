@@ -1297,171 +1297,108 @@ export default function DailyLogPage() {
             })()}
           </div>
 
-          {/* Ringkasan Pekan Ini */}
-          <div className="bg-white rounded-xl shadow-sm p-5">
-            <div className="flex items-center gap-3 border-b border-indigo-100 pb-2 mb-4 flex-wrap">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase">Ringkasan Pekan Ini</h2>
-              <span className="text-sm font-semibold text-indigo-500 bg-indigo-50 px-2.5 py-0.5 rounded-lg">{weekLabel(today)}</span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {[
-                {
-                  label: 'Sesi Terlaksana',
-                  val: `${thisWeekSessions.length} / ${thisWeekPlanned.length || '—'}`,
-                  color: 'text-indigo-600',
-                },
-                {
-                  label: 'Total Jarak',
-                  val: `${thisWeekSessions.reduce((s, x) => s + (x.distance_km || 0), 0).toFixed(1)} km`,
-                  color: 'text-gray-800',
-                },
-                {
-                  label: 'Total Durasi',
-                  val: `${Math.round(thisWeekSessions.reduce((s, x) => s + (x.duration_sec ? x.duration_sec / 60 : 0), 0))} mnt`,
-                  color: 'text-gray-800',
-                },
-                {
-                  label: 'Avg RPE',
-                  val: thisWeekSessions.length
-                    ? (thisWeekSessions.reduce((s, x) => s + (x.rpe || 0), 0) / thisWeekSessions.length).toFixed(1)
-                    : '—',
-                  color: 'text-gray-800',
-                },
-                {
-                  label: 'Sesi Missed',
-                  val: thisWeekMissed > 0 ? thisWeekMissed : '0',
-                  color: thisWeekMissed > 0 ? 'text-red-500' : 'text-green-600',
-                },
-              ].map(item => (
-                <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center">
-                  <div className={`text-2xl font-bold ${item.color}`}>{item.val}</div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">{item.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Ringkasan Bulan Ini */}
-          <div className="bg-white rounded-xl shadow-sm p-5">
-            <div className="flex items-center gap-3 border-b border-indigo-100 pb-2 mb-4 flex-wrap">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase">Ringkasan Bulan Ini</h2>
-              <span className="text-sm font-semibold text-indigo-500 bg-indigo-50 px-2.5 py-0.5 rounded-lg">{getMonthRange(today).label}</span>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {[
-                {
-                  label: 'Sesi Terlaksana',
-                  val: `${thisMonthSessions.length} / ${thisMonthPlanned.length || '—'}`,
-                  color: 'text-indigo-600',
-                },
-                {
-                  label: 'Total Jarak',
-                  val: `${thisMonthSessions.reduce((s, x) => s + (x.distance_km || 0), 0).toFixed(1)} km`,
-                  color: 'text-gray-800',
-                },
-                {
-                  label: 'Total Durasi',
-                  val: `${Math.round(thisMonthSessions.reduce((s, x) => s + (x.duration_sec ? x.duration_sec / 60 : 0), 0) / 60)} jam`,
-                  color: 'text-gray-800',
-                },
-                {
-                  label: 'Avg RPE',
-                  val: thisMonthSessions.length
-                    ? (thisMonthSessions.reduce((s, x) => s + (x.rpe || 0), 0) / thisMonthSessions.length).toFixed(1)
-                    : '—',
-                  color: 'text-gray-800',
-                },
-                {
-                  label: 'Sesi Missed',
-                  val: thisMonthMissed > 0 ? thisMonthMissed : '0',
-                  color: thisMonthMissed > 0 ? 'text-red-500' : 'text-green-600',
-                },
-              ].map(item => (
-                <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center">
-                  <div className={`text-2xl font-bold ${item.color}`}>{item.val}</div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">{item.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Realisasi vs Rencana — Mingguan & Bulanan */}
+          {/* Realisasi vs Rencana — Mingguan & Bulanan (gabungan, warna per kategori) */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {/* Mingguan */}
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Realisasi vs Rencana — Mingguan</h2>
-              {thisWeekPlanned.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">Tidak ada sesi program untuk pekan ini.</div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-gray-50 rounded-xl p-3 text-center">
-                      <div className="text-2xl font-bold text-indigo-600">{thisWeekSessions.length} / {thisWeekPlanned.length}</div>
-                      <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Sesi Selesai</div>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-3 text-center">
-                      <div className={`text-2xl font-bold ${thisWeekPlanned.length ? (thisWeekSessions.length / thisWeekPlanned.length >= 0.8 ? 'text-green-600' : 'text-amber-500') : 'text-gray-400'}`}>
-                        {thisWeekPlanned.length ? `${Math.round((thisWeekSessions.length / thisWeekPlanned.length) * 100)}%` : '—'}
-                      </div>
-                      <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Kepatuhan</div>
-                    </div>
-                  </div>
-                  <div className="border-t border-gray-100 pt-3">
-                    <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown per Tipe Sesi</div>
-                    <div className="space-y-1.5">
-                      {Array.from(new Set(thisWeekPlanned.map(ps => ps.program_type))).map(type => {
-                        const planned = thisWeekPlanned.filter(ps => ps.program_type === type).length
-                        const done = thisWeekSessions.filter(s => s.program_session_id && thisWeekPlanned.some(ps => ps.id === s.program_session_id && ps.program_type === type)).length
-                        return (
-                          <div key={type} className="flex items-center justify-between text-xs">
-                            <span className="text-gray-600 truncate flex-1 mr-2">{type}</span>
-                            <span className={`font-bold ${done >= planned ? 'text-green-600' : 'text-gray-700'}`}>{done} / {planned}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+            {[
+              {
+                title: 'Realisasi vs Rencana — Mingguan',
+                periodLabel: weekLabel(today),
+                sessions: thisWeekSessions,
+                planned: thisWeekPlanned,
+                missed: thisWeekMissed,
+                durationUnit: 'mnt' as const,
+              },
+              {
+                title: 'Realisasi vs Rencana — Bulanan',
+                periodLabel: getMonthRange(today).label,
+                sessions: thisMonthSessions,
+                planned: thisMonthPlanned,
+                missed: thisMonthMissed,
+                durationUnit: 'jam' as const,
+              },
+            ].map(period => {
+              const totalKm = period.sessions.reduce((s, x) => s + (x.distance_km || 0), 0)
+              const totalDurMin = period.sessions.reduce((s, x) => s + (x.duration_sec ? x.duration_sec / 60 : 0), 0)
+              const avgRpe = period.sessions.length
+                ? period.sessions.reduce((s, x) => s + (x.rpe || 0), 0) / period.sessions.length
+                : null
+              const completionPct = period.planned.length
+                ? Math.round((period.sessions.length / period.planned.length) * 100)
+                : null
+              const completionColor = completionPct === null ? '#9ca3af' : completionPct >= 80 ? '#059669' : completionPct >= 50 ? '#d97706' : '#dc2626'
 
-            {/* Bulanan */}
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Realisasi vs Rencana — Bulanan</h2>
-              {thisMonthPlanned.length === 0 ? (
-                <div className="text-center py-8 text-gray-400 text-sm">Tidak ada sesi program untuk bulan ini.</div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-gray-50 rounded-xl p-3 text-center">
-                      <div className="text-2xl font-bold text-indigo-600">{thisMonthSessions.length} / {thisMonthPlanned.length}</div>
-                      <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Sesi Selesai</div>
-                    </div>
-                    <div className="bg-gray-50 rounded-xl p-3 text-center">
-                      <div className={`text-2xl font-bold ${thisMonthPlanned.length ? (thisMonthSessions.length / thisMonthPlanned.length >= 0.8 ? 'text-green-600' : 'text-amber-500') : 'text-gray-400'}`}>
-                        {thisMonthPlanned.length ? `${Math.round((thisMonthSessions.length / thisMonthPlanned.length) * 100)}%` : '—'}
+              return (
+                <div key={period.title} className="bg-white rounded-xl shadow-sm p-5 border border-gray-100">
+                  <div className="flex items-center gap-3 border-b border-indigo-100 pb-3 mb-4 flex-wrap">
+                    <h2 className="font-gsans text-xl text-indigo-700 uppercase">{period.title}</h2>
+                    <span className="text-sm font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-lg">{period.periodLabel}</span>
+                  </div>
+
+                  {/* Kartu Tingkat Penyelesaian — hero, dengan progress bar */}
+                  <div className="rounded-xl p-4 mb-4" style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)' }}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <div className="text-3xl font-bold text-indigo-700">{period.sessions.length} <span className="text-lg text-indigo-400">/ {period.planned.length || '—'}</span></div>
+                        <div className="text-xs font-semibold text-indigo-500 uppercase mt-0.5">Sesi Selesai</div>
                       </div>
-                      <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Kepatuhan</div>
+                      <div className="text-right">
+                        <div className="text-3xl font-bold" style={{ color: completionColor }}>{completionPct !== null ? `${completionPct}%` : '—'}</div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase mt-0.5">Tingkat Penyelesaian</div>
+                      </div>
+                    </div>
+                    {completionPct !== null && (
+                      <div className="h-2 bg-white/70 rounded-full overflow-hidden mt-2">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(completionPct, 100)}%`, background: completionColor }} />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 4 metric cards berwarna */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    <div className="rounded-xl p-3" style={{ background: '#ecfdf5' }}>
+                      <div className="text-xl font-bold text-emerald-700">{totalKm.toFixed(1)} km</div>
+                      <div className="text-xs font-semibold text-emerald-600 uppercase mt-0.5">Total Jarak</div>
+                    </div>
+                    <div className="rounded-xl p-3" style={{ background: '#fff7ed' }}>
+                      <div className="text-xl font-bold text-orange-700">
+                        {period.durationUnit === 'jam' ? `${Math.round(totalDurMin / 60)} jam` : `${Math.round(totalDurMin)} mnt`}
+                      </div>
+                      <div className="text-xs font-semibold text-orange-600 uppercase mt-0.5">Total Durasi</div>
+                    </div>
+                    <div className="rounded-xl p-3" style={{ background: '#eff6ff' }}>
+                      <div className="text-xl font-bold text-blue-700">{avgRpe !== null ? avgRpe.toFixed(1) : '—'}</div>
+                      <div className="text-xs font-semibold text-blue-600 uppercase mt-0.5">Avg RPE</div>
+                    </div>
+                    <div className="rounded-xl p-3" style={{ background: period.missed > 0 ? '#fef2f2' : '#ecfdf5' }}>
+                      <div className={`text-xl font-bold ${period.missed > 0 ? 'text-red-600' : 'text-emerald-700'}`}>{period.missed}</div>
+                      <div className={`text-xs font-semibold uppercase mt-0.5 ${period.missed > 0 ? 'text-red-500' : 'text-emerald-600'}`}>Sesi Missed</div>
                     </div>
                   </div>
-                  <div className="border-t border-gray-100 pt-3">
-                    <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown per Tipe Sesi</div>
-                    <div className="space-y-1.5">
-                      {Array.from(new Set(thisMonthPlanned.map(ps => ps.program_type))).map(type => {
-                        const planned = thisMonthPlanned.filter(ps => ps.program_type === type).length
-                        const done = thisMonthSessions.filter(s => s.program_session_id && thisMonthPlanned.some(ps => ps.id === s.program_session_id && ps.program_type === type)).length
-                        return (
-                          <div key={type} className="flex items-center justify-between text-xs">
-                            <span className="text-gray-600 truncate flex-1 mr-2">{type}</span>
-                            <span className={`font-bold ${done >= planned ? 'text-green-600' : 'text-gray-700'}`}>{done} / {planned}</span>
-                          </div>
-                        )
-                      })}
+
+                  {/* Breakdown per tipe sesi */}
+                  {period.planned.length === 0 ? (
+                    <div className="text-center py-6 text-gray-400 text-sm border-t border-gray-100">Tidak ada sesi program untuk periode ini.</div>
+                  ) : (
+                    <div className="border-t border-gray-100 pt-3">
+                      <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown per Tipe Sesi</div>
+                      <div className="space-y-1.5">
+                        {Array.from(new Set(period.planned.map(ps => ps.program_type))).map(type => {
+                          const plannedCount = period.planned.filter(ps => ps.program_type === type).length
+                          const doneCount = period.sessions.filter(s => s.program_session_id && period.planned.some(ps => ps.id === s.program_session_id && ps.program_type === type)).length
+                          const isComplete = doneCount >= plannedCount
+                          return (
+                            <div key={type} className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg" style={{ background: isComplete ? '#ecfdf5' : '#f9fafb' }}>
+                              <span className="text-gray-600 truncate flex-1 mr-2">{type}</span>
+                              <span className={`font-bold px-2 py-0.5 rounded-full ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{doneCount} / {plannedCount}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-              )}
-            </div>
+              )
+            })}
           </div>
 
           {/* Tren CTL/ATL/TSB Harian (30 Hari) */}
