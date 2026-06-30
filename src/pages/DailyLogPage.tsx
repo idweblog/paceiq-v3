@@ -209,7 +209,8 @@ const DEFAULT_TL_SETTINGS: TLSettings = {
 // HELPERS
 // ============================================================
 function fmtDateShort(d: string) {
-  return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
+  const [y, m, day] = d.split('-').map(Number)
+  return new Date(y, m - 1, day).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
 }
 function todayISO() {
   // Pakai tanggal lokal device, bukan UTC — toISOString() mundur 1 hari untuk timezone +X
@@ -221,18 +222,31 @@ function todayISO() {
 }
 
 // Get Monday of a given date's week
+// PENTING: parsing string "YYYY-MM-DDT00:00:00" tanpa suffix Z bersifat ambigu
+// antar browser/engine (bisa dianggap UTC atau lokal). Solusi: bangun Date dari
+// komponen angka eksplisit agar selalu konsisten sebagai tanggal lokal.
+function parseISODateLocal(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+function toISODateLocal(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 function getMondayOfWeek(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00')
+  const d = parseISODateLocal(dateStr)
   const day = d.getDay() // 0=Sun, 1=Mon
   const diff = day === 0 ? -6 : 1 - day
   d.setDate(d.getDate() + diff)
-  return d.toISOString().slice(0, 10)
+  return toISODateLocal(d)
 }
 function getSundayOfWeek(dateStr: string): string {
   const mon = getMondayOfWeek(dateStr)
-  const d = new Date(mon + 'T00:00:00')
+  const d = parseISODateLocal(mon)
   d.setDate(d.getDate() + 6)
-  return d.toISOString().slice(0, 10)
+  return toISODateLocal(d)
 }
 
 function paceFromDurDist(durMin: number, distKm: number): string {
@@ -277,7 +291,7 @@ function getHRZone(avgHR: number, lthr: number): number {
 function weekLabel(dateStr: string): string {
   const mon = getMondayOfWeek(dateStr)
   const sun = getSundayOfWeek(dateStr)
-  const fmt = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
+  const fmt = (d: string) => parseISODateLocal(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
   return `${fmt(mon)} – ${fmt(sun)}`
 }
 
