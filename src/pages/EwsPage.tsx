@@ -281,6 +281,32 @@ export default function EwsPage() {
     showToast(`${updated} entri berhasil di-recalculate`)
   }
 
+  // ── Download seluruh riwayat EWS sebagai CSV (semua kolom tabel) ──
+  function downloadCSV() {
+    if (!entries.length) { showToast('Tidak ada data untuk diunduh', false); return }
+    const headers = Object.keys(entries[0]) as (keyof EwsEntry)[]
+    const csvRows = [
+      headers.join(','),
+      ...entries.map(e => headers.map(h => {
+        const v = e[h]
+        if (v === null || v === undefined) return ''
+        const str = String(v).replace(/"/g, '""')
+        return /[",\n]/.test(str) ? `"${str}"` : str
+      }).join(','))
+    ]
+    const csvContent = csvRows.join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `ews_tracker_export_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast('CSV berhasil diunduh')
+  }
+
   // ── Derived data ──────────────────────────────────────────────────────────
 
   const getWeekKey = useCallback((dateStr: string) => {
@@ -780,13 +806,19 @@ export default function EwsPage() {
 
           {/* History Table */}
           <div className="bg-white rounded-xl shadow-sm p-5">
-            <div className="border-b border-indigo-100 pb-2 mb-4 flex items-center justify-between">
+            <div className="border-b border-indigo-100 pb-2 mb-4 flex items-center justify-between flex-wrap gap-2">
               <h2 className="font-gsans text-xl text-indigo-700 uppercase">Riwayat EWS & Fatigue Score</h2>
               {entries.length > 0 && (
-                <button onClick={recalculateAll}
-                  className="border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50">
-                  🔄 Recalculate Semua
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={recalculateAll}
+                    className="border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50">
+                    🔄 Recalculate Semua
+                  </button>
+                  <button onClick={downloadCSV}
+                    className="border border-gray-300 text-gray-600 text-xs px-3 py-1 rounded-lg hover:bg-gray-50">
+                    ⬇️ Download CSV
+                  </button>
+                </div>
               )}
             </div>
 

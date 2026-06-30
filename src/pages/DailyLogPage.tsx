@@ -431,7 +431,9 @@ function calcTrainingLoad(
   })
   const atlToday = dailyTL * k7 + atl * (1 - k7)
   const ctlToday = dailyTL * k28 + ctl * (1 - k28)
-  const form_tsb = ctl - atl  // TSB = CTL_yesterday - ATL_yesterday
+  // TSB = CTL - ATL pada titik waktu yang SAMA dengan ATL/CTL yang ditampilkan (hari ini),
+  // bukan dari ctl/atl versi sebelum sesi hari ini diproses (bug lama).
+  const form_tsb = ctlToday - atlToday
 
   // ── Cold Start Protection ──
   const dataSessions = pastSessions.length
@@ -633,6 +635,7 @@ export default function DailyLogPage() {
   const [programSessions, setProgramSessions] = useState<ProgramSession[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [recalculating, setRecalculating] = useState(false)
   const [page, setPage] = useState(1)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -934,6 +937,114 @@ export default function DailyLogPage() {
     setTlSettings(tlSettingsForm)
     setShowSettings(false)
     showToast('Parameter Training Load disimpan')
+  }
+
+  // ── Recalculate semua sesi (urut tanggal lama→baru karena ATL/CTL bersifat kumulatif EWMA) ──
+  async function recalculateAll() {
+    if (!athleteId) return
+    if (!confirm(`Recalculate semua metrik untuk ${sessions.length} sesi? Proses ini akan menghitung ulang Daily TL, ATL, CTL, TSB, ACWR, dan metrik lainnya secara berurutan.`)) return
+    setRecalculating(true)
+    try {
+      const refHRrest = settings?.resting_hr || 55
+      const refMaxHR  = maxHR || 180
+      const refLthr   = lthr || (refMaxHR * 0.87)
+
+      const sortedAsc = [...sessions].sort((a, b) => a.session_date.localeCompare(b.session_date))
+      const recalculated: TrainingSession[] = []
+
+      for (const s of sortedAsc) {
+        const pseudoForm: LogForm = {
+          session_date:       s.session_date,
+          session_type:       s.session_type,
+          program_session_id: s.program_session_id || '',
+          duration_min:       s.duration_sec ? String(s.duration_sec / 60) : '',
+          distance_km:        s.distance_km?.toString() || '',
+          avg_hr:             s.hr_avg?.toString() || '',
+          max_hr:             s.hr_max?.toString() || '',
+          hr_part1:           s.hr_part1?.toString() || '',
+          hr_part2:           s.hr_part2?.toString() || '',
+          rpe:                s.rpe?.toString() || '',
+          perceived_feel:     s.perceived_feel || 'Baik',
+          heat_condition:     s.heat_condition || 'Low',
+          sup_whey:           s.sup_whey || false,
+          sup_bcaa:           s.sup_bcaa || false,
+          sup_creatine:       s.sup_creatine || false,
+          notes:              s.notes || '',
+        }
+        const ewsScore = getEWSForDate(s.session_date)
+        // recalculated (urutan asc sejauh ini) dipakai sebagai histori EWMA — bukan sessions lama
+        const c = calcTrainingLoad(pseudoForm, tlSettings, refMaxHR, refHRrest, refLthr, ewsScore, vcr, recalculated)
+
+        const updatePayload = {
+          daily_tl:              Math.round(c.dailyTL),
+          atl:                   Math.round(c.atl),
+          ctl:                   Math.round(c.ctl),
+          tsb:                   Math.round(c.tsb),
+          acwr:                  parseFloat(c.acwr.toFixed(3)),
+          risk_flag:             c.riskFlag,
+          deload_signal:         c.deloadSig,
+          next_rec:              c.nextRec,
+          efficiency_index:      parseFloat(c.effIdx.toFixed(3)),
+          stimulus:              c.stimulus,
+          eff_tag:               c.effTag,
+          rqs:                   parseFloat(c.rqs.toFixed(3)),
+          fatigue_score:         parseFloat(c.ewsScore.toFixed(1)),
+          readiness:             parseFloat(c.readiness.toFixed(1)),
+          hr_zone:               c.hrZone,
+          hr_intensity_pct:      parseFloat(c.hrIntPct.toFixed(1)),
+          pace_zone_name:        c.paceZoneName,
+          srpe_load:             parseFloat(c.srpeLoad.toFixed(2)),
+          hr_load:               parseFloat(c.hrLoad.toFixed(2)),
+          base_load:             parseFloat(c.baseLoad.toFixed(2)),
+          fatigue_mult:          parseFloat(c.fatigueMult.toFixed(3)),
+          drift_penalty:         parseFloat(c.driftPenalty.toFixed(3)),
+          maxhr_penalty:         parseFloat(c.maxHRPenalty.toFixed(3)),
+          plan_vs_actual:        c.planVsActual,
+          load_deviation_pct:    parseFloat(c.loadDevPct.toFixed(1)),
+          recovery_need:         c.recoveryNeed,
+          session_quality:       c.sessionQuality,
+          three_day_risk:        c.threeDayLabel,
+          z_score:               parseFloat(c.zScore.toFixed(3)),
+          personal_load_status:  c.personalLoad,
+          hr_drift_pct:          c.hr_drift_pct || null,
+        }
+        await (supabase as any).from('training_sessions').update(updatePayload).eq('id', s.id)
+        recalculated.push({ ...s, daily_tl: updatePayload.daily_tl, atl: updatePayload.atl, ctl: updatePayload.ctl })
+      }
+
+      await loadSessions(athleteId)
+      showToast(`${sortedAsc.length} sesi berhasil di-recalculate`)
+    } catch (e: any) {
+      showToast('Gagal recalculate: ' + e.message, false)
+    } finally {
+      setRecalculating(false)
+    }
+  }
+
+  // ── Download seluruh riwayat sebagai CSV (semua kolom tabel) ──
+  function downloadCSV() {
+    if (!sessions.length) { showToast('Tidak ada data untuk diunduh', false); return }
+    const headers = Object.keys(sessions[0]) as (keyof TrainingSession)[]
+    const csvRows = [
+      headers.join(','),
+      ...sessions.map(s => headers.map(h => {
+        const v = s[h]
+        if (v === null || v === undefined) return ''
+        const str = String(v).replace(/"/g, '""')
+        return /[",\n]/.test(str) ? `"${str}"` : str
+      }).join(','))
+    ]
+    const csvContent = csvRows.join('\n')
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `daily_log_export_${todayISO()}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    showToast('CSV berhasil diunduh')
   }
 
   // ── Computed dashboard data ──
@@ -1546,10 +1657,26 @@ export default function DailyLogPage() {
 
           {/* Riwayat Log */}
           <div className="bg-white rounded-xl shadow-sm p-5">
-            <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">
-              Riwayat Log
-              <span className="ml-2 text-xs font-normal text-gray-400 normal-case">{sessions.length} sesi tersimpan</span>
-            </h2>
+            <div className="border-b border-indigo-100 pb-2 mb-4 flex items-center justify-between flex-wrap gap-2">
+              <h2 className="font-gsans text-xl text-indigo-700 uppercase">
+                Riwayat Log
+                <span className="ml-2 text-xs font-normal text-gray-400 normal-case">{sessions.length} sesi tersimpan</span>
+              </h2>
+              <div className="flex gap-2">
+                {sessions.length > 0 && canEdit && (
+                  <button onClick={recalculateAll} disabled={recalculating}
+                    className="border border-indigo-500 text-indigo-600 text-xs px-3 py-1.5 rounded-lg hover:bg-indigo-50 disabled:opacity-50">
+                    {recalculating ? '⏳ Memproses...' : '🔄 Recalculate Semua'}
+                  </button>
+                )}
+                {sessions.length > 0 && (
+                  <button onClick={downloadCSV}
+                    className="border border-gray-300 text-gray-600 text-xs px-3 py-1.5 rounded-lg hover:bg-gray-50">
+                    ⬇️ Download CSV
+                  </button>
+                )}
+              </div>
+            </div>
 
             {sessions.length === 0 ? (
               <div className="text-center py-12 text-gray-400 text-sm">
