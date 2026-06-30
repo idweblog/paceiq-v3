@@ -712,7 +712,7 @@ export default function DailyLogPage() {
   async function loadEws(athId: string) {
     const { data } = await (supabase as any)
       .from('ews_entries')
-      .select('entry_date,resting_hr,hrv,sleep_hours,sleep_quality,muscle_soreness,motivation')
+      .select('entry_date,resting_hr,hrv,sleep_hours,sleep_quality,muscle_soreness,motivation,composite_score')
       .eq('athlete_id', athId).order('entry_date', { ascending: true })
     setEwsEntries(data || [])
   }
