@@ -211,7 +211,14 @@ const DEFAULT_TL_SETTINGS: TLSettings = {
 function fmtDateShort(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short' })
 }
-function todayISO() { return new Date().toISOString().slice(0, 10) }
+function todayISO() {
+  // Pakai tanggal lokal device, bukan UTC — toISOString() mundur 1 hari untuk timezone +X
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
 
 // Get Monday of a given date's week
 function getMondayOfWeek(dateStr: string): string {
