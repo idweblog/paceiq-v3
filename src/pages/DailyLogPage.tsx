@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import {
-  Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Line, LineChart, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts'
 
@@ -293,6 +293,66 @@ function weekLabel(dateStr: string): string {
   const sun = getSundayOfWeek(dateStr)
   const fmt = (d: string) => parseISODateLocal(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })
   return `${fmt(mon)} – ${fmt(sun)}`
+}
+
+// ── Interpretasi TSB (Form/Freshness) untuk awam ──
+function tsbInterpretation(tsb: number): { label: string; color: string; bg: string; desc: string } {
+  if (tsb > 25)  return { label: 'Sangat Segar', color: '#059669', bg: '#ecfdf5', desc: 'Form sangat tinggi — cocok untuk race atau tes performa.' }
+  if (tsb > 5)   return { label: 'Segar & Siap',  color: '#10b981', bg: '#ecfdf5', desc: 'Tubuh dalam kondisi segar, siap menerima beban latihan.' }
+  if (tsb >= -10) return { label: 'Zona Produktif', color: '#6366f1', bg: '#eef2ff', desc: 'Keseimbangan fitness dan fatigue yang sehat untuk training normal.' }
+  if (tsb >= -20) return { label: 'Lelah — Wajar', color: '#f59e0b', bg: '#fffbeb', desc: 'Fatigue mulai menumpuk, masih wajar dalam fase pembebanan.' }
+  if (tsb >= -30) return { label: 'Fatigue Tinggi', color: '#f97316', bg: '#fff7ed', desc: 'Fatigue cukup tinggi — perhatikan kualitas tidur dan nutrisi.' }
+  return { label: 'Fatigue Sangat Tinggi', color: '#ef4444', bg: '#fef2f2', desc: 'Risiko overtraining meningkat — butuh recovery signifikan.' }
+}
+
+// ── Interpretasi ACWR (Acute:Chronic Workload Ratio) untuk awam ──
+function acwrInterpretation(acwr: number, hasData: boolean): { label: string; color: string; bg: string; desc: string } {
+  if (!hasData || acwr === 0) return { label: 'Belum Cukup Data', color: '#9ca3af', bg: '#f9fafb', desc: 'Butuh lebih banyak histori latihan untuk menghitung rasio ini.' }
+  if (acwr > 1.5) return { label: 'Lonjakan Beban — Bahaya', color: '#ef4444', bg: '#fef2f2', desc: 'Beban naik terlalu cepat — risiko cedera tinggi.' }
+  if (acwr > 1.3) return { label: 'Lonjakan Beban', color: '#f97316', bg: '#fff7ed', desc: 'Beban akut lebih tinggi dari biasanya — kurangi intensitas.' }
+  if (acwr >= 0.8) return { label: 'Sweet Spot', color: '#10b981', bg: '#ecfdf5', desc: 'Beban latihan dalam rentang ideal untuk adaptasi optimal.' }
+  return { label: 'Beban Menurun', color: '#3b82f6', bg: '#eff6ff', desc: 'Beban di bawah kebiasaan — fitness bisa menurun jika berlanjut lama.' }
+}
+
+// ── Rekomendasi harian gabungan (TSB + ACWR + deload signal) ──
+function dailyRecommendation(
+  tsb: number, acwr: number, hasAcwr: boolean, deloadActive: boolean, hasData: boolean
+): { title: string; desc: string; color: string; bg: string; icon: string } {
+  if (!hasData) {
+    return { title: 'Mulai Input Log Latihan', desc: 'Belum ada data untuk dianalisis. Input log latihan untuk mendapat rekomendasi harian.', color: '#6366f1', bg: '#eef2ff', icon: '📝' }
+  }
+  if (deloadActive) {
+    return { title: 'Prioritaskan Recovery', color: '#ef4444', bg: '#fef2f2', icon: '🛑',
+      desc: 'Sinyal deload aktif. Pilih Active Recovery atau Full Rest hari ini — tubuh butuh waktu pulih sebelum lanjut ke sesi berat.' }
+  }
+  if (hasAcwr && acwr > 1.3) {
+    return { title: 'Kurangi Intensitas', color: '#f97316', bg: '#fff7ed', icon: '⚠️',
+      desc: 'Beban akut melonjak dibanding kebiasaan. Pilih sesi Easy/Recovery, hindari Quality Run hari ini.' }
+  }
+  if (tsb < -30) {
+    return { title: 'Waspada Fatigue Tinggi', color: '#ef4444', bg: '#fef2f2', icon: '🚨',
+      desc: 'Fatigue jauh lebih tinggi dari fitness. Pertimbangkan Easy Run ringan atau Rest, perhatikan kualitas tidur.' }
+  }
+  if (tsb < -20) {
+    return { title: 'Latihan Ringan Disarankan', color: '#f59e0b', bg: '#fffbeb', icon: '⚡',
+      desc: 'Fatigue cukup tinggi tapi masih wajar dalam fase pembebanan. Tetap monitor kondisi tubuh sebelum sesi berat.' }
+  }
+  if (tsb > 5) {
+    return { title: 'Siap untuk Sesi Berat', color: '#10b981', bg: '#ecfdf5', icon: '💪',
+      desc: 'Form sedang baik. Saat yang tepat untuk menjalankan sesi Quality Run sesuai program.' }
+  }
+  return { title: 'Lanjutkan Sesuai Program', color: '#6366f1', bg: '#eef2ff', icon: '✅',
+    desc: 'Kondisi dalam zona produktif. Ikuti rencana program latihan seperti biasa.' }
+}
+
+// ── Bulan kalender berjalan ──
+function getMonthRange(dateStr: string): { start: string; end: string; label: string } {
+  const [y, m] = dateStr.split('-').map(Number)
+  const start = `${y}-${String(m).padStart(2, '0')}-01`
+  const lastDay = new Date(y, m, 0).getDate()
+  const end = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+  const label = new Date(y, m - 1, 1).toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
+  return { start, end, label }
 }
 
 // ============================================================
@@ -1065,6 +1125,29 @@ export default function DailyLogPage() {
   const thisWeekMissed = thisWeekPlanned.filter(ps =>
     !sessions.some(s => s.program_session_id === ps.id) && ps.session_date < today).length
 
+  // ── Bulan kalender berjalan ──
+  const monthRange = getMonthRange(today)
+  const thisMonthSessions = sessions.filter(s =>
+    s.session_date >= monthRange.start && s.session_date <= monthRange.end)
+  const thisMonthPlanned = programSessions.filter(ps =>
+    ps.session_date >= monthRange.start && ps.session_date <= monthRange.end)
+  const thisMonthMissed = thisMonthPlanned.filter(ps =>
+    !sessions.some(s => s.program_session_id === ps.id) && ps.session_date < today).length
+
+  // ── Tren CTL/ATL/TSB harian, 30 hari terakhir ──
+  const dailyTrendData = sortedAsc
+    .filter(s => {
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - 30)
+      return new Date(s.session_date) >= cutoff && s.ctl != null
+    })
+    .map(s => ({
+      date: parseISODateLocal(s.session_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
+      ctl: s.ctl ?? null,
+      atl: s.atl ?? null,
+      tsb: s.tsb ?? null,
+    }))
+
   const weeklyData = calcWeeklySummary(sortedAsc).slice(-8)
   const chartData = weeklyData.map(w => ({
     week: w.weekLabel.split('–')[0].trim(),
@@ -1173,30 +1256,53 @@ export default function DailyLogPage() {
           <div className="bg-white rounded-xl shadow-sm p-5">
             <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Snapshot Terkini</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {[
-                { label: 'CTL', sub: 'Chronic Load (Fitness)', val: currentCTL, color: 'text-indigo-600' },
-                { label: 'ATL', sub: 'Acute Load (Fatigue)',   val: currentATL, color: 'text-orange-500' },
-                { label: 'TSB', sub: 'Form (Freshness)',       val: currentTSB, color: tsbColor(currentTSB) },
-                { label: 'ACWR', sub: 'Acute:Chronic Ratio',   val: currentACWR ? currentACWR.toFixed(2) : '—', color: acwrColor(currentACWR) },
-              ].map(item => (
+              {(() => {
+                const tsbInfo  = tsbInterpretation(currentTSB)
+                const acwrInfo = acwrInterpretation(currentACWR, !!latestSession)
+                return [
+                  { label: 'CTL', sub: 'Chronic Load (Fitness)', val: currentCTL, color: 'text-indigo-600', badge: null },
+                  { label: 'ATL', sub: 'Acute Load (Fatigue)',   val: currentATL, color: 'text-orange-500', badge: null },
+                  { label: 'TSB', sub: 'Form (Freshness)',       val: currentTSB, color: tsbColor(currentTSB), badge: latestSession ? tsbInfo : null },
+                  { label: 'ACWR', sub: 'Acute:Chronic Ratio',   val: currentACWR ? currentACWR.toFixed(2) : '—', color: acwrColor(currentACWR), badge: acwrInfo },
+                ]
+              })().map(item => (
                 <div key={item.label} className="bg-gray-50 rounded-xl p-4 text-center">
-                  <div className={`text-2xl font-bold ${item.color}`}>{item.val}</div>
-                  <div className="text-xs font-bold text-gray-700 mt-1">{item.label}</div>
-                  <div className="text-[10px] text-gray-400">{item.sub}</div>
+                  <div className={`text-3xl font-bold ${item.color}`}>{item.val}</div>
+                  <div className="text-sm font-bold text-gray-700 mt-1">{item.label}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">{item.sub}</div>
+                  {item.badge && (
+                    <div className="mt-2 inline-block text-[11px] font-bold px-2 py-1 rounded-full" style={{ background: item.badge.bg, color: item.badge.color }}>
+                      {item.badge.label}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
             {!latestSession && (
               <div className="text-center py-6 text-gray-400 text-sm mt-4">Belum ada data log. Mulai input di tab Input & Riwayat.</div>
             )}
+
+            {/* Rekomendasi Harian */}
+            {(() => {
+              const rec = dailyRecommendation(currentTSB, currentACWR, currentACWR > 0, deloadActive, !!latestSession)
+              return (
+                <div className="mt-4 rounded-xl p-4 flex items-start gap-3" style={{ background: rec.bg }}>
+                  <span className="text-2xl flex-shrink-0">{rec.icon}</span>
+                  <div>
+                    <div className="text-sm font-bold mb-1" style={{ color: rec.color }}>{rec.title}</div>
+                    <div className="text-xs text-gray-600 leading-relaxed">{rec.desc}</div>
+                  </div>
+                </div>
+              )
+            })()}
           </div>
 
           {/* Ringkasan Pekan Ini */}
           <div className="bg-white rounded-xl shadow-sm p-5">
-            <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">
-              Ringkasan Pekan Ini
-              <span className="ml-2 text-xs font-normal text-gray-400 normal-case">{weekLabel(today)}</span>
-            </h2>
+            <div className="flex items-center gap-3 border-b border-indigo-100 pb-2 mb-4 flex-wrap">
+              <h2 className="font-gsans text-xl text-indigo-700 uppercase">Ringkasan Pekan Ini</h2>
+              <span className="text-sm font-semibold text-indigo-500 bg-indigo-50 px-2.5 py-0.5 rounded-lg">{weekLabel(today)}</span>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {[
                 {
@@ -1228,11 +1334,167 @@ export default function DailyLogPage() {
                 },
               ].map(item => (
                 <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center">
-                  <div className={`text-xl font-bold ${item.color}`}>{item.val}</div>
-                  <div className="text-[10px] font-medium text-gray-400 uppercase mt-1">{item.label}</div>
+                  <div className={`text-2xl font-bold ${item.color}`}>{item.val}</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">{item.label}</div>
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Ringkasan Bulan Ini */}
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <div className="flex items-center gap-3 border-b border-indigo-100 pb-2 mb-4 flex-wrap">
+              <h2 className="font-gsans text-xl text-indigo-700 uppercase">Ringkasan Bulan Ini</h2>
+              <span className="text-sm font-semibold text-indigo-500 bg-indigo-50 px-2.5 py-0.5 rounded-lg">{getMonthRange(today).label}</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {[
+                {
+                  label: 'Sesi Terlaksana',
+                  val: `${thisMonthSessions.length} / ${thisMonthPlanned.length || '—'}`,
+                  color: 'text-indigo-600',
+                },
+                {
+                  label: 'Total Jarak',
+                  val: `${thisMonthSessions.reduce((s, x) => s + (x.distance_km || 0), 0).toFixed(1)} km`,
+                  color: 'text-gray-800',
+                },
+                {
+                  label: 'Total Durasi',
+                  val: `${Math.round(thisMonthSessions.reduce((s, x) => s + (x.duration_sec ? x.duration_sec / 60 : 0), 0) / 60)} jam`,
+                  color: 'text-gray-800',
+                },
+                {
+                  label: 'Avg RPE',
+                  val: thisMonthSessions.length
+                    ? (thisMonthSessions.reduce((s, x) => s + (x.rpe || 0), 0) / thisMonthSessions.length).toFixed(1)
+                    : '—',
+                  color: 'text-gray-800',
+                },
+                {
+                  label: 'Sesi Missed',
+                  val: thisMonthMissed > 0 ? thisMonthMissed : '0',
+                  color: thisMonthMissed > 0 ? 'text-red-500' : 'text-green-600',
+                },
+              ].map(item => (
+                <div key={item.label} className="bg-gray-50 rounded-xl p-3 text-center">
+                  <div className={`text-2xl font-bold ${item.color}`}>{item.val}</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">{item.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Realisasi vs Rencana — Mingguan & Bulanan */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {/* Mingguan */}
+            <div className="bg-white rounded-xl shadow-sm p-5">
+              <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Realisasi vs Rencana — Mingguan</h2>
+              {thisWeekPlanned.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-sm">Tidak ada sesi program untuk pekan ini.</div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-xl p-3 text-center">
+                      <div className="text-2xl font-bold text-indigo-600">{thisWeekSessions.length} / {thisWeekPlanned.length}</div>
+                      <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Sesi Selesai</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3 text-center">
+                      <div className={`text-2xl font-bold ${thisWeekPlanned.length ? (thisWeekSessions.length / thisWeekPlanned.length >= 0.8 ? 'text-green-600' : 'text-amber-500') : 'text-gray-400'}`}>
+                        {thisWeekPlanned.length ? `${Math.round((thisWeekSessions.length / thisWeekPlanned.length) * 100)}%` : '—'}
+                      </div>
+                      <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Kepatuhan</div>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown per Tipe Sesi</div>
+                    <div className="space-y-1.5">
+                      {Array.from(new Set(thisWeekPlanned.map(ps => ps.program_type))).map(type => {
+                        const planned = thisWeekPlanned.filter(ps => ps.program_type === type).length
+                        const done = thisWeekSessions.filter(s => s.program_session_id && thisWeekPlanned.some(ps => ps.id === s.program_session_id && ps.program_type === type)).length
+                        return (
+                          <div key={type} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-600 truncate flex-1 mr-2">{type}</span>
+                            <span className={`font-bold ${done >= planned ? 'text-green-600' : 'text-gray-700'}`}>{done} / {planned}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bulanan */}
+            <div className="bg-white rounded-xl shadow-sm p-5">
+              <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Realisasi vs Rencana — Bulanan</h2>
+              {thisMonthPlanned.length === 0 ? (
+                <div className="text-center py-8 text-gray-400 text-sm">Tidak ada sesi program untuk bulan ini.</div>
+              ) : (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-gray-50 rounded-xl p-3 text-center">
+                      <div className="text-2xl font-bold text-indigo-600">{thisMonthSessions.length} / {thisMonthPlanned.length}</div>
+                      <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Sesi Selesai</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-3 text-center">
+                      <div className={`text-2xl font-bold ${thisMonthPlanned.length ? (thisMonthSessions.length / thisMonthPlanned.length >= 0.8 ? 'text-green-600' : 'text-amber-500') : 'text-gray-400'}`}>
+                        {thisMonthPlanned.length ? `${Math.round((thisMonthSessions.length / thisMonthPlanned.length) * 100)}%` : '—'}
+                      </div>
+                      <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Kepatuhan</div>
+                    </div>
+                  </div>
+                  <div className="border-t border-gray-100 pt-3">
+                    <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown per Tipe Sesi</div>
+                    <div className="space-y-1.5">
+                      {Array.from(new Set(thisMonthPlanned.map(ps => ps.program_type))).map(type => {
+                        const planned = thisMonthPlanned.filter(ps => ps.program_type === type).length
+                        const done = thisMonthSessions.filter(s => s.program_session_id && thisMonthPlanned.some(ps => ps.id === s.program_session_id && ps.program_type === type)).length
+                        return (
+                          <div key={type} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-600 truncate flex-1 mr-2">{type}</span>
+                            <span className={`font-bold ${done >= planned ? 'text-green-600' : 'text-gray-700'}`}>{done} / {planned}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Tren CTL/ATL/TSB Harian (30 Hari) */}
+          <div className="bg-white rounded-xl shadow-sm p-5">
+            <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Tren CTL/ATL/TSB Harian (30 Hari)</h2>
+            {dailyTrendData.length < 2 ? (
+              <div className="text-center py-12 text-gray-400 text-sm">
+                <div className="text-4xl mb-3">📈</div>
+                <div>Tren tersedia setelah minimal 2 hari data log masuk.</div>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-4 mb-4 text-xs font-semibold">
+                  {[['#6366f1','CTL (Fitness)'],['#f97316','ATL (Fatigue)'],['#10b981','TSB (Form)']].map(([c,l]) => (
+                    <span key={l} className="flex items-center gap-1.5">
+                      <span className="inline-block w-4 h-0.5 rounded" style={{ background: c }} />{l}
+                    </span>
+                  ))}
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={dailyTrendData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <ReferenceLine y={0} stroke="#d1d5db" />
+                    <Line type="monotone" dataKey="ctl" name="CTL" stroke="#6366f1" strokeWidth={2.5} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="atl" name="ATL" stroke="#f97316" strokeWidth={2.5} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="tsb" name="TSB" stroke="#10b981" strokeWidth={2} strokeDasharray="4 2" dot={false} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </>
+            )}
           </div>
 
           {/* Charts */}
