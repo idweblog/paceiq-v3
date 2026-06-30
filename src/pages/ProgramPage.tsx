@@ -320,7 +320,7 @@ export default function ProgramPage() {
       <div className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Program Detail</h1>
+            <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Training Program</h1>
             <p className="text-xs text-gray-400 mt-0.5">Rencana latihan harian per race</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
