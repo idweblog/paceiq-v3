@@ -427,7 +427,7 @@ export default function EwsPage() {
       <div className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Training Readiness</h1>
+            <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Early Warning System (EWS) Tracker</h1>
             <p className="text-xs text-gray-400 mt-0.5">Algoritma Penilaian Kelelahan Otomatis berdasarkan Metrik Fisik & Perasaan</p>
           </div>
           <button onClick={() => { setActiveTab('input'); setForm(FORM_BLANK); setEditingId(null) }}
@@ -468,7 +468,7 @@ export default function EwsPage() {
                     {latestStatus.icon}
                   </div>
                   <div>
-                    <div className="text-xs text-gray-400 mb-0.5">Entri terakhir · {fmtDate(latest.entry_date)}</div>
+                    <div className="text-sm text-gray-500 mb-0.5">Entri terakhir · {fmtDate(latest.entry_date)}</div>
                     <div className="text-xl font-bold" style={{ color: latestStatus.color }}>{latestStatus.label}</div>
                     <div className="text-xs text-gray-500 mt-1 leading-relaxed max-w-lg">{latestStatus.rec}</div>
                   </div>
@@ -477,7 +477,7 @@ export default function EwsPage() {
                   <div className="text-3xl font-bold" style={{ color: latestStatus.color }}>
                     {latest.composite_score?.toFixed(1)}
                   </div>
-                  <div className="text-xs text-gray-400 mt-1">Fatigue Score</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Fatigue Score</div>
                   <div className="mt-2 h-1.5 w-20 bg-gray-200 rounded-full overflow-hidden">
                     <div className="h-full rounded-full" style={{ width: `${Math.min(latest.composite_score ?? 0, 100)}%`, background: latestStatus.color }} />
                   </div>
@@ -489,7 +489,7 @@ export default function EwsPage() {
           {/* Filter + 5 Stat Cards */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-gray-700">Rata-Rata Metrik Kelelahan</h3>
+              <h3 className="font-gsans text-xl text-indigo-700 uppercase">Rata-Rata Metrik Kelelahan</h3>
               <select value={filterWeek} onChange={e => { setFilterWeek(e.target.value); setPage(1) }}
                 className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-300">
                 <option value="ALL">Semua Waktu</option>
@@ -507,7 +507,7 @@ export default function EwsPage() {
                 <div key={label} className="bg-white rounded-xl shadow-sm p-4 flex items-center gap-3">
                   <span className="text-2xl">{icon}</span>
                   <div>
-                    <div className="text-[10px] text-gray-400 leading-tight">{label}</div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase mt-0.5">{label}</div>
                     <div className="text-lg font-bold" style={{ color }}>{val != null ? val.toFixed(1) : '—'}</div>
                   </div>
                 </div>
@@ -519,65 +519,65 @@ export default function EwsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {/* Streak */}
             <div className="bg-white rounded-xl shadow-sm p-5">
-              <div className="text-xs font-medium text-gray-500 uppercase mb-3">🔥 Streak & Konsistensi</div>
+              <div className="text-sm font-bold text-gray-700 uppercase mb-3">🔥 Streak & Konsistensi</div>
               <div className="flex items-center gap-4">
                 <div className="text-center">
                   <div className="text-3xl font-bold text-orange-500">{streak}</div>
-                  <div className="text-xs text-gray-400">Hari Berturut</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Hari Berturut</div>
                 </div>
                 <div className="h-10 w-px bg-gray-100" />
                 <div className="text-center">
                   <div className="text-3xl font-bold text-indigo-600">{goodPct}%</div>
-                  <div className="text-xs text-gray-400">Hari Kondisi Baik</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Hari Kondisi Baik</div>
                 </div>
                 <div className="h-10 w-px bg-gray-100" />
                 <div className="text-center">
                   <div className="text-3xl font-bold text-gray-700">{filtered.length}</div>
-                  <div className="text-xs text-gray-400">Total Entri</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Total Entri</div>
                 </div>
               </div>
             </div>
 
             {/* RHR Trend */}
             <div className="bg-white rounded-xl shadow-sm p-5">
-              <div className="text-xs font-medium text-gray-500 uppercase mb-3">💓 Tren RHR (7 hari terakhir)</div>
+              <div className="text-sm font-bold text-gray-700 uppercase mb-3">💓 Tren RHR (7 hari terakhir)</div>
               <div className="flex items-center gap-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-2xl font-bold text-gray-800">{avgRhr != null ? avgRhr.toFixed(0) : '—'}</span>
                     <span className="text-2xl font-bold" style={{ color: rhrTrend.color }}>{rhrTrend.arrow}</span>
                   </div>
-                  <div className="text-xs text-gray-400">bpm avg sekarang</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">bpm avg sekarang</div>
                 </div>
                 <div className="h-10 w-px bg-gray-100" />
                 <div>
                   <div className="text-xl font-bold text-gray-500">{avg(prev7.map(e => e.resting_hr))?.toFixed(0) ?? '—'}</div>
-                  <div className="text-xs text-gray-400">bpm avg sebelumnya</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">bpm avg sebelumnya</div>
                 </div>
               </div>
-              <div className="mt-3 text-xs text-gray-400">
+              <div className="mt-3 text-xs font-medium text-gray-600">
                 {rhrTrend.color === '#10b981' ? '✅ RHR membaik (turun)' : rhrTrend.color === '#ef4444' ? '⚠️ RHR meningkat — monitor' : '→ RHR stabil'}
               </div>
             </div>
 
             {/* HRV Trend */}
             <div className="bg-white rounded-xl shadow-sm p-5">
-              <div className="text-xs font-medium text-gray-500 uppercase mb-3">📡 Tren HRV (7 hari terakhir)</div>
+              <div className="text-sm font-bold text-gray-700 uppercase mb-3">📡 Tren HRV (7 hari terakhir)</div>
               <div className="flex items-center gap-4">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-2xl font-bold text-gray-800">{avg(last7.map(e => e.hrv))?.toFixed(0) ?? '—'}</span>
                     <span className="text-2xl font-bold" style={{ color: hrvTrend.color }}>{hrvTrend.arrow}</span>
                   </div>
-                  <div className="text-xs text-gray-400">ms avg sekarang</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">ms avg sekarang</div>
                 </div>
                 <div className="h-10 w-px bg-gray-100" />
                 <div>
                   <div className="text-xl font-bold text-gray-500">{avg(prev7.map(e => e.hrv))?.toFixed(0) ?? '—'}</div>
-                  <div className="text-xs text-gray-400">ms avg sebelumnya</div>
+                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">ms avg sebelumnya</div>
                 </div>
               </div>
-              <div className="mt-3 text-xs text-gray-400">
+              <div className="mt-3 text-xs font-medium text-gray-600">
                 {hrvTrend.color === '#10b981' ? '✅ HRV membaik (naik)' : hrvTrend.color === '#ef4444' ? '⚠️ HRV menurun — butuh recovery' : '→ HRV stabil'}
               </div>
             </div>
@@ -589,7 +589,7 @@ export default function EwsPage() {
             {/* Zone reference badges */}
             <div className="flex flex-wrap gap-2 mb-5">
               {[['#eef2ff','#6366f1','≤15 Sangat Prima'],['#ecfdf5','#065f46','≤30 Kondisi Baik'],['#fffbeb','#92400e','≤45 Waspada'],['#fef2f2','#991b1b','≤60 Kelelahan Tinggi'],['#1e293b','#f8fafc','>60 Danger Zone']].map(([bg,col,lbl]) => (
-                <span key={lbl} className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
+                <span key={lbl} className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
               ))}
             </div>
 
@@ -603,13 +603,13 @@ export default function EwsPage() {
                   return (
                     <div key={s.label} className="flex items-center gap-3">
                       <div className="w-5 text-sm flex-shrink-0">{s.icon}</div>
-                      <div className="w-40 flex-shrink-0 text-xs font-medium text-gray-600">{s.label}</div>
+                      <div className="w-40 flex-shrink-0 text-sm font-semibold text-gray-700">{s.label}</div>
                       <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: s.color }} />
                       </div>
                       <div className="w-20 flex-shrink-0 text-right">
-                        <span className="text-xs font-bold text-gray-700">{count}×</span>
-                        <span className="text-xs text-gray-400 ml-1">({pct.toFixed(0)}%)</span>
+                        <span className="text-sm font-bold text-gray-700">{count}×</span>
+                        <span className="text-xs font-medium text-gray-500 ml-1">({pct.toFixed(0)}%)</span>
                       </div>
                     </div>
                   )
@@ -628,7 +628,7 @@ export default function EwsPage() {
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap gap-4 mb-6 text-xs font-semibold">
+                <div className="flex flex-wrap gap-4 mb-6 text-sm font-semibold text-gray-700">
                   {[['#6366f1','Fatigue Score'],['#ef4444','RHR (bpm)'],['#10b981','HRV (ms)'],['#f59e0b','Energy (×10)']].map(([c,l]) => (
                     <span key={l} className="flex items-center gap-1.5">
                       <span className="inline-block w-4 h-0.5 rounded" style={{ background: c }} />{l}
@@ -639,10 +639,10 @@ export default function EwsPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                      <YAxis yAxisId="score" domain={[0, 100]} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                      <YAxis yAxisId="hr" orientation="right" domain={['auto','auto']} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                      <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                      <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#475569' }} />
+                      <YAxis yAxisId="score" domain={[0, 100]} tick={{ fontSize: 12, fill: '#475569' }} />
+                      <YAxis yAxisId="hr" orientation="right" domain={['auto','auto']} tick={{ fontSize: 12, fill: '#475569' }} />
+                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                       <ReferenceLine yAxisId="score" y={15} stroke="#6366f1" strokeDasharray="4 4" strokeOpacity={0.3} />
                       <ReferenceLine yAxisId="score" y={30} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.3} />
                       <ReferenceLine yAxisId="score" y={45} stroke="#f59e0b" strokeDasharray="4 4" strokeOpacity={0.3} />
