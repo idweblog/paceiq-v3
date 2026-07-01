@@ -628,7 +628,7 @@ export default function EwsPage() {
               </div>
             ) : (
               <>
-                <div className="flex flex-wrap gap-4 mb-6 text-sm font-semibold text-gray-700">
+                <div className="flex flex-wrap gap-4 mb-6 text-xs font-semibold text-gray-600">
                   {[['#6366f1','Fatigue Score'],['#ef4444','RHR (bpm)'],['#10b981','HRV (ms)'],['#f59e0b','Energy (×10)']].map(([c,l]) => (
                     <span key={l} className="flex items-center gap-1.5">
                       <span className="inline-block w-4 h-0.5 rounded" style={{ background: c }} />{l}
@@ -639,10 +639,10 @@ export default function EwsPage() {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                      <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#475569' }} />
-                      <YAxis yAxisId="score" domain={[0, 100]} tick={{ fontSize: 12, fill: '#475569' }} />
-                      <YAxis yAxisId="hr" orientation="right" domain={['auto','auto']} tick={{ fontSize: 12, fill: '#475569' }} />
-                      <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                      <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                      <YAxis yAxisId="score" domain={[0, 100]} tick={{ fontSize: 10 }} />
+                      <YAxis yAxisId="hr" orientation="right" domain={['auto','auto']} tick={{ fontSize: 10 }} />
+                      <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8, border: '1px solid #e2e8f0' }} />
                       <ReferenceLine yAxisId="score" y={15} stroke="#6366f1" strokeDasharray="4 4" strokeOpacity={0.3} />
                       <ReferenceLine yAxisId="score" y={30} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.3} />
                       <ReferenceLine yAxisId="score" y={45} stroke="#f59e0b" strokeDasharray="4 4" strokeOpacity={0.3} />
