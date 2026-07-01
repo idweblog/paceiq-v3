@@ -589,7 +589,7 @@ export default function EwsPage() {
             {/* Zone reference badges */}
             <div className="flex flex-wrap gap-2 mb-5">
               {[['#eef2ff','#6366f1','≤15 Sangat Prima'],['#ecfdf5','#065f46','≤30 Kondisi Baik'],['#fffbeb','#92400e','≤45 Waspada'],['#fef2f2','#991b1b','≤60 Kelelahan Tinggi'],['#1e293b','#f8fafc','>60 Danger Zone']].map(([bg,col,lbl]) => (
-                <span key={lbl} className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
+                <span key={lbl} className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
               ))}
             </div>
 
