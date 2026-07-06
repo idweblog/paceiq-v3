@@ -12,9 +12,21 @@ interface EwsEntry {
   composite_score: number | null; notes: string | null
 }
 
+interface FlagItem {
+  level: 'yellow' | 'red'
+  item: string
+  value: string
+  message: string
+}
+
 interface EwsResult {
   baseRhr: number; baseHrv: number; baseSource: string
-  scorePhys: number; scoreSleep: number; scoreDoms: number; scoreEnergy: number; totalScore: number
+  scorePhys: number; scoreSleep: number; scoreDoms: number; scoreEnergy: number
+  scoreFatigue: number; scoreMood: number; scoreStress: number
+  rawScore: number     // composite sebelum override
+  totalScore: number   // composite setelah override (yang disimpan ke DB)
+  flags: FlagItem[]
+  overrideApplied: boolean
 }
 
 interface EwsForm {
@@ -36,7 +48,7 @@ const FORM_BLANK: EwsForm = {
 const STATUS_CONFIG = [
   { max: 15,  label: 'Sangat Prima',              color: '#6366f1', bg: '#eef2ff', icon: '🛡️', rec: 'Pemulihan sangat tuntas. Tubuh dalam keadaan optimal untuk menyerap beban latihan berat (Long Run atau Interval). Lanjutkan sesuai program dengan percaya diri!' },
   { max: 30,  label: 'Kondisi Baik',               color: '#10b981', bg: '#ecfdf5', icon: '✅', rec: 'Kelelahan berada pada tingkat normal dan dapat ditoleransi. Anda masih dalam zona produktif untuk melanjutkan program mingguan.' },
-  { max: 45,  label: 'Waspada Kelelahan',          color: '#f59e0b', bg: '#fffbeb', icon: '⚠️', rec: 'Tubuh menunjukkan tanda kelelahan yang mulai menumpuk. Rekomendasi: Kurangi intensitas lari 10–15% hari ini, atau ganti Quality Run menjadi Easy RWR pace.' },
+  { max: 45,  label: 'Perlu Perhatian',             color: '#f59e0b', bg: '#fffbeb', icon: '⚠️', rec: 'Tubuh menunjukkan tanda kelelahan yang mulai menumpuk. Rekomendasi: Kurangi intensitas lari 10–15% hari ini, atau ganti Quality Run menjadi Easy RWR pace.' },
   { max: 60,  label: 'Kelelahan Tingkat Tinggi',   color: '#ef4444', bg: '#fef2f2', icon: '🚨', rec: 'Peringatan! Risiko cedera dan overtraining meningkat drastis. Sangat disarankan mengganti sesi lari dengan Active Recovery atau pilih Full Rest.' },
   { max: 101, label: 'Danger Zone / Overreaching', color: '#1e293b', bg: '#f8fafc', icon: '💀', rec: 'DANGER! Sistem saraf pusat kelelahan ekstrim. Segera hentikan seluruh aktivitas latihan. Wajib Full Rest 1–2 hari, prioritaskan hidrasi dan tidur ekstra.' },
 ]
@@ -77,30 +89,34 @@ function trendArrow(current: number | null, baseline: number | null, higherIsBet
   }
 }
 
-// ── Algorithm (v2.11 locked) ──────────────────────────────────────────────────
+// ── Algorithm v3 — 7-Component + Flag Override ──────────────────────────────
+// Referensi:
+//   McLean et al. (2010) — 5-item subjective wellness questionnaire
+//   Saw et al. (2016)    — subjective > objective untuk monitoring respons atlet
+//   Hooper & Mackinnon (1995) — Hooper Index (fatigue, DOMS, sleep, stress)
+//   Halson (2014)        — sleep deprivation ↓ performance 10-30%
+//   Meeusen et al. (2013) — ECSS consensus: overtraining prevention
+//   Kellmann (2010)      — RESTQ-Sport: psychosocial stress modulates recovery
+//   Morgan (1985)        — Iceberg Profile: mood as early overreaching marker
+//   Kiviniemi (2007) / Plews (2013) — HRV individual baseline
 
 function calculateEWS(
   dateStr: string, rhr: number, hrv: number,
   sleep: number, sleepQual: number, doms: number, energy: number,
+  mood: number | null, fatigue: number | null, stress: number | null,
   history: EwsEntry[], profileHRrest: number, profileHRVBase: number | null
 ): EwsResult {
   const past = history.filter(e => e.entry_date < dateStr).sort((a, b) => b.entry_date.localeCompare(a.entry_date))
 
   // ── Baseline 3 Lapis (Kiviniemi 2007 / Plews 2013 / Whoop onboarding) ──────
-  // Lapis 1 (entri 1–7)   : profil RHR + HRV Baseline dari athlete_settings
-  //                          Jika profil belum diisi → nilai hari itu (no false alarm)
-  // Lapis 2 (entri 8–20)  : blended 50% profil + 50% rolling data
-  // Lapis 3 (entri 21+)   : 100% rolling avg 30 hari (fully data-driven individual)
-
-  const profileRhr = profileHRrest || rhr  // fallback ke hari ini jika profil kosong
-  const profileHrv = profileHRVBase || hrv // fallback ke hari ini jika profil kosong
+  const profileRhr = profileHRrest || rhr
+  const profileHrv = profileHRVBase || hrv
 
   let baseRhr: number
   let baseHrv: number
   let baseSource: string
 
   if (past.length >= 21) {
-    // Lapis 3: rolling avg 30 hari — sepenuhnya data individual
     const last30 = past.slice(0, 30)
     const rhrV = last30.map(e => e.resting_hr).filter((v): v is number => v != null)
     const hrvV = last30.map(e => e.hrv).filter((v): v is number => v != null)
@@ -108,7 +124,6 @@ function calculateEWS(
     baseHrv = hrvV.length ? hrvV.reduce((a, b) => a + b, 0) / hrvV.length : profileHrv
     baseSource = `rolling avg ${Math.min(past.length, 30)} hari (Lapis 3 — fully individual)`
   } else if (past.length >= 8) {
-    // Lapis 2: blended 50% profil + 50% rolling data
     const rhrV = past.map(e => e.resting_hr).filter((v): v is number => v != null)
     const hrvV = past.map(e => e.hrv).filter((v): v is number => v != null)
     const rollingRhr = rhrV.length ? rhrV.reduce((a, b) => a + b, 0) / rhrV.length : profileRhr
@@ -117,24 +132,137 @@ function calculateEWS(
     baseHrv = (profileHrv * 0.5) + (rollingHrv * 0.5)
     baseSource = `blended profil 50% + rolling ${past.length} entri 50% (Lapis 2)`
   } else {
-    // Lapis 1: profil baseline (atau hari ini jika profil kosong)
     baseRhr = profileRhr
     baseHrv = profileHrv
     const src = (profileHRrest && profileHRVBase) ? 'profil RHR & HRV Baseline' : profileHRrest ? 'profil RHR + HRV hari ini' : profileHRVBase ? 'profil HRV + RHR hari ini' : 'nilai hari ini (isi RHR & HRV Baseline di Profil)'
     baseSource = `${src} (Lapis 1 — ${past.length === 0 ? 'entri pertama' : past.length + ' entri, akumulasi data'})`
   }
 
+  // ── Component Scores (0–100, higher = worse) ──────────────────────────────
+
+  // 1. Physio (HRV + RHR) — objektif
   let scoreRhr = 0, scoreHrv = 0
   if (rhr > 0 && baseRhr > 0) scoreRhr = Math.min(Math.max(((rhr - baseRhr) / baseRhr) * 200, 0), 100)
   if (hrv > 0 && baseHrv > 0) scoreHrv = Math.min(Math.max(((hrv - baseHrv) / baseHrv) * -200, 0), 100)
+  const scorePhys = (0.6 * scoreHrv) + (0.4 * scoreRhr)
 
-  const scorePhys   = (0.6 * scoreHrv) + (0.4 * scoreRhr)
-  const scoreSleep  = Math.min(100, ((Math.max(0, 7 - sleep) / 7) * 60) + ((Math.max(0, 5 - sleepQual) / 5) * 40))
-  const scoreDoms   = (doms / 10) * 100
+  // 2. Sleep (durasi + kualitas) — Halson 2014
+  const scoreSleep = Math.min(100, ((Math.max(0, 7 - sleep) / 7) * 60) + ((Math.max(0, 5 - sleepQual) / 5) * 40))
+
+  // 3. DOMS (0-10 → 0-100)
+  const scoreDoms = (doms / 10) * 100
+
+  // 4. Energy (0-10, inverted)
   const scoreEnergy = ((10 - energy) / 10) * 100
-  const totalScore  = (0.35 * scorePhys) + (0.3 * scoreSleep) + (0.2 * scoreDoms) + (0.15 * scoreEnergy)
 
-  return { baseRhr, baseHrv, baseSource, scorePhys, scoreSleep, scoreDoms, scoreEnergy, totalScore }
+  // 5. Fatigue / Kelelahan (1-5, inverted → 0-100) — Hooper Index
+  //    1=segar, 5=sangat lelah
+  const scoreFatigue = fatigue != null ? ((fatigue - 1) / 4) * 100 : 0
+
+  // 6. Mood (1-5, inverted → 0-100) — Morgan's Iceberg Profile
+  //    5=sangat baik, 1=sangat buruk → invert
+  const scoreMood = mood != null ? ((5 - mood) / 4) * 100 : 0
+
+  // 7. Stress (1-5, inverted → 0-100) — Kellmann RESTQ-Sport
+  //    1=sangat rendah, 5=sangat tinggi
+  const scoreStress = stress != null ? ((stress - 1) / 4) * 100 : 0
+
+  // ── Composite Score (Saw et al. 2016 — bobot subjective > objective) ──────
+  // Bobot: Physio 0.20, Sleep 0.20, DOMS 0.15, Fatigue 0.15, Mood 0.10, Stress 0.10, Energy 0.10
+  const hasMFS = mood != null && fatigue != null && stress != null
+  let rawScore: number
+
+  if (hasMFS) {
+    // Full 7-component
+    rawScore =
+      (0.20 * scorePhys) +
+      (0.20 * scoreSleep) +
+      (0.15 * scoreDoms) +
+      (0.15 * scoreFatigue) +
+      (0.10 * scoreMood) +
+      (0.10 * scoreStress) +
+      (0.10 * scoreEnergy)
+  } else {
+    // Fallback 4-component (backward compat ketika mood/fatigue/stress null)
+    rawScore =
+      (0.30 * scorePhys) +
+      (0.30 * scoreSleep) +
+      (0.20 * scoreDoms) +
+      (0.20 * scoreEnergy)
+  }
+
+  // ── Critical Threshold Flag System (Meeusen et al. 2013) ──────────────────
+  // Override: bahkan jika composite rendah, item individual buruk harus warning
+  // SWC (Smallest Worthwhile Change) = 0.5 × CV baseline → simplified to fixed thresholds
+
+  const flags: FlagItem[] = []
+
+  // DOMS flags
+  if (doms >= 8) flags.push({ level: 'red', item: 'DOMS', value: `${doms}/10`, message: 'Kerusakan otot berat — wajib Active Recovery atau Rest' })
+  else if (doms >= 6) flags.push({ level: 'yellow', item: 'DOMS', value: `${doms}/10`, message: 'Nyeri otot signifikan pasca latihan berat — pertimbangkan recovery' })
+
+  // Fatigue flags
+  if (fatigue != null) {
+    if (fatigue >= 5) flags.push({ level: 'red', item: 'Kelelahan', value: `${fatigue}/5`, message: 'Kelelahan ekstrim — risiko overtraining (Hooper Index)' })
+    else if (fatigue >= 4) flags.push({ level: 'yellow', item: 'Kelelahan', value: `${fatigue}/5`, message: 'Kelelahan tinggi — kurangi volume/intensitas' })
+  }
+
+  // Stress flags
+  if (stress != null) {
+    if (stress >= 5) flags.push({ level: 'red', item: 'Stres', value: `${stress}/5`, message: 'Stres psikososial ekstrim — recovery capacity terganggu (Kellmann 2010)' })
+    else if (stress >= 4) flags.push({ level: 'yellow', item: 'Stres', value: `${stress}/5`, message: 'Stres tinggi — dampak negatif pada pemulihan' })
+  }
+
+  // Mood flags (inverted: low = bad)
+  if (mood != null) {
+    if (mood <= 1) flags.push({ level: 'red', item: 'Mood', value: `${mood}/5`, message: 'Mood sangat rendah — tanda awal overreaching (Morgan 1985)' })
+    else if (mood <= 2) flags.push({ level: 'yellow', item: 'Mood', value: `${mood}/5`, message: 'Mood rendah — monitor potensi non-functional overreaching' })
+  }
+
+  // Sleep hours flags (Halson 2014)
+  if (sleep < 5) flags.push({ level: 'red', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: 'Tidur sangat kurang — gangguan hormon pertumbuhan dan cortisol' })
+  else if (sleep < 6) flags.push({ level: 'yellow', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: 'Durasi tidur kurang — pemulihan terhambat' })
+
+  // Energy flags
+  if (energy <= 2) flags.push({ level: 'red', item: 'Energy', value: `${energy}/10`, message: 'Energi sangat rendah — tubuh butuh istirahat penuh' })
+  else if (energy <= 3) flags.push({ level: 'yellow', item: 'Energy', value: `${energy}/10`, message: 'Energi rendah — pertimbangkan sesi ringan' })
+
+  // HRV/RHR flags (simplified SWC using percentage deviation from baseline)
+  if (baseRhr > 0 && rhr > 0) {
+    const rhrPct = ((rhr - baseRhr) / baseRhr) * 100
+    if (rhrPct >= 8) flags.push({ level: 'red', item: 'RHR', value: `${rhr} bpm (+${rhrPct.toFixed(0)}%)`, message: 'RHR jauh di atas baseline — kemungkinan stress sistemik' })
+    else if (rhrPct >= 5) flags.push({ level: 'yellow', item: 'RHR', value: `${rhr} bpm (+${rhrPct.toFixed(0)}%)`, message: 'RHR meningkat — monitor pemulihan' })
+  }
+  if (baseHrv > 0 && hrv > 0) {
+    const hrvPct = ((baseHrv - hrv) / baseHrv) * 100
+    if (hrvPct >= 15) flags.push({ level: 'red', item: 'HRV', value: `${hrv} ms (-${hrvPct.toFixed(0)}%)`, message: 'HRV sangat rendah — ANS exhaustion (Plews 2013)' })
+    else if (hrvPct >= 10) flags.push({ level: 'yellow', item: 'HRV', value: `${hrv} ms (-${hrvPct.toFixed(0)}%)`, message: 'HRV menurun signifikan — parasympathetic withdrawal' })
+  }
+
+  // ── Override Rules (Meeusen et al. 2013 ECSS consensus) ───────────────────
+  const redCount = flags.filter(f => f.level === 'red').length
+  const yellowCount = flags.filter(f => f.level === 'yellow').length
+  let overrideApplied = false
+  let totalScore = rawScore
+
+  if (redCount >= 2) {
+    // 2+ Red Flag → minimum "Kelelahan Tingkat Tinggi" (score ≥ 46)
+    if (totalScore < 46) { totalScore = 46; overrideApplied = true }
+  } else if (redCount >= 1 || yellowCount >= 3) {
+    // 1 Red OR 3+ Yellow → minimum "Perlu Perhatian" (score ≥ 31)
+    if (totalScore < 31) { totalScore = 31; overrideApplied = true }
+  } else if (yellowCount >= 1) {
+    // 1+ Yellow → minimum "Perlu Perhatian" (score ≥ 31) — but softer: cap at 31
+    if (totalScore < 31) { totalScore = 31; overrideApplied = true }
+  }
+
+  return {
+    baseRhr, baseHrv, baseSource,
+    scorePhys, scoreSleep, scoreDoms, scoreEnergy,
+    scoreFatigue, scoreMood, scoreStress,
+    rawScore, totalScore,
+    flags, overrideApplied
+  }
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -187,7 +315,7 @@ export default function EwsPage() {
     setEntries(data || [])
   }
 
-  // Real-time calc
+  // Real-time calc — sekarang include mood/fatigue/stress
   useEffect(() => {
     const rhr = parseFloat(form.resting_hr), hrv = parseFloat(form.hrv)
     const sleep = parseSleepStr(form.sleep_str) ?? parseFloat(form.sleep_hours)
@@ -195,7 +323,10 @@ export default function EwsPage() {
     if (!form.entry_date || isNaN(rhr) || isNaN(hrv) || isNaN(sleep) || isNaN(sq) || isNaN(doms) || isNaN(energy)) {
       setResult(null); return
     }
-    setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest, profileHRVBase))
+    const moodVal = form.mood ? parseInt(form.mood) : null
+    const fatigueVal = form.fatigue ? parseInt(form.fatigue) : null
+    const stressVal = form.stress ? parseInt(form.stress) : null
+    setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, entries, profileHRrest, profileHRVBase))
   }, [form, entries, profileHRrest, profileHRVBase])
 
   function handleSleepStr(val: string) {
@@ -214,17 +345,19 @@ export default function EwsPage() {
     const sq = form.sleep_quality ? parseInt(form.sleep_quality) : null
     const doms = form.muscle_soreness ? parseFloat(form.muscle_soreness) : null
     const energy = form.motivation ? parseFloat(form.motivation) : null
+    const moodVal = form.mood ? parseInt(form.mood) : null
+    const fatigueVal = form.fatigue ? parseInt(form.fatigue) : null
+    const stressVal = form.stress ? parseInt(form.stress) : null
     let score: number | null = null
     if (rhr && hrv && sleep != null && sq != null && doms != null && energy != null)
-      score = calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest, profileHRVBase).totalScore
+      score = calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, entries, profileHRrest, profileHRVBase).totalScore
     const payload = {
       athlete_id: athleteId, entry_date: form.entry_date,
       resting_hr: rhr || null, hrv: hrv || null, sleep_hours: sleep,
       sleep_quality: sq, muscle_soreness: doms, motivation: energy,
-      mood: form.mood ? parseInt(form.mood) : null,
-      fatigue: form.fatigue ? parseInt(form.fatigue) : null,
-      stress: form.stress ? parseInt(form.stress) : null,
-      composite_score: score, notes: form.notes || null
+      mood: moodVal, fatigue: fatigueVal, stress: stressVal,
+      composite_score: score != null ? parseFloat(score.toFixed(1)) : null,
+      notes: form.notes || null
     }
     try {
       if (editingId) {
@@ -263,22 +396,22 @@ export default function EwsPage() {
     await loadEntries(athleteId!); showToast('Entri dihapus')
   }
 
-  // ── Recalculate all entries ──
+  // ── Recalculate all entries (v3 — 7-component) ──
   async function recalculateAll() {
     if (!athleteId) return
-    if (!confirm(`Recalculate composite_score untuk ${entries.length} entri menggunakan baseline profil aktif?`)) return
+    if (!confirm(`Recalculate composite_score untuk ${entries.length} entri menggunakan algoritma v3 (7-komponen + flag override)?`)) return
     let updated = 0
     for (const e of entries) {
       const rhr = e.resting_hr, hrv = e.hrv
       const sleep = e.sleep_hours, sq = e.sleep_quality
       const doms = e.muscle_soreness, energy = e.motivation
       if (!rhr || !hrv || sleep == null || sq == null || doms == null || energy == null) continue
-      const res = calculateEWS(e.entry_date, rhr, hrv, sleep, sq, doms, energy, entries, profileHRrest, profileHRVBase)
-      await (supabase as any).from('ews_entries').update({ composite_score: res.totalScore }).eq('id', e.id)
+      const res = calculateEWS(e.entry_date, rhr, hrv, sleep, sq, doms, energy, e.mood, e.fatigue, e.stress, entries, profileHRrest, profileHRVBase)
+      await (supabase as any).from('ews_entries').update({ composite_score: parseFloat(res.totalScore.toFixed(1)) }).eq('id', e.id)
       updated++
     }
     await loadEntries(athleteId)
-    showToast(`${updated} entri berhasil di-recalculate`)
+    showToast(`${updated} entri berhasil di-recalculate (algoritma v3)`)
   }
 
   // ── Download seluruh riwayat EWS sebagai CSV (semua kolom tabel) ──
@@ -332,12 +465,14 @@ export default function EwsPage() {
   const avgDoms    = avg(filtered.map(e => e.muscle_soreness))
   const avgEnergy  = avg(filtered.map(e => e.motivation))
   const avgRhr     = avg(filtered.map(e => e.resting_hr))
+  const avgMoodRaw = avg(filtered.map(e => e.mood))
+  const avgFatigueRaw = avg(filtered.map(e => e.fatigue))
+  const avgStressRaw = avg(filtered.map(e => e.stress))
 
   const avgPhysioScore = (() => {
     const vals = filtered.filter(e => e.composite_score != null).map(e => {
       const rhr = e.resting_hr ?? 0, hrv = e.hrv ?? 0
       if (!rhr || !hrv) return null
-      // Mirror 3-layer baseline logic
       const past = entries.filter(x => x.entry_date < e.entry_date)
         .sort((a, b) => b.entry_date.localeCompare(a.entry_date))
       const profRhr = profileHRrest || rhr
@@ -353,7 +488,6 @@ export default function EwsPage() {
         bRhr = profRhr * 0.5 + rollingRhr * 0.5
         bHrv = profHrv * 0.5 + rollingHrv * 0.5
       } else {
-        // Lapis 1 — pakai profil baseline
         bRhr = profRhr
         bHrv = profHrv
       }
@@ -408,6 +542,17 @@ export default function EwsPage() {
   const latest = entries[0]
   const latestStatus = latest?.composite_score != null ? getStatus(latest.composite_score) : null
 
+  // Latest flags (recalculate for display)
+  const latestFlags: FlagItem[] = (() => {
+    if (!latest || latest.composite_score == null) return []
+    const rhr = latest.resting_hr, hrv = latest.hrv
+    const sleep = latest.sleep_hours, sq = latest.sleep_quality
+    const doms = latest.muscle_soreness, energy = latest.motivation
+    if (!rhr || !hrv || sleep == null || sq == null || doms == null || energy == null) return []
+    const res = calculateEWS(latest.entry_date, rhr, hrv, sleep, sq, doms, energy, latest.mood, latest.fatigue, latest.stress, entries, profileHRrest, profileHRVBase)
+    return res.flags
+  })()
+
   // Table pagination & search
   const tableEntries = [...entries]
     .filter(e => searchDate ? e.entry_date.includes(searchDate) : true)
@@ -427,8 +572,8 @@ export default function EwsPage() {
       <div className="bg-white rounded-xl shadow-sm p-5">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Early Warning System (EWS) Tracker</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Algoritma Penilaian Kelelahan Otomatis berdasarkan Metrik Fisik & Perasaan</p>
+            <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Training Readiness — EWS Tracker</h1>
+            <p className="text-xs text-gray-400 mt-0.5">Algoritma 7-Komponen + Flag Override · McLean 2010 · Saw 2016 · Hooper 1995 · Meeusen 2013</p>
           </div>
           <button onClick={() => { setActiveTab('input'); setForm(FORM_BLANK); setEditingId(null) }}
             className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700">
@@ -462,31 +607,48 @@ export default function EwsPage() {
                 <div>Belum ada data EWS. Mulai input di tab Input & Riwayat.</div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-center">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl flex-shrink-0" style={{ background: latestStatus.bg }}>
-                    {latestStatus.icon}
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-4 items-center">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl flex-shrink-0" style={{ background: latestStatus.bg }}>
+                      {latestStatus.icon}
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-500 mb-0.5">Entri terakhir · {fmtDate(latest.entry_date)}</div>
+                      <div className="text-xl font-bold" style={{ color: latestStatus.color }}>{latestStatus.label}</div>
+                      <div className="text-xs text-gray-500 mt-1 leading-relaxed max-w-lg">{latestStatus.rec}</div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="text-sm text-gray-500 mb-0.5">Entri terakhir · {fmtDate(latest.entry_date)}</div>
-                    <div className="text-xl font-bold" style={{ color: latestStatus.color }}>{latestStatus.label}</div>
-                    <div className="text-xs text-gray-500 mt-1 leading-relaxed max-w-lg">{latestStatus.rec}</div>
+                  <div className="flex flex-col items-center justify-center bg-gray-50 rounded-xl px-6 py-4 min-w-[120px]">
+                    <div className="text-3xl font-bold" style={{ color: latestStatus.color }}>
+                      {latest.composite_score?.toFixed(1)}
+                    </div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Readiness Score</div>
+                    <div className="mt-2 h-1.5 w-20 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full" style={{ width: `${Math.min(latest.composite_score ?? 0, 100)}%`, background: latestStatus.color }} />
+                    </div>
                   </div>
                 </div>
-                <div className="flex flex-col items-center justify-center bg-gray-50 rounded-xl px-6 py-4 min-w-[120px]">
-                  <div className="text-3xl font-bold" style={{ color: latestStatus.color }}>
-                    {latest.composite_score?.toFixed(1)}
+
+                {/* Flag alerts on dashboard */}
+                {latestFlags.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {latestFlags.map((f, i) => (
+                      <div key={i} className={`flex items-start gap-2 px-3 py-2 rounded-lg text-xs ${f.level === 'red' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
+                        <span className="flex-shrink-0 mt-0.5">{f.level === 'red' ? '🔴' : '⚠️'}</span>
+                        <div>
+                          <span className={`font-bold ${f.level === 'red' ? 'text-red-700' : 'text-amber-700'}`}>{f.item}: {f.value}</span>
+                          <span className="text-gray-600 ml-1">— {f.message}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase mt-1">Fatigue Score</div>
-                  <div className="mt-2 h-1.5 w-20 bg-gray-200 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full" style={{ width: `${Math.min(latest.composite_score ?? 0, 100)}%`, background: latestStatus.color }} />
-                  </div>
-                </div>
-              </div>
+                )}
+              </>
             )}
           </div>
 
-          {/* Filter + 5 Stat Cards */}
+          {/* Filter + Stat Cards — 2 rows */}
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-gsans text-xl text-indigo-700 uppercase">Rata-Rata Metrik Kelelahan</h3>
@@ -496,19 +658,40 @@ export default function EwsPage() {
                 {weekOptions.map(w => <option key={w} value={w}>{w}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {/* Row 1: Original 5 cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-3">
               {[
                 { label: 'Avg Physio Score',  val: avgPhysioScore, icon: '❤️', color: '#6366f1' },
                 { label: 'Avg Sleep Score',   val: avgSleepH != null ? Math.min(100, (Math.max(0, 7 - avgSleepH) / 7) * 100) : null, icon: '😴', color: '#8b5cf6' },
                 { label: 'Avg DOMS Score',    val: avgDoms != null ? (avgDoms / 10) * 100 : null, icon: '🔥', color: '#ef4444' },
                 { label: 'Avg Energy Score',  val: avgEnergy != null ? ((10 - avgEnergy) / 10) * 100 : null, icon: '⚡', color: '#f59e0b' },
-                { label: 'Avg Fatigue Score', val: avgFatigue, icon: '🔋', color: '#1e293b' },
+                { label: 'Avg Readiness',     val: avgFatigue, icon: '🔋', color: '#1e293b' },
               ].map(({ label, val, icon, color }) => (
                 <div key={label} className="bg-white rounded-xl shadow-sm p-4 flex items-center gap-3">
                   <span className="text-2xl">{icon}</span>
                   <div>
                     <div className="text-xs font-semibold text-gray-500 uppercase mt-0.5">{label}</div>
                     <div className="text-lg font-bold" style={{ color }}>{val != null ? val.toFixed(1) : '—'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Row 2: New subjective cards (raw averages, not scores) */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Avg Mood', val: avgMoodRaw, icon: '😊', color: '#059669', suffix: '/5', note: '(5=sangat baik)' },
+                { label: 'Avg Kelelahan', val: avgFatigueRaw, icon: '🥱', color: '#dc2626', suffix: '/5', note: '(5=sangat lelah)' },
+                { label: 'Avg Stres', val: avgStressRaw, icon: '😤', color: '#7c3aed', suffix: '/5', note: '(5=sangat tinggi)' },
+              ].map(({ label, val, icon, color, suffix, note }) => (
+                <div key={label} className="bg-white rounded-xl shadow-sm p-4 flex items-center gap-3">
+                  <span className="text-2xl">{icon}</span>
+                  <div>
+                    <div className="text-xs font-semibold text-gray-500 uppercase mt-0.5">{label}</div>
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-lg font-bold" style={{ color }}>{val != null ? val.toFixed(1) : '—'}</span>
+                      <span className="text-xs text-gray-400">{suffix}</span>
+                    </div>
+                    <div className="text-[10px] text-gray-400">{note}</div>
                   </div>
                 </div>
               ))}
@@ -588,8 +771,8 @@ export default function EwsPage() {
             <h2 className="font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4">Distribusi Status</h2>
             {/* Zone reference badges */}
             <div className="flex flex-wrap gap-2 mb-5">
-              {[['#eef2ff','#6366f1','≤15 Sangat Prima'],['#ecfdf5','#065f46','≤30 Kondisi Baik'],['#fffbeb','#92400e','≤45 Waspada'],['#fef2f2','#991b1b','≤60 Kelelahan Tinggi'],['#1e293b','#f8fafc','>60 Danger Zone']].map(([bg,col,lbl]) => (
-                <span key={lbl} className="text-[11px] font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
+              {[['#eef2ff','#6366f1','≤15 Sangat Prima'],['#ecfdf5','#065f46','≤30 Kondisi Baik'],['#fffbeb','#92400e','≤45 Perlu Perhatian'],['#fef2f2','#991b1b','≤60 Kelelahan Tinggi'],['#1e293b','#f8fafc','>60 Danger Zone']].map(([bg,col,lbl]) => (
+                <span key={lbl} className="text-xs font-bold px-2 py-0.5 rounded" style={{ background: bg, color: col }}>{lbl}</span>
               ))}
             </div>
 
@@ -603,13 +786,13 @@ export default function EwsPage() {
                   return (
                     <div key={s.label} className="flex items-center gap-3">
                       <div className="w-5 text-sm flex-shrink-0">{s.icon}</div>
-                      <div className="w-40 flex-shrink-0 text-sm font-semibold text-gray-700">{s.label}</div>
+                      <div className="w-40 flex-shrink-0 text-xs font-medium text-gray-600">{s.label}</div>
                       <div className="flex-1 h-5 bg-gray-100 rounded-full overflow-hidden">
                         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: s.color }} />
                       </div>
                       <div className="w-20 flex-shrink-0 text-right">
-                        <span className="text-sm font-bold text-gray-700">{count}×</span>
-                        <span className="text-xs font-medium text-gray-500 ml-1">({pct.toFixed(0)}%)</span>
+                        <span className="text-xs font-bold text-gray-700">{count}×</span>
+                        <span className="text-xs text-gray-400 ml-1">({pct.toFixed(0)}%)</span>
                       </div>
                     </div>
                   )
@@ -629,7 +812,7 @@ export default function EwsPage() {
             ) : (
               <>
                 <div className="flex flex-wrap gap-4 mb-6 text-xs font-semibold text-gray-600">
-                  {[['#6366f1','Fatigue Score'],['#ef4444','RHR (bpm)'],['#10b981','HRV (ms)'],['#f59e0b','Energy (×10)']].map(([c,l]) => (
+                  {[['#6366f1','Readiness Score'],['#ef4444','RHR (bpm)'],['#10b981','HRV (ms)'],['#f59e0b','Energy (×10)']].map(([c,l]) => (
                     <span key={l} className="flex items-center gap-1.5">
                       <span className="inline-block w-4 h-0.5 rounded" style={{ background: c }} />{l}
                     </span>
@@ -647,7 +830,7 @@ export default function EwsPage() {
                       <ReferenceLine yAxisId="score" y={30} stroke="#10b981" strokeDasharray="4 4" strokeOpacity={0.3} />
                       <ReferenceLine yAxisId="score" y={45} stroke="#f59e0b" strokeDasharray="4 4" strokeOpacity={0.3} />
                       <ReferenceLine yAxisId="score" y={60} stroke="#ef4444" strokeDasharray="4 4" strokeOpacity={0.3} />
-                      <Line yAxisId="score" type="monotone" dataKey="fatigue" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 4, fill: '#6366f1' }} name="Fatigue Score" connectNulls />
+                      <Line yAxisId="score" type="monotone" dataKey="fatigue" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 4, fill: '#6366f1' }} name="Readiness Score" connectNulls />
                       <Line yAxisId="hr"    type="monotone" dataKey="rhr"     stroke="#ef4444" strokeWidth={1.8} dot={{ r: 3 }} name="RHR (bpm)" connectNulls />
                       <Line yAxisId="hr"    type="monotone" dataKey="hrv"     stroke="#10b981" strokeWidth={1.8} dot={{ r: 3 }} name="HRV (ms)" connectNulls />
                       <Line yAxisId="score" type="monotone" dataKey="energy"  stroke="#f59e0b" strokeWidth={1.8} strokeDasharray="5 5" dot={{ r: 3 }} name="Energy (×10)" connectNulls />
@@ -755,7 +938,7 @@ export default function EwsPage() {
               </div>
             )}
 
-            {/* Row 3: extra */}
+            {/* Row 3: Subjective wellness (now part of algorithm) */}
             <div className="grid grid-cols-3 gap-4 mb-4">
               {[
                 { key: 'mood',    label: 'Mood (1–5)',       placeholder: '4', max: 5 },
@@ -778,9 +961,9 @@ export default function EwsPage() {
                 placeholder="Kondisi khusus, cedera, keluhan..." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
             </div>
 
-            {/* Auto Status */}
+            {/* Auto Status — enhanced with 7 components + flags */}
             <div>
-              <div className="text-xs font-medium text-gray-500 uppercase mb-2">Analisis Algoritma: Total Skor Fatigue & Rekomendasi (Otomatis)</div>
+              <div className="text-xs font-medium text-gray-500 uppercase mb-2">Analisis Algoritma: Readiness Score & Rekomendasi (7-Komponen + Flag Override)</div>
               {!result ? (
                 <div className="border border-gray-200 rounded-lg px-4 py-4 text-sm text-gray-400">
                   ℹ️ Lengkapi semua metrik untuk melihat analisis algoritma EWS.
@@ -791,13 +974,34 @@ export default function EwsPage() {
                     <span className="text-2xl">{status!.icon}</span>
                     <strong className="text-base" style={{ color: status!.color }}>{status!.label}</strong>
                     <span className="text-sm font-bold text-gray-600">(Skor: {result.totalScore.toFixed(1)})</span>
+                    {result.overrideApplied && (
+                      <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">FLAG OVERRIDE ↑{(result.totalScore - result.rawScore).toFixed(1)}</span>
+                    )}
                   </div>
                   <div className="text-sm text-gray-700 leading-relaxed mb-3">{status!.rec}</div>
+
+                  {/* Flag alerts in form */}
+                  {result.flags.length > 0 && (
+                    <div className="space-y-1.5 mb-3">
+                      {result.flags.map((f, i) => (
+                        <div key={i} className={`flex items-start gap-2 px-3 py-1.5 rounded-lg text-xs ${f.level === 'red' ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'}`}>
+                          <span className="flex-shrink-0">{f.level === 'red' ? '🔴' : '⚠️'}</span>
+                          <span className={f.level === 'red' ? 'text-red-700' : 'text-amber-700'}><strong>{f.item}: {f.value}</strong> — {f.message}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 7-component breakdown */}
                   <div className="flex flex-wrap gap-4 text-xs bg-white/60 rounded-lg px-3 py-2">
-                    <span><strong>Scr Physio:</strong> {result.scorePhys.toFixed(1)}</span>
-                    <span><strong>Scr Sleep:</strong> {result.scoreSleep.toFixed(1)}</span>
-                    <span><strong>Scr DOMS:</strong> {result.scoreDoms.toFixed(1)}</span>
-                    <span><strong>Scr Energy:</strong> {result.scoreEnergy.toFixed(1)}</span>
+                    <span><strong>Physio:</strong> {result.scorePhys.toFixed(1)}</span>
+                    <span><strong>Sleep:</strong> {result.scoreSleep.toFixed(1)}</span>
+                    <span><strong>DOMS:</strong> {result.scoreDoms.toFixed(1)}</span>
+                    <span><strong>Energy:</strong> {result.scoreEnergy.toFixed(1)}</span>
+                    <span><strong>Fatigue:</strong> {result.scoreFatigue.toFixed(1)}</span>
+                    <span><strong>Mood:</strong> {result.scoreMood.toFixed(1)}</span>
+                    <span><strong>Stress:</strong> {result.scoreStress.toFixed(1)}</span>
+                    {result.overrideApplied && <span className="text-amber-600 font-semibold">| Raw: {result.rawScore.toFixed(1)} → Override: {result.totalScore.toFixed(1)}</span>}
                   </div>
                 </div>
               )}
@@ -807,12 +1011,12 @@ export default function EwsPage() {
           {/* History Table */}
           <div className="bg-white rounded-xl shadow-sm p-5">
             <div className="border-b border-indigo-100 pb-2 mb-4 flex items-center justify-between flex-wrap gap-2">
-              <h2 className="font-gsans text-xl text-indigo-700 uppercase">Riwayat EWS & Fatigue Score</h2>
+              <h2 className="font-gsans text-xl text-indigo-700 uppercase">Riwayat EWS & Readiness Score</h2>
               {entries.length > 0 && (
                 <div className="flex gap-2">
                   <button onClick={recalculateAll}
                     className="border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50">
-                    🔄 Recalculate Semua
+                    🔄 Recalculate Semua (v3)
                   </button>
                   <button onClick={downloadCSV}
                     className="border border-gray-300 text-gray-600 text-xs px-3 py-1 rounded-lg hover:bg-gray-50">
@@ -848,7 +1052,7 @@ export default function EwsPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 text-left">
-                        {['Tanggal','Sleep','S.Qual','DOMS','Energy','RHR','HRV','Fatigue Score',''].map(h => (
+                        {['Tanggal','Sleep','S.Qual','DOMS','Energy','Mood','Lelah','Stres','RHR','HRV','Score',''].map(h => (
                           <th key={h} className="text-xs font-medium text-gray-500 uppercase pb-2 pr-3 whitespace-nowrap">{h}</th>
                         ))}
                       </tr>
@@ -863,6 +1067,9 @@ export default function EwsPage() {
                             <td className="py-2.5 pr-3 text-xs text-gray-700 text-center">{e.sleep_quality ?? '—'}</td>
                             <td className="py-2.5 pr-3 text-xs text-gray-700 text-center">{e.muscle_soreness ?? '—'}</td>
                             <td className="py-2.5 pr-3 text-xs text-gray-700 text-center">{e.motivation ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs text-gray-700 text-center">{e.mood ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs text-gray-700 text-center">{e.fatigue ?? '—'}</td>
+                            <td className="py-2.5 pr-3 text-xs text-gray-700 text-center">{e.stress ?? '—'}</td>
                             <td className="py-2.5 pr-3 text-xs text-gray-700 text-center">{e.resting_hr ?? '—'}</td>
                             <td className="py-2.5 pr-3 text-xs text-gray-700 text-center">{e.hrv ?? '—'}</td>
                             <td className="py-2.5 pr-3">
