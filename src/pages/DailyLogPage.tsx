@@ -890,6 +890,7 @@ export default function DailyLogPage() {
         hr_max:                parseFloat(form.max_hr)       || null,
         hr_part1:              parseFloat(form.hr_part1)     || null,
         hr_part2:              parseFloat(form.hr_part2)     || null,
+        pace:                  c.pace || null,
         hr_drift_pct:          c.hr_drift_pct || null,
         rpe:                   parseFloat(form.rpe)          || null,
         perceived_feel:        form.perceived_feel || null,
@@ -1066,6 +1067,7 @@ export default function DailyLogPage() {
           three_day_risk:        c.threeDayLabel,
           z_score:               parseFloat(c.zScore.toFixed(3)),
           personal_load_status:  c.personalLoad,
+          pace:                  c.pace || null,
           hr_drift_pct:          c.hr_drift_pct || null,
         }
         await (supabase as any).from('training_sessions').update(updatePayload).eq('id', s.id)
