@@ -1345,12 +1345,12 @@ export default function DailyLogPage() {
                   <div className="rounded-xl p-4 mb-4" style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)' }}>
                     <div className="flex items-center justify-between mb-2">
                       <div>
-                        <div className="text-3xl font-bold text-indigo-700">{linkedCount} <span className="text-lg text-indigo-400">/ {period.planned.length || '—'}</span></div>
+                        <div className="text-3xl font-bold text-indigo-700">{period.sessions.length}</div>
                         <div className="text-xs font-semibold text-indigo-500 uppercase mt-0.5">Sesi Selesai</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-3xl font-bold" style={{ color: completionColor }}>{completionPct !== null ? `${completionPct}%` : '—'}</div>
-                        <div className="text-xs font-semibold text-gray-500 uppercase mt-0.5">Tingkat Penyelesaian</div>
+                        <div className="text-3xl font-bold" style={{ color: completionColor }}>{completionPct !== null ? `${linkedCount}/${period.planned.length} (${completionPct}%)` : '—'}</div>
+                        <div className="text-xs font-semibold text-gray-500 uppercase mt-0.5">Adherence Program</div>
                       </div>
                     </div>
                     {completionPct !== null && (
