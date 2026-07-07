@@ -945,6 +945,7 @@ export default function DailyLogPage() {
       setForm(FORM_BLANK)
       setEditingId(null)
       await loadSessions(athleteId)
+      setTab('dashboard')
     } catch (e: any) {
       showToast('Gagal: ' + e.message, false)
     } finally {
