@@ -9,7 +9,6 @@ import PaceZonesPage from './pages/PaceZonesPage'
 import RoadmapPage from './pages/RoadmapPage'
 import ProgramPage from './pages/ProgramPage'
 import EwsPage from './pages/EwsPage'
-import TrainingLoadPage from './pages/TrainingLoadPage'
 import DailyLogPage from './pages/DailyLogPage'
 import RwrPage from './pages/RwrPage'
 import NutritionPage from './pages/NutritionPage'
@@ -41,7 +40,6 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 function AuthCallback() {
   const navigate = useNavigate()
   useEffect(() => {
-    // Supabase akan set session via onAuthStateChange setelah email verified
     const timer = setTimeout(() => navigate('/login?verified=1', { replace: true }), 1500)
     return () => clearTimeout(timer)
   }, [navigate])
@@ -63,23 +61,22 @@ function AppRoutes() {
       >
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
-        <Route path="profil" element={<ProfilPage />} />
+        <Route path="profile" element={<ProfilPage />} />
         <Route path="pace-zones" element={<PaceZonesPage />} />
         <Route path="roadmap" element={<RoadmapPage />} />
-        <Route path="program" element={<ProgramPage />} />
-        <Route path="ews" element={<EwsPage />} />
-        <Route path="training-load" element={<TrainingLoadPage />} />
-        <Route path="daily-log" element={<DailyLogPage />} />
-        <Route path="rwr" element={<RwrPage />} />
+        <Route path="training-program" element={<ProgramPage />} />
+        <Route path="training-readiness" element={<EwsPage />} />
+        <Route path="training-logs" element={<DailyLogPage />} />
+        <Route path="run-walk-run" element={<RwrPage />} />
         <Route path="nutrition" element={<NutritionPage />} />
         <Route path="treatment" element={<TreatmentPage />} />
         <Route path="races" element={<RacesPage />} />
         <Route path="body-metrics" element={<BodyMetricsPage />} />
         <Route path="export" element={<ExportPage />} />
-        <Route path="referensi" element={<ReferensiPage />} />
+        <Route path="reference" element={<ReferensiPage />} />
         <Route path="admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
-        <Route path="group" element={<GroupPage />} />
-        <Route path="coach" element={<CoachDashboardPage />} />
+        <Route path="group-training" element={<GroupPage />} />
+        <Route path="coach-dashboard" element={<CoachDashboardPage />} />
       </Route>
 
     </Routes>

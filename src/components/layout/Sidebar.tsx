@@ -4,24 +4,24 @@ import { useRole } from '../../hooks/useRole'
 
 const menuItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
-  { path: '/profil', label: 'Profil & Analisis', icon: '👤' },
+  { path: '/profile', label: 'Profil & Analisis', icon: '👤' },
   { path: '/pace-zones', label: 'Pace & HR Zones', icon: '🎯' },
   { path: '/roadmap', label: 'Roadmap & Milestone', icon: '🗺️' },
-  { path: '/program', label: 'Training Program', icon: '📋' },
-  { path: '/ews', label: 'Training Readiness', icon: '⚠️' },
-  { path: '/daily-log', label: 'Training Logs', icon: '✏️' },
+  { path: '/training-program', label: 'Training Program', icon: '📋' },
+  { path: '/training-readiness', label: 'Training Readiness', icon: '⚠️' },
+  { path: '/training-logs', label: 'Training Logs', icon: '✏️' },
   { path: '/body-metrics', label: 'Body Metrics', icon: '⚖️' },
   { path: '/nutrition', label: 'Nutrition & Fueling', icon: '🍌' },
   { path: '/treatment', label: 'Treatment Protocol', icon: '💊' },
-  { path: '/rwr', label: 'RWR Calculator', icon: '🏃' },
+  { path: '/run-walk-run', label: 'RWR Calculator', icon: '🏃' },
   { path: '/races', label: 'Race Management', icon: '🏁' },
-  { path: '/group', label: 'Group Training', icon: '👥' },
+  { path: '/group-training', label: 'Group Training', icon: '👥' },
   { path: '/export', label: 'Export / Import', icon: '💾' },
-  { path: '/referensi', label: 'Referensi & Metodologi', icon: '📚' },
+  { path: '/reference', label: 'Referensi & Metodologi', icon: '📚' },
 ]
 
 const coachItems = [
-  { path: '/coach', label: 'Coach Dashboard', icon: '🎓' },
+  { path: '/coach-dashboard', label: 'Coach Dashboard', icon: '🎓' },
 ]
 
 const adminItems = [
