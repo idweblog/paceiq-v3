@@ -1325,9 +1325,9 @@ export default function DailyLogPage() {
               const avgRpe = period.sessions.length
                 ? period.sessions.reduce((s, x) => s + (x.rpe || 0), 0) / period.sessions.length
                 : null
-              // Linked count = planned sessions yang punya training session ter-link
+              // Linked count = planned sessions yang punya training session ter-link (cek semua sessions, bukan hanya period — karena cross-month linking via weekly window)
               const linkedCount = period.planned.filter(ps =>
-                period.sessions.some(s => s.program_session_id === ps.id)
+                sessions.some(s => s.program_session_id === ps.id)
               ).length
               const completionPct = period.planned.length
                 ? Math.round((linkedCount / period.planned.length) * 100)
@@ -1391,7 +1391,7 @@ export default function DailyLogPage() {
                       <div className="space-y-1.5">
                         {Array.from(new Set(period.planned.map(ps => ps.program_type))).map(type => {
                           const plannedCount = period.planned.filter(ps => ps.program_type === type).length
-                          const doneCount = period.sessions.filter(s => s.program_session_id && period.planned.some(ps => ps.id === s.program_session_id && ps.program_type === type)).length
+                          const doneCount = period.planned.filter(ps => ps.program_type === type && sessions.some(s => s.program_session_id === ps.id)).length
                           const isComplete = doneCount >= plannedCount
                           return (
                             <div key={type} className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg" style={{ background: isComplete ? '#ecfdf5' : '#f9fafb' }}>
