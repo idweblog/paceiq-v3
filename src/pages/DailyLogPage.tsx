@@ -1325,8 +1325,12 @@ export default function DailyLogPage() {
               const avgRpe = period.sessions.length
                 ? period.sessions.reduce((s, x) => s + (x.rpe || 0), 0) / period.sessions.length
                 : null
+              // Linked count = planned sessions yang punya training session ter-link
+              const linkedCount = period.planned.filter(ps =>
+                period.sessions.some(s => s.program_session_id === ps.id)
+              ).length
               const completionPct = period.planned.length
-                ? Math.round((period.sessions.length / period.planned.length) * 100)
+                ? Math.round((linkedCount / period.planned.length) * 100)
                 : null
               const completionColor = completionPct === null ? '#9ca3af' : completionPct >= 80 ? '#059669' : completionPct >= 50 ? '#d97706' : '#dc2626'
 
@@ -1341,7 +1345,7 @@ export default function DailyLogPage() {
                   <div className="rounded-xl p-4 mb-4" style={{ background: 'linear-gradient(135deg, #eef2ff 0%, #f5f3ff 100%)' }}>
                     <div className="flex items-center justify-between mb-2">
                       <div>
-                        <div className="text-3xl font-bold text-indigo-700">{period.sessions.length} <span className="text-lg text-indigo-400">/ {period.planned.length || '—'}</span></div>
+                        <div className="text-3xl font-bold text-indigo-700">{linkedCount} <span className="text-lg text-indigo-400">/ {period.planned.length || '—'}</span></div>
                         <div className="text-xs font-semibold text-indigo-500 uppercase mt-0.5">Sesi Selesai</div>
                       </div>
                       <div className="text-right">
