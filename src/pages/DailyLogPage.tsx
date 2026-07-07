@@ -1134,8 +1134,6 @@ export default function DailyLogPage() {
     s.session_date >= monthRange.start && s.session_date <= monthRange.end)
   const thisMonthPlanned = programSessions.filter(ps =>
     ps.session_date >= monthRange.start && ps.session_date <= monthRange.end)
-  const thisMonthMissed = thisMonthPlanned.filter(ps =>
-    !sessions.some(s => s.program_session_id === ps.id) && ps.session_date < today).length
 
   // ── Tren CTL/ATL/TSB harian, 30 hari terakhir ──
   const dailyTrendData = sortedAsc
@@ -1304,6 +1302,7 @@ export default function DailyLogPage() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {[
               {
+                kind: 'weekly' as const,
                 title: 'Realisasi vs Rencana — Mingguan',
                 periodLabel: weekLabel(today),
                 sessions: thisWeekSessions,
@@ -1312,11 +1311,12 @@ export default function DailyLogPage() {
                 durationUnit: 'mnt' as const,
               },
               {
+                kind: 'monthly' as const,
                 title: 'Realisasi vs Rencana — Bulanan',
                 periodLabel: getMonthRange(today).label,
                 sessions: thisMonthSessions,
                 planned: thisMonthPlanned,
-                missed: thisMonthMissed,
+                missed: 0,
                 durationUnit: 'jam' as const,
               },
             ].map(period => {
@@ -1379,25 +1379,46 @@ export default function DailyLogPage() {
                   </div>
 
                   {/* Breakdown per tipe sesi */}
-                  {period.planned.length === 0 ? (
-                    <div className="text-center py-6 text-gray-400 text-sm border-t border-gray-100">Tidak ada sesi program untuk periode ini.</div>
-                  ) : (
-                    <div className="border-t border-gray-100 pt-3">
-                      <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown per Tipe Sesi</div>
-                      <div className="space-y-1.5">
-                        {Array.from(new Set(period.planned.map(ps => ps.program_type))).map(type => {
-                          const plannedCount = period.planned.filter(ps => ps.program_type === type).length
-                          const doneCount = period.planned.filter(ps => ps.program_type === type && sessions.some(s => s.program_session_id === ps.id)).length
-                          const isComplete = doneCount >= plannedCount
-                          return (
-                            <div key={type} className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg" style={{ background: isComplete ? '#ecfdf5' : '#f9fafb' }}>
-                              <span className="text-gray-600 truncate flex-1 mr-2">{type}</span>
-                              <span className={`font-bold px-2 py-0.5 rounded-full ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{doneCount} / {plannedCount}</span>
-                            </div>
-                          )
-                        })}
+                  {period.kind === 'monthly' ? (
+                    period.sessions.length === 0 ? (
+                      <div className="text-center py-6 text-gray-400 text-sm border-t border-gray-100">Belum ada sesi di periode ini.</div>
+                    ) : (
+                      <div className="border-t border-gray-100 pt-3">
+                        <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown per Tipe Sesi</div>
+                        <div className="space-y-1.5">
+                          {Array.from(new Set(period.sessions.map(s => s.session_type))).map(type => {
+                            const count = period.sessions.filter(s => s.session_type === type).length
+                            return (
+                              <div key={type} className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg bg-emerald-50">
+                                <span className="text-gray-600 truncate flex-1 mr-2">{type}</span>
+                                <span className="font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">{count}×</span>
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
-                    </div>
+                    )
+                  ) : (
+                    period.planned.length === 0 ? (
+                      <div className="text-center py-6 text-gray-400 text-sm border-t border-gray-100">Tidak ada sesi program untuk periode ini.</div>
+                    ) : (
+                      <div className="border-t border-gray-100 pt-3">
+                        <div className="text-xs font-semibold text-gray-500 uppercase mb-2">Breakdown per Tipe Sesi</div>
+                        <div className="space-y-1.5">
+                          {Array.from(new Set(period.planned.map(ps => ps.program_type))).map(type => {
+                            const plannedCount = period.planned.filter(ps => ps.program_type === type).length
+                            const doneCount = period.planned.filter(ps => ps.program_type === type && sessions.some(s => s.program_session_id === ps.id)).length
+                            const isComplete = doneCount >= plannedCount
+                            return (
+                              <div key={type} className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg" style={{ background: isComplete ? '#ecfdf5' : '#f9fafb' }}>
+                                <span className="text-gray-600 truncate flex-1 mr-2">{type}</span>
+                                <span className={`font-bold px-2 py-0.5 rounded-full ${isComplete ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{doneCount} / {plannedCount}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )
                   )}
                 </div>
               )
