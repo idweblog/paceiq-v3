@@ -76,22 +76,34 @@ function fmtDuration(min: number): string {
   const h = Math.floor(min / 60); const m = Math.round(min % 60)
   return m > 0 ? `${h}j ${m}mnt` : `${h}j`
 }
-function toYMD(d: Date): string { return d.toISOString().slice(0, 10) }
+function toYMD(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// Parse ISO date string tanpa timezone shift (WITA-safe)
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
 function groupByWeek(sessions: ProgramSession[]): WeekGroup[] {
   if (!sessions.length) return []
   const sorted = [...sessions].sort((a, b) => a.session_date.localeCompare(b.session_date))
   // Anchor = Senin dari minggu sesi pertama (periodisasi Senin–Minggu)
-  const firstDate = new Date(sorted[0].session_date)
+  const firstDate = parseLocalDate(sorted[0].session_date)
   const dayOfWeek = firstDate.getDay() // 0=Sun, 1=Mon, ...
   const offsetToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
-  const anchorMs = new Date(firstDate.getTime() + offsetToMon * 86400000).setHours(0, 0, 0, 0)
+  const anchor = new Date(firstDate.getFullYear(), firstDate.getMonth(), firstDate.getDate() + offsetToMon)
+  const anchorMs = anchor.getTime()
   const weekMap: Map<number, WeekGroup> = new Map()
   sessions.forEach(s => {
-    const sessMs = new Date(s.session_date).setHours(0, 0, 0, 0)
+    const sessMs = parseLocalDate(s.session_date).getTime()
     const wn = Math.floor((sessMs - anchorMs) / (7 * 86400000)) + 1
     if (!weekMap.has(wn)) {
-      const start = new Date(anchorMs + (wn - 1) * 7 * 86400000)
-      const end   = new Date(start.getTime() + 6 * 86400000)
+      const start = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + (wn - 1) * 7)
+      const end   = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6)
       weekMap.set(wn, { week_number: wn, period_start: toYMD(start), period_end: toYMD(end), sessions: [], total_km: 0 })
     }
     weekMap.get(wn)!.sessions.push(s)
