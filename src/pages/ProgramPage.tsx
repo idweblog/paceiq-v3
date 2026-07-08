@@ -14,6 +14,7 @@ interface SessionDetail {
   zone_name: string; repetitions: number; unit: string
   value_input: number | null; distance_per_rep: number | null
   distance_km: number | null; est_duration_min: number | null
+  vcr_snapshot: number | null
 }
 
 interface PaceZone {
@@ -107,6 +108,7 @@ export default function ProgramPage() {
   const [selectedRaceId, setSelectedRaceId] = useState<string>('')
   const [sessions, setSessions]     = useState<ProgramSession[]>([])
   const [paceZones, setPaceZones]   = useState<PaceZone[]>([])
+  const [vcr, setVcr]               = useState<number>(0)
   const [loading, setLoading]       = useState(true)
   const [toast, setToast]           = useState<{ msg: string; ok: boolean } | null>(null)
   const [selectedWeek, setSelectedWeek] = useState<number | null>(null)
@@ -166,12 +168,13 @@ export default function ProgramPage() {
     const { data: tt } = await (supabase as any)
       .from('tt_history').select('distance_km,finish_time_sec')
       .eq('athlete_id', athId).order('tt_date', { ascending: false }).limit(1).single()
-    const vcr: number = (tt?.distance_km && tt?.finish_time_sec) ? (tt.distance_km * 1000) / tt.finish_time_sec : 0
-    if (!vcr) { setPaceZones([]); return }
+    const vcrVal: number = (tt?.distance_km && tt?.finish_time_sec) ? (tt.distance_km * 1000) / tt.finish_time_sec : 0
+    setVcr(vcrVal)
+    if (!vcrVal) { setPaceZones([]); return }
     setPaceZones(ZONE_DEFINITIONS.map(z => ({
       ...z,
-      pace_min_sec: 1000 / (vcr * z.pct_max),
-      pace_max_sec: 1000 / (vcr * z.pct_min)
+      pace_min_sec: 1000 / (vcrVal * z.pct_max),
+      pace_max_sec: 1000 / (vcrVal * z.pct_min)
     })))
   }
 
@@ -206,6 +209,21 @@ export default function ProgramPage() {
   }
 
   function getZone(name: string): PaceZone | null { return paceZones.find(z => z.name === name) || null }
+
+  // Pace range dari VCR tertentu (untuk frozen display dari vcr_snapshot)
+  function paceRangeFromVcr(zoneName: string, vcrVal: number): { min: number; max: number } | null {
+    const zd = ZONE_DEFINITIONS.find(z => z.name === zoneName)
+    if (!zd || !vcrVal) return null
+    return { min: 1000 / (vcrVal * zd.pct_max), max: 1000 / (vcrVal * zd.pct_min) }
+  }
+
+  // Pace string untuk detail yang sudah tersimpan — pakai vcr_snapshot jika ada, fallback ke live
+  function detPaceStr(det: SessionDetail): string {
+    const vcrUsed = det.vcr_snapshot || vcr
+    if (!vcrUsed) return '—'
+    const range = paceRangeFromVcr(det.zone_name, vcrUsed)
+    return range ? `${secToMMSS((range.min + range.max) / 2)}/km` : '—'
+  }
 
   // Core calc: given zone, rep, unit, value → { distPerRep, totalKm, totalMin }
   function calcDetail(zoneName: string, rep: number, unit: string, val: number | null): { distPerRep: number; totalKm: number; totalMin: number } | null {
@@ -249,7 +267,7 @@ export default function ProgramPage() {
           const rep = Number(d.repetitions) || 1
           const val = Number(d.value_input)
           const out = calcDetail(d.zone_name, rep, d.unit, val)
-          return { session_id: sessionId, athlete_id: athleteId, sort_order: i, zone_name: d.zone_name, repetitions: rep, unit: d.unit, value_input: val, distance_per_rep: out?.distPerRep ?? null, distance_km: out?.totalKm ?? null, est_duration_min: out?.totalMin ?? null }
+          return { session_id: sessionId, athlete_id: athleteId, sort_order: i, zone_name: d.zone_name, repetitions: rep, unit: d.unit, value_input: val, distance_per_rep: out?.distPerRep ?? null, distance_km: out?.totalKm ?? null, est_duration_min: out?.totalMin ?? null, vcr_snapshot: vcr || null }
         })
         await (supabase as any).from('program_session_details').insert(inserts)
       }
@@ -288,7 +306,7 @@ export default function ProgramPage() {
         const rep = Number(f.repetitions) || 1
         const val = Number(f.value_input) || 0
         const out = calcDetail(f.zone_name, rep, f.unit, val || null)
-        return { session_id: session.id, athlete_id: athleteId, sort_order: base + i, zone_name: f.zone_name, repetitions: rep, unit: f.unit, value_input: val || null, distance_per_rep: out?.distPerRep ?? null, distance_km: out?.totalKm ?? null, est_duration_min: out?.totalMin ?? null }
+        return { session_id: session.id, athlete_id: athleteId, sort_order: base + i, zone_name: f.zone_name, repetitions: rep, unit: f.unit, value_input: val || null, distance_per_rep: out?.distPerRep ?? null, distance_km: out?.totalKm ?? null, est_duration_min: out?.totalMin ?? null, vcr_snapshot: vcr || null }
       })
       await (supabase as any).from('program_session_details').insert(inserts)
       setDetailForms(prev => { const n = { ...prev }; delete n[session.id]; return n })
@@ -529,21 +547,22 @@ export default function ProgramPage() {
                             </div>
                           )}
 
-                          {/* Existing details */}
+                          {/* Existing details — pace dari vcr_snapshot (frozen) */}
                           {(sess.details || []).map((det, idx) => {
-                            const zone = getZone(det.zone_name)
+                            const zd = ZONE_DEFINITIONS.find(z => z.name === det.zone_name)
+                            const zoneColor = zd?.color || '#6b7280'
                             const rep = det.repetitions || 1
                             const unit = det.unit || 'km'
                             const valIn = det.value_input
-                            const paceStr = zone ? `${secToMMSS(zone.pace_min_sec)}–${secToMMSS(zone.pace_max_sec)}` : '—'
+                            const paceStr = detPaceStr(det)
                             const valLabel = valIn != null ? (unit === 'km' ? `${valIn} km` : unit === 'detik' ? `${valIn} dtk` : `${valIn} mnt`) : '—'
                             return (
                               <div key={det.id} className="grid grid-cols-[1fr_110px_100px_90px_28px] gap-2 items-center py-2 border-b border-gray-50 last:border-0">
                                 <div className="flex items-center gap-2">
                                   <span className="text-[10px] font-medium text-gray-400">{idx + 1}.</span>
                                   <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
-                                    style={{ background: (zone?.color || '#6b7280') + '20', color: zone?.color || '#6b7280' }}>
-                                    <span className="w-2 h-2 rounded-full" style={{ background: zone?.color || '#9ca3af' }} />
+                                    style={{ background: zoneColor + '20', color: zoneColor }}>
+                                    <span className="w-2 h-2 rounded-full" style={{ background: zoneColor }} />
                                     {det.zone_name}
                                   </span>
                                 </div>
