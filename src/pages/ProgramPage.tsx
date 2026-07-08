@@ -80,11 +80,14 @@ function toYMD(d: Date): string { return d.toISOString().slice(0, 10) }
 function groupByWeek(sessions: ProgramSession[]): WeekGroup[] {
   if (!sessions.length) return []
   const sorted = [...sessions].sort((a, b) => a.session_date.localeCompare(b.session_date))
-  // Anchor = first session date itself (not rolled back to Monday)
-  const anchorMs = new Date(sorted[0].session_date).getTime()
+  // Anchor = Senin dari minggu sesi pertama (periodisasi Senin–Minggu)
+  const firstDate = new Date(sorted[0].session_date)
+  const dayOfWeek = firstDate.getDay() // 0=Sun, 1=Mon, ...
+  const offsetToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+  const anchorMs = new Date(firstDate.getTime() + offsetToMon * 86400000).setHours(0, 0, 0, 0)
   const weekMap: Map<number, WeekGroup> = new Map()
   sessions.forEach(s => {
-    const sessMs = new Date(s.session_date).getTime()
+    const sessMs = new Date(s.session_date).setHours(0, 0, 0, 0)
     const wn = Math.floor((sessMs - anchorMs) / (7 * 86400000)) + 1
     if (!weekMap.has(wn)) {
       const start = new Date(anchorMs + (wn - 1) * 7 * 86400000)
