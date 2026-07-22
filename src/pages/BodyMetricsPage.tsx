@@ -30,6 +30,11 @@ interface BodyMetric {
   seg_trunk: number | null
   seg_leg_left: number | null
   seg_leg_right: number | null
+  seg_muscle_arm_left: number | null
+  seg_muscle_arm_right: number | null
+  seg_muscle_trunk: number | null
+  seg_muscle_leg_left: number | null
+  seg_muscle_leg_right: number | null
   notes: string | null
 }
 
@@ -214,6 +219,8 @@ const emptyForm = {
   waist_cm: '',
   seg_arm_left: '', seg_arm_right: '', seg_trunk: '',
   seg_leg_left: '', seg_leg_right: '',
+  seg_muscle_arm_left: '', seg_muscle_arm_right: '', seg_muscle_trunk: '',
+  seg_muscle_leg_left: '', seg_muscle_leg_right: '',
   notes: '',
 }
 
@@ -271,7 +278,7 @@ export default function BodyMetricsPage() {
     if (!athleteId) return
     const { data } = await supabase.from('body_metrics').select('*')
       .eq('athlete_id', athleteId).order('recorded_date', { ascending: false }).limit(120)
-    if (!cancelled && data) setLogs(data as BodyMetric[])
+    if (!cancelled && data) setLogs(data as unknown as BodyMetric[])
   }
 
   async function loadProfile(cancelled = false) {
@@ -324,7 +331,7 @@ export default function BodyMetricsPage() {
     if (!athleteId) return
     if (!form.recorded_date || !form.weight_kg) { showToast('Tanggal dan berat badan wajib diisi.'); return }
     setSaving(true)
-    const { error } = await supabase.from('body_metrics').upsert({
+    const { error } = await (supabase as any).from('body_metrics').upsert({
       athlete_id: athleteId,
       recorded_date: form.recorded_date,
       weight_kg: form.weight_kg ? parseFloat(form.weight_kg) : null,
@@ -345,6 +352,11 @@ export default function BodyMetricsPage() {
       seg_trunk: form.seg_trunk ? parseFloat(form.seg_trunk) : null,
       seg_leg_left: form.seg_leg_left ? parseFloat(form.seg_leg_left) : null,
       seg_leg_right: form.seg_leg_right ? parseFloat(form.seg_leg_right) : null,
+      seg_muscle_arm_left: form.seg_muscle_arm_left ? parseFloat(form.seg_muscle_arm_left) : null,
+      seg_muscle_arm_right: form.seg_muscle_arm_right ? parseFloat(form.seg_muscle_arm_right) : null,
+      seg_muscle_trunk: form.seg_muscle_trunk ? parseFloat(form.seg_muscle_trunk) : null,
+      seg_muscle_leg_left: form.seg_muscle_leg_left ? parseFloat(form.seg_muscle_leg_left) : null,
+      seg_muscle_leg_right: form.seg_muscle_leg_right ? parseFloat(form.seg_muscle_leg_right) : null,
       notes: form.notes || null,
     }, { onConflict: 'athlete_id,recorded_date' })
     setSaving(false)
@@ -377,10 +389,13 @@ export default function BodyMetricsPage() {
             role: 'user',
             content: [
               { type: 'image', source: { type: 'base64', media_type: aiFile.type as 'image/jpeg' | 'image/png', data: base64 } },
-              { type: 'text', text: `Extract body composition data from this report image. Return ONLY a JSON object with these keys (use null if not found):
+              { type: 'text', text: `Extract body composition data from this BIA report image. Return ONLY a JSON object with these keys (use null if not found):
 weight_kg, body_fat_pct, skeletal_muscle_pct, visceral_fat_index, bmr_kcal, body_water_pct, lean_body_mass_kg, smi, health_score, protein_pct, waist_cm,
-seg_arm_left, seg_arm_right, seg_trunk, seg_leg_left, seg_leg_right.
-seg_* fields are fat mass (kg) per body segment from segmental analysis. All values must be numbers or null. No other text.` }
+seg_arm_left, seg_arm_right, seg_trunk, seg_leg_left, seg_leg_right,
+seg_muscle_arm_left, seg_muscle_arm_right, seg_muscle_trunk, seg_muscle_leg_left, seg_muscle_leg_right.
+seg_arm_*/seg_trunk/seg_leg_* = segmental FAT mass (kg) per body segment.
+seg_muscle_* = segmental SKELETAL MUSCLE mass (kg) per body segment.
+All values must be numbers or null. No other text.` }
             ]
           }]
         })
@@ -406,6 +421,11 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
         seg_trunk: parsed.seg_trunk?.toString() ?? prev.seg_trunk,
         seg_leg_left: parsed.seg_leg_left?.toString() ?? prev.seg_leg_left,
         seg_leg_right: parsed.seg_leg_right?.toString() ?? prev.seg_leg_right,
+        seg_muscle_arm_left: parsed.seg_muscle_arm_left?.toString() ?? prev.seg_muscle_arm_left,
+        seg_muscle_arm_right: parsed.seg_muscle_arm_right?.toString() ?? prev.seg_muscle_arm_right,
+        seg_muscle_trunk: parsed.seg_muscle_trunk?.toString() ?? prev.seg_muscle_trunk,
+        seg_muscle_leg_left: parsed.seg_muscle_leg_left?.toString() ?? prev.seg_muscle_leg_left,
+        seg_muscle_leg_right: parsed.seg_muscle_leg_right?.toString() ?? prev.seg_muscle_leg_right,
       }))
       showToast('Data berhasil diimpor — mohon verifikasi sebelum menyimpan.')
     } catch { showToast('Gagal mengekstrak data dari foto.') }
@@ -457,6 +477,8 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
 
   const armGap = latest ? segGap(latest.seg_arm_left, latest.seg_arm_right) : null
   const legGap = latest ? segGap(latest.seg_leg_left, latest.seg_leg_right) : null
+  const muscleArmGap  = latest ? segGap(latest.seg_muscle_arm_left, latest.seg_muscle_arm_right) : null
+  const muscleLegGap  = latest ? segGap(latest.seg_muscle_leg_left, latest.seg_muscle_leg_right) : null
 
   const chartData = useMemo(() => [...logs].reverse().map(l => ({
     date: new Date(l.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
@@ -633,19 +655,19 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                   </div>
                 )}
 
-                {/* Muscle Balance */}
+                {/* Segmental Fat Analysis */}
                 <div className={sectionCls + ' !mb-0'}>
-                  <h2 className={headerCls}>Muscle Balance</h2>
+                  <h2 className={headerCls}>Segmental Fat Analysis</h2>
                   {latest.seg_arm_left || latest.seg_arm_right || latest.seg_leg_left || latest.seg_leg_right ? (
                     <>
                       <div className="grid grid-cols-3 gap-3 mb-3">
                         {[
-                          { label: 'Lengan Kiri', value: latest.seg_arm_left ? `${latest.seg_arm_left} kg` : '—' },
-                          { label: 'Lengan Kanan', value: latest.seg_arm_right ? `${latest.seg_arm_right} kg` : '—' },
-                          { label: 'Gap Lengan', value: armGap ? `${armGap.pct}%` : '—', flag: armGap?.flag },
-                          { label: 'Tungkai Kiri', value: latest.seg_leg_left ? `${latest.seg_leg_left} kg` : '—' },
-                          { label: 'Tungkai Kanan', value: latest.seg_leg_right ? `${latest.seg_leg_right} kg` : '—' },
-                          { label: 'Gap Tungkai', value: legGap ? `${legGap.pct}%` : '—', flag: legGap?.flag },
+                          { label: 'Lemak Lengan Kiri', value: latest.seg_arm_left ? `${latest.seg_arm_left} kg` : '—' },
+                          { label: 'Lemak Lengan Kanan', value: latest.seg_arm_right ? `${latest.seg_arm_right} kg` : '—' },
+                          { label: 'Gap Lemak Lengan', value: armGap ? `${armGap.pct}%` : '—', flag: armGap?.flag },
+                          { label: 'Lemak Tungkai Kiri', value: latest.seg_leg_left ? `${latest.seg_leg_left} kg` : '—' },
+                          { label: 'Lemak Tungkai Kanan', value: latest.seg_leg_right ? `${latest.seg_leg_right} kg` : '—' },
+                          { label: 'Gap Lemak Tungkai', value: legGap ? `${legGap.pct}%` : '—', flag: legGap?.flag },
                         ].map(s => (
                           <div key={s.label} className={cardCls}>
                             <p className={labelCls}>{s.label}</p>
@@ -657,20 +679,94 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                       </div>
                       {latest.seg_trunk !== null && (
                         <div className={cardCls + ' mb-3'}>
-                          <p className={labelCls}>Trunk</p>
+                          <p className={labelCls}>Lemak Trunk</p>
                           <p className={valueCls}>{latest.seg_trunk} kg</p>
                         </div>
                       )}
-                      <p className="text-xs text-gray-400">Gap L/R &gt;15% berisiko cedera overuse. Data distribusi lemak, bukan kekuatan otot.</p>
-                      <p className="text-xs text-gray-400">Rauh et al. 2006; Niemuth et al. 2005</p>
+                      <p className="text-xs text-gray-400">Distribusi lemak per segmen dari BIA. Gap L/R &gt;15% dapat mengindikasikan asimetri distribusi lemak.</p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-400">Input data segmental fat di tab Input Data.</p>
+                  )}
+                </div>
+
+                {/* Muscle Balance */}
+                <div className={sectionCls + ' !mb-0'}>
+                  <h2 className={headerCls}>Muscle Balance</h2>
+                  {latest.seg_muscle_leg_left || latest.seg_muscle_leg_right || latest.seg_muscle_arm_left || latest.seg_muscle_arm_right ? (
+                    <>
+                      {/* Tungkai — paling kritis untuk runner */}
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Tungkai (kritis untuk runner)</p>
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        {[
+                          { label: 'Otot Tungkai Kiri', value: latest.seg_muscle_leg_left ? `${latest.seg_muscle_leg_left} kg` : '—' },
+                          { label: 'Otot Tungkai Kanan', value: latest.seg_muscle_leg_right ? `${latest.seg_muscle_leg_right} kg` : '—' },
+                          { label: 'Gap Tungkai', value: muscleLegGap ? `${muscleLegGap.pct}%` : '—', flag: muscleLegGap?.flag },
+                        ].map(s => (
+                          <div key={s.label} className={cardCls}>
+                            <p className={labelCls}>{s.label}</p>
+                            <p className={`text-sm font-bold ${s.flag === true ? 'text-red-500' : s.flag === false ? 'text-green-600' : 'text-gray-800'}`}>
+                              {s.value}{s.flag === true ? ' ⚠' : s.flag === false ? ' ✓' : ''}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Visual bar asimetri tungkai */}
+                      {muscleLegGap && (
+                        <div className="mb-3 p-3 rounded-lg bg-gray-50">
+                          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                            <span>Kiri {latest.seg_muscle_leg_left} kg</span>
+                            <span>Kanan {latest.seg_muscle_leg_right} kg</span>
+                          </div>
+                          <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
+                            {(() => {
+                              const l = latest.seg_muscle_leg_left ?? 0
+                              const r = latest.seg_muscle_leg_right ?? 0
+                              const total = l + r
+                              const leftPct = total ? (l / total) * 100 : 50
+                              return <>
+                                <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: muscleLegGap.flag ? '#ef4444' : '#6366f1' }} />
+                                <div className="h-full flex-1" style={{ background: muscleLegGap.flag ? '#fca5a5' : '#a5b4fc' }} />
+                              </>
+                            })()}
+                          </div>
+                          <div className="mt-1.5">
+                            {muscleLegGap.flag
+                              ? <p className="text-xs text-red-600 font-medium">⚠ Gap {muscleLegGap.pct}% — asimetri tungkai berisiko cedera overuse (Croisier et al. 2008). Konsultasikan dengan fisioterapis.</p>
+                              : <p className="text-xs text-green-600 font-medium">✓ Gap {muscleLegGap.pct}% — asimetri tungkai dalam batas normal (&lt;10%).</p>
+                            }
+                          </div>
+                        </div>
+                      )}
+                      {/* Lengan */}
+                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-1">Lengan</p>
+                      <div className="grid grid-cols-3 gap-3 mb-3">
+                        {[
+                          { label: 'Otot Lengan Kiri', value: latest.seg_muscle_arm_left ? `${latest.seg_muscle_arm_left} kg` : '—' },
+                          { label: 'Otot Lengan Kanan', value: latest.seg_muscle_arm_right ? `${latest.seg_muscle_arm_right} kg` : '—' },
+                          { label: 'Gap Lengan', value: muscleArmGap ? `${muscleArmGap.pct}%` : '—', flag: muscleArmGap?.flag },
+                        ].map(s => (
+                          <div key={s.label} className={cardCls}>
+                            <p className={labelCls}>{s.label}</p>
+                            <p className={`text-sm font-bold ${s.flag === true ? 'text-amber-500' : s.flag === false ? 'text-green-600' : 'text-gray-800'}`}>
+                              {s.value}{s.flag === true ? ' ⚠' : s.flag === false ? ' ✓' : ''}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Trunk */}
+                      {latest.seg_muscle_trunk !== null && (
+                        <div className={cardCls + ' mb-3'}>
+                          <p className={labelCls}>Otot Trunk</p>
+                          <p className={valueCls}>{latest.seg_muscle_trunk} kg</p>
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-400">Threshold: gap tungkai &gt;10% = risiko cedera overuse (Croisier et al. 2008; Niemuth et al. 2005). Data skeletal muscle mass dari BIA segmental.</p>
                     </>
                   ) : (
                     <div>
-                      <div className="p-3 bg-amber-50 rounded-lg text-xs text-amber-700 mb-2">
-                        ⚠ Data distribusi lemak segmental dari timbangan, bukan kekuatan otot.
-                      </div>
-                      <p className="text-xs text-gray-400">Input data segmental di tab Input Data.</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Rauh et al. 2006; Niemuth et al. 2005</p>
+                      <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Croisier et al. 2008; Niemuth et al. 2005</p>
                     </div>
                   )}
                 </div>
@@ -826,15 +922,35 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
             }
           </div>
 
-          {/* Form — Segmental Analysis */}
+          {/* Form — Segmental Fat Analysis */}
           <p className="text-xs font-medium text-gray-500 uppercase mb-3">Segmental Fat Analysis (dari timbangan)</p>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
             {[
-              { key: 'seg_arm_left', label: 'Lengan Kiri (kg)', ph: '1.0' },
-              { key: 'seg_arm_right', label: 'Lengan Kanan (kg)', ph: '1.0' },
-              { key: 'seg_trunk', label: 'Trunk (kg)', ph: '9.1' },
-              { key: 'seg_leg_left', label: 'Tungkai Kiri (kg)', ph: '2.6' },
-              { key: 'seg_leg_right', label: 'Tungkai Kanan (kg)', ph: '2.6' },
+              { key: 'seg_arm_left', label: 'Lemak Lengan Kiri (kg)', ph: '1.0' },
+              { key: 'seg_arm_right', label: 'Lemak Lengan Kanan (kg)', ph: '1.0' },
+              { key: 'seg_trunk', label: 'Lemak Trunk (kg)', ph: '9.1' },
+              { key: 'seg_leg_left', label: 'Lemak Tungkai Kiri (kg)', ph: '2.6' },
+              { key: 'seg_leg_right', label: 'Lemak Tungkai Kanan (kg)', ph: '2.6' },
+            ].map(f => (
+              <div key={f.key}>
+                <label className={labelCls}>{f.label}</label>
+                <input type="number" step="0.1" placeholder={f.ph}
+                  value={form[f.key as keyof typeof form]}
+                  onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  className={inputCls} />
+              </div>
+            ))}
+          </div>
+
+          {/* Form — Segmental Skeletal Muscle (Muscle Balance) */}
+          <p className="text-xs font-medium text-gray-500 uppercase mb-3">Skeletal Muscle per Segmen — Muscle Balance (dari timbangan)</p>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+            {[
+              { key: 'seg_muscle_arm_left', label: 'Otot Lengan Kiri (kg)', ph: '2.8' },
+              { key: 'seg_muscle_arm_right', label: 'Otot Lengan Kanan (kg)', ph: '2.9' },
+              { key: 'seg_muscle_trunk', label: 'Otot Trunk (kg)', ph: '24.5' },
+              { key: 'seg_muscle_leg_left', label: 'Otot Tungkai Kiri (kg)', ph: '9.1' },
+              { key: 'seg_muscle_leg_right', label: 'Otot Tungkai Kanan (kg)', ph: '9.3' },
             ].map(f => (
               <div key={f.key}>
                 <label className={labelCls}>{f.label}</label>
@@ -907,7 +1023,7 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['Tanggal','Berat','BF%','Fat Mass','Lean Mass','BMI','SM%','VFI','BMR','Waist','Score','Arm L/R','Leg L/R',''].map(h => (
+                    {['Tanggal','Berat','BF%','Fat Mass','Lean Mass','BMI','SM%','VFI','BMR','Waist','Score','Fat Arm L/R','Fat Leg L/R','Otot Arm L/R','Otot Leg L/R',''].map(h => (
                       <th key={h} className="text-left text-xs font-medium text-gray-400 uppercase pb-2 pr-3 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
@@ -917,8 +1033,10 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                     const bmiV = l.weight_kg ? calcBMI(l.weight_kg, heightCm) : null
                     const fatMV = l.body_fat_pct && l.weight_kg ? (l.body_fat_pct / 100) * l.weight_kg : null
                     const leanV = l.lean_body_mass_kg ?? (l.weight_kg && fatMV !== null ? l.weight_kg - fatMV : null)
-                    const aGap = segGap(l.seg_arm_left, l.seg_arm_right)
-                    const lGap = segGap(l.seg_leg_left, l.seg_leg_right)
+                    const aGap  = segGap(l.seg_arm_left, l.seg_arm_right)
+                    const lGap  = segGap(l.seg_leg_left, l.seg_leg_right)
+                    const maGap = segGap(l.seg_muscle_arm_left, l.seg_muscle_arm_right)
+                    const mlGap = segGap(l.seg_muscle_leg_left, l.seg_muscle_leg_right)
                     return (
                       <tr key={l.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="py-2 pr-3 whitespace-nowrap text-gray-600 text-xs">
@@ -944,6 +1062,16 @@ seg_* fields are fat mass (kg) per body segment from segmental analysis. All val
                         <td className="py-2 pr-3 text-xs">
                           {l.seg_leg_left || l.seg_leg_right
                             ? <span className={lGap?.flag ? 'text-red-500 font-medium' : 'text-gray-600'}>{l.seg_leg_left ?? '—'} / {l.seg_leg_right ?? '—'}{lGap ? ` (${lGap.pct}%)` : ''}</span>
+                            : '—'}
+                        </td>
+                        <td className="py-2 pr-3 text-xs">
+                          {l.seg_muscle_arm_left || l.seg_muscle_arm_right
+                            ? <span className={maGap?.flag ? 'text-amber-500 font-medium' : 'text-gray-600'}>{l.seg_muscle_arm_left ?? '—'} / {l.seg_muscle_arm_right ?? '—'}{maGap ? ` (${maGap.pct}%)` : ''}</span>
+                            : '—'}
+                        </td>
+                        <td className="py-2 pr-3 text-xs">
+                          {l.seg_muscle_leg_left || l.seg_muscle_leg_right
+                            ? <span className={mlGap?.flag ? 'text-red-500 font-medium' : 'text-gray-600'}>{l.seg_muscle_leg_left ?? '—'} / {l.seg_muscle_leg_right ?? '—'}{mlGap ? ` (${mlGap.pct}%)` : ''}</span>
                             : '—'}
                         </td>
                         <td className="py-2">
