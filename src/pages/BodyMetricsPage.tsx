@@ -202,10 +202,10 @@ function buildTrendAnalysis(logs: BodyMetric[]): string[] {
   return msgs
 }
 
-function segGap(left: number | null, right: number | null): { pct: number; flag: boolean } | null {
+function segGap(left: number | null, right: number | null, threshold = 6): { pct: number; flag: boolean } | null {
   if (!left || !right) return null
   const gap = Math.abs(left - right) / Math.max(left, right) * 100
-  return { pct: parseFloat(gap.toFixed(1)), flag: gap > 15 }
+  return { pct: parseFloat(gap.toFixed(1)), flag: gap > threshold }
 }
 
 // ─────────────────────────────────────────────
@@ -510,10 +510,10 @@ All values must be numbers or null. No other text.` }
   const rwi = raceWeight && latest?.weight_kg ? calcRWI(latest.weight_kg, raceWeight) : null
   const weeksNeeded = weightGap && weightGap > 0 ? weightGap / 0.5 : null
 
-  const armGap = latest ? segGap(latest.seg_arm_left, latest.seg_arm_right) : null
-  const legGap = latest ? segGap(latest.seg_leg_left, latest.seg_leg_right) : null
-  const muscleArmGap  = latestMuscle ? segGap(latestMuscle.seg_muscle_arm_left, latestMuscle.seg_muscle_arm_right) : null
-  const muscleLegGap  = latestMuscle ? segGap(latestMuscle.seg_muscle_leg_left, latestMuscle.seg_muscle_leg_right) : null
+  const armGap = latest ? segGap(latest.seg_arm_left, latest.seg_arm_right, 6) : null
+  const legGap = latest ? segGap(latest.seg_leg_left, latest.seg_leg_right, 3) : null
+  const muscleArmGap = latestMuscle ? segGap(latestMuscle.seg_muscle_arm_left, latestMuscle.seg_muscle_arm_right, 6) : null
+  const muscleLegGap = latestMuscle ? segGap(latestMuscle.seg_muscle_leg_left, latestMuscle.seg_muscle_leg_right, 3) : null
 
   const chartData = useMemo(() => [...logs].reverse().map(l => ({
     date: new Date(l.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
@@ -698,18 +698,22 @@ All values must be numbers or null. No other text.` }
                     const tK = latest.seg_trunk ?? 0
                     const lL = latest.seg_leg_left ?? 0, lR = latest.seg_leg_right ?? 0
                     const totalFat = aL + aR + tK + lL + lR
+                    const limbFat = aL + aR + lL + lR
+                    // Trunk-to-Limb Fat Ratio — makin rendah makin baik (Camhi et al. 2011; Wilson et al. 2013)
+                    const trunkToLimbRatio = limbFat > 0 ? tK / limbFat : null
+                    // Pola Android: waist-to-hip berbasis segmental — trunk dominant vs perifer (Kissebah & Krakower 1994)
                     const trunkPct = totalFat ? (tK / totalFat) * 100 : 0
-                    // Android pattern: trunk fat dominan (>45% dari total segmental fat) — Kissebah & Krakower 1994
-                    const isAndroid = trunkPct > 45
+                    // InBody threshold asimetri: lengan >6%, tungkai >3% (InBody Professional Guide)
                     return (
                       <>
-                        {/* Distribusi proporsional — bar horizontal */}
+                        {/* Distribusi — bar proporsional antar segmen */}
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Distribusi Lemak per Segmen</p>
+                        <p className="text-xs text-gray-400 mb-2">Bar menunjukkan proporsi lemak tiap segmen terhadap total lemak segmental. Bukan indikator baik/buruk secara sendiri — gunakan bersama analisis di bawah.</p>
                         {[
-                          { label: 'Lengan Kiri', val: aL, color: '#818cf8' },
-                          { label: 'Lengan Kanan', val: aR, color: '#6366f1' },
-                          { label: 'Trunk', val: tK, color: '#f59e0b' },
-                          { label: 'Tungkai Kiri', val: lL, color: '#34d399' },
+                          { label: 'Lengan Kiri',   val: aL, color: '#818cf8' },
+                          { label: 'Lengan Kanan',  val: aR, color: '#6366f1' },
+                          { label: 'Trunk',         val: tK, color: '#f59e0b' },
+                          { label: 'Tungkai Kiri',  val: lL, color: '#34d399' },
                           { label: 'Tungkai Kanan', val: lR, color: '#10b981' },
                         ].map(seg => {
                           const pct = totalFat ? (seg.val / totalFat) * 100 : 0
@@ -724,11 +728,40 @@ All values must be numbers or null. No other text.` }
                           )
                         })}
 
+                        {/* Trunk-to-Limb Fat Ratio */}
+                        {trunkToLimbRatio !== null && (
+                          <div className={`mt-4 p-3 rounded-lg text-xs border ${trunkToLimbRatio > 1.0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                            <p className={`font-semibold mb-1 ${trunkToLimbRatio > 1.0 ? 'text-amber-700' : 'text-green-700'}`}>
+                              Trunk-to-Limb Fat Ratio: {trunkToLimbRatio.toFixed(2)}
+                              {trunkToLimbRatio > 1.0 ? ' ⚠ Lemak trunk dominan' : ' ✓ Distribusi lemak perifer'}
+                            </p>
+                            <p className={trunkToLimbRatio > 1.0 ? 'text-amber-600' : 'text-green-600'}>
+                              {trunkToLimbRatio > 1.0
+                                ? `Lemak trunk (${tK} kg) melebihi total lemak ekstremitas (${limbFat.toFixed(1)} kg). Distribusi lemak sentral berkorelasi dengan risiko metabolik dan kardiovaskular yang lebih tinggi.`
+                                : `Lemak ekstremitas (${limbFat.toFixed(1)} kg) lebih dominan dari trunk (${tK} kg) — distribusi lemak perifer lebih menguntungkan secara metabolik.`}
+                            </p>
+                            <p className="text-gray-400 mt-1">Camhi et al. 2011 (Obesity) · Wilson et al. 2013 (Diabetes Care)</p>
+                          </div>
+                        )}
+
+                        {/* Pola Android vs Gynoid */}
+                        <div className={`mt-3 p-3 rounded-lg text-xs border ${trunkPct > 50 ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                          <p className={`font-semibold mb-1 ${trunkPct > 50 ? 'text-amber-700' : 'text-gray-700'}`}>
+                            Pola distribusi: Trunk {trunkPct.toFixed(0)}% dari total lemak segmental
+                            {trunkPct > 50 ? ' — Kecenderungan Central (Android)' : ' — Kecenderungan Perifer (Gynoid)'}
+                          </p>
+                          <p className="text-gray-500">
+                            Lemak viseral (trunk) berkorelasi lebih kuat dengan risiko kardiovaskular dibanding lemak subkutan perifer. Pada pelari maraton, distribusi lemak trunk lebih rendah 73% dibanding non-runner.
+                          </p>
+                          <p className="text-gray-400 mt-1">Kissebah & Krakower 1994 (Physiol Rev) · Chan et al. 1994 (CMAJ) · Townsend et al. 2020 (PMC7073848)</p>
+                        </div>
+
                         {/* Asimetri L/R */}
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-4">Asimetri Kiri–Kanan</p>
+                        <p className="text-xs text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = asimetri signifikan (kemungkinan imbalance atau retensi cairan lokal).</p>
                         {[
-                          { label: 'Lengan', L: aL, R: aR, gap: armGap },
-                          { label: 'Tungkai', L: lL, R: lR, gap: legGap },
+                          { label: 'Lengan', L: aL, R: aR, gap: armGap, threshold: 6 },
+                          { label: 'Tungkai', L: lL, R: lR, gap: legGap, threshold: 3 },
                         ].map(seg => (
                           <div key={seg.label} className="mb-3 p-3 rounded-lg bg-gray-50">
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
@@ -740,32 +773,22 @@ All values must be numbers or null. No other text.` }
                               {(() => {
                                 const total = seg.L + seg.R
                                 const leftPct = total ? (seg.L / total) * 100 : 50
-                                const flagColor = seg.gap?.flag
                                 return <>
-                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: flagColor ? '#f59e0b' : '#818cf8' }} />
-                                  <div className="h-full flex-1" style={{ background: flagColor ? '#fde68a' : '#c7d2fe' }} />
+                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#f59e0b' : '#818cf8' }} />
+                                  <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fde68a' : '#c7d2fe' }} />
                                 </>
                               })()}
                             </div>
                             <p className={`text-xs mt-1 font-medium ${seg.gap?.flag ? 'text-amber-600' : 'text-gray-500'}`}>
-                              {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% — asimetri distribusi lemak signifikan` : `✓ Gap ${seg.gap.pct}% — simetris`) : '—'}
+                              {seg.gap
+                                ? seg.gap.flag
+                                  ? `⚠ Gap ${seg.gap.pct}% — melebihi threshold ${seg.threshold}% (InBody Professional Guide)`
+                                  : `✓ Gap ${seg.gap.pct}% — simetris (threshold ${seg.threshold}%)`
+                                : '—'}
                             </p>
                           </div>
                         ))}
-
-                        {/* Pola distribusi — Android vs Gynoid */}
-                        <div className={`p-3 rounded-lg text-xs ${isAndroid ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
-                          <p className={`font-semibold mb-1 ${isAndroid ? 'text-amber-700' : 'text-green-700'}`}>
-                            {isAndroid ? '⚠ Pola Android (Central Obesity)' : '✓ Pola Gynoid / Perifer'}
-                          </p>
-                          <p className={isAndroid ? 'text-amber-600' : 'text-green-600'}>
-                            Trunk menyumbang {trunkPct.toFixed(0)}% dari total lemak segmental.
-                            {isAndroid
-                              ? ' Lemak viseral dominan meningkatkan risiko kardiovaskular dan resistensi insulin. Prioritaskan reduksi lemak trunk melalui defisit kalori dan latihan aerobik (Kissebah & Krakower 1994).'
-                              : ' Distribusi lemak perifer lebih menguntungkan secara metabolik. Pertahankan dengan latihan aerobik konsisten (Kissebah & Krakower 1994).'}
-                          </p>
-                        </div>
-                        <p className="text-xs text-gray-400 mt-2">Data dari BIA segmental. Gap L/R &gt;15% = asimetri signifikan.</p>
+                        <p className="text-xs text-gray-400 mt-1">⚠ Catatan: BIA segmental cenderung underestimate fat mass di ekstremitas dibanding DXA. Gunakan sebagai monitoring tren, bukan nilai absolut klinis (Ling et al. 2011, J Clin Densitom).</p>
                       </>
                     )
                   })() : (
@@ -783,9 +806,10 @@ All values must be numbers or null. No other text.` }
                     const lL = latestMuscle.seg_muscle_leg_left ?? 0
                     const lR = latestMuscle.seg_muscle_leg_right ?? 0
                     const totalMuscle = aL + aR + tK + lL + lR
-                    // Upper-Lower ratio: (arm × 2) / (leg × 2) — optimal untuk runner < 0.4 (leg dominan)
+                    // SMI dari DB (Skeletal Muscle Index = total SMM / height²) — AWGS 2019: pria normal ≥7.0, rendah <7.0
+                    const smiVal = latestMuscle.smi ?? null
+                    // Upper-Lower Ratio (informatif, bukan threshold klinis)
                     const upperLowerRatio = (lL + lR) > 0 ? (aL + aR) / (lL + lR) : null
-                    const isLegDominant = upperLowerRatio != null && upperLowerRatio < 0.40
                     return (
                       <>
                         {latestMuscle.recorded_date !== latest?.recorded_date && (
@@ -794,11 +818,12 @@ All values must be numbers or null. No other text.` }
 
                         {/* Distribusi proporsional */}
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Distribusi Otot per Segmen</p>
+                        <p className="text-xs text-gray-400 mb-2">Bar menunjukkan proporsi otot tiap segmen. Gunakan bersama analisis asimetri dan SMI di bawah.</p>
                         {[
-                          { label: 'Lengan Kiri', val: aL, color: '#818cf8' },
-                          { label: 'Lengan Kanan', val: aR, color: '#6366f1' },
-                          { label: 'Trunk', val: tK, color: '#f59e0b' },
-                          { label: 'Tungkai Kiri', val: lL, color: '#34d399' },
+                          { label: 'Lengan Kiri',   val: aL, color: '#818cf8' },
+                          { label: 'Lengan Kanan',  val: aR, color: '#6366f1' },
+                          { label: 'Trunk',         val: tK, color: '#f59e0b' },
+                          { label: 'Tungkai Kiri',  val: lL, color: '#34d399' },
                           { label: 'Tungkai Kanan', val: lR, color: '#10b981' },
                         ].map(seg => {
                           const pct = totalMuscle ? (seg.val / totalMuscle) * 100 : 0
@@ -813,11 +838,37 @@ All values must be numbers or null. No other text.` }
                           )
                         })}
 
-                        {/* Asimetri Lengan & Tungkai */}
+                        {/* SMI — satu-satunya threshold yang benar-benar tervalidasi */}
+                        {smiVal !== null && (
+                          <div className={`mt-4 p-3 rounded-lg text-xs border ${
+                            smiVal >= 7.0 ? 'bg-green-50 border-green-200' :
+                            smiVal >= 5.7 ? 'bg-amber-50 border-amber-200' :
+                            'bg-red-50 border-red-200'
+                          }`}>
+                            <p className={`font-semibold mb-1 ${
+                              smiVal >= 7.0 ? 'text-green-700' :
+                              smiVal >= 5.7 ? 'text-amber-700' : 'text-red-700'
+                            }`}>
+                              SMI (Skeletal Muscle Index): {smiVal} kg/m²
+                              {smiVal >= 7.0 ? ' ✓ Normal' : smiVal >= 5.7 ? ' ⚠ Moderat — perlu diperhatikan' : ' 🔴 Rendah — risiko sarcopenia'}
+                            </p>
+                            <p className={smiVal >= 7.0 ? 'text-green-600' : smiVal >= 5.7 ? 'text-amber-600' : 'text-red-600'}>
+                              {smiVal >= 7.0
+                                ? `SMI ${smiVal} kg/m² berada di rentang normal untuk pria Asia. Massa otot total proporsional terhadap tinggi badan.`
+                                : smiVal >= 5.7
+                                ? `SMI ${smiVal} kg/m² di bawah normal (≥7.0). Pertimbangkan peningkatan protein (1.6–2.0 g/kg/hari) dan resistance training 2×/minggu.`
+                                : `SMI ${smiVal} kg/m² menunjukkan kemungkinan sarcopenia. Konsultasikan dengan dokter dan ahli gizi.`}
+                            </p>
+                            <p className="text-gray-400 mt-1">AWGS 2019 (Asian Working Group for Sarcopenia) · Chen et al. 2020 (J Cachexia Sarcopenia Muscle) · Threshold pria Asia: normal ≥7.0 kg/m²</p>
+                          </div>
+                        )}
+
+                        {/* Asimetri L/R */}
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-4">Asimetri Kiri–Kanan</p>
+                        <p className="text-xs text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = kemungkinan strength imbalance atau efek cedera sebelumnya.</p>
                         {[
-                          { label: 'Lengan', L: aL, R: aR, gap: muscleArmGap, threshold: 10, ref: 'Rauh et al. 2006' },
-                          { label: 'Tungkai', L: lL, R: lR, gap: muscleLegGap, threshold: 10, ref: 'Croisier et al. 2008' },
+                          { label: 'Lengan', L: aL, R: aR, gap: muscleArmGap, threshold: 6 },
+                          { label: 'Tungkai', L: lL, R: lR, gap: muscleLegGap, threshold: 3 },
                         ].map(seg => (
                           <div key={seg.label} className="mb-3 p-3 rounded-lg bg-gray-50">
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
@@ -829,33 +880,31 @@ All values must be numbers or null. No other text.` }
                               {(() => {
                                 const total = seg.L + seg.R
                                 const leftPct = total ? (seg.L / total) * 100 : 50
-                                const isFlag = seg.gap?.flag
                                 return <>
-                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: isFlag ? '#ef4444' : '#6366f1' }} />
-                                  <div className="h-full flex-1" style={{ background: isFlag ? '#fca5a5' : '#a5b4fc' }} />
+                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#ef4444' : '#6366f1' }} />
+                                  <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fca5a5' : '#a5b4fc' }} />
                                 </>
                               })()}
                             </div>
                             <p className={`text-xs mt-1 font-medium ${seg.gap?.flag ? 'text-red-600' : 'text-green-600'}`}>
                               {seg.gap
                                 ? seg.gap.flag
-                                  ? `⚠ Gap ${seg.gap.pct}% — melebihi threshold ${seg.threshold}%, risiko cedera overuse (${seg.ref})`
+                                  ? `⚠ Gap ${seg.gap.pct}% — melebihi threshold ${seg.threshold}% (InBody Professional Guide). Pertimbangkan unilateral strength training.`
                                   : `✓ Gap ${seg.gap.pct}% — dalam batas normal (<${seg.threshold}%)`
                                 : '—'}
                             </p>
                           </div>
                         ))}
 
-                        {/* Upper-Lower Ratio */}
-                        {upperLowerRatio != null && (
-                          <div className={`p-3 rounded-lg text-xs mt-1 ${isLegDominant ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
-                            <p className={`font-semibold mb-1 ${isLegDominant ? 'text-green-700' : 'text-amber-700'}`}>
-                              Upper–Lower Ratio: {upperLowerRatio.toFixed(2)} {isLegDominant ? '✓ Leg-dominant (profil runner)' : '⚠ Perlu penguatan tungkai'}
+                        {/* Upper-Lower Ratio — informatif, tanpa threshold klinis */}
+                        {upperLowerRatio !== null && (
+                          <div className="mt-1 p-3 rounded-lg bg-gray-50 text-xs">
+                            <p className="font-semibold text-gray-700 mb-1">
+                              Upper–Lower Muscle Ratio: {upperLowerRatio.toFixed(2)}
+                              {upperLowerRatio < 0.35 ? ' — Tungkai sangat dominan' : upperLowerRatio < 0.50 ? ' — Tungkai dominan' : ' — Relatif seimbang upper-lower'}
                             </p>
-                            <p className={isLegDominant ? 'text-green-600' : 'text-amber-600'}>
-                              {isLegDominant
-                                ? 'Massa otot tungkai dominan terhadap lengan — profil komposisi yang mendukung ekonomi lari (Tanner & Gore 2013).'
-                                : `Rasio otot lengan:tungkai = ${upperLowerRatio.toFixed(2)}. Untuk runner, tungkai idealnya lebih dominan. Tambahkan strength training tungkai (squat, lunge, calf raise) untuk meningkatkan running economy.`}
+                            <p className="text-gray-500">
+                              Rasio otot lengan terhadap tungkai. Untuk pelari, dominasi otot tungkai adalah profil yang lazim. Nilai ini bersifat informatif — belum ada threshold klinis tervalidasi spesifik untuk runner dari BIA segmental.
                             </p>
                           </div>
                         )}
@@ -864,18 +913,19 @@ All values must be numbers or null. No other text.` }
                         {tK > 0 && (
                           <div className="mt-3 p-3 rounded-lg bg-gray-50 text-xs">
                             <span className="font-semibold text-gray-700">Otot Trunk: {tK} kg</span>
-                            <span className="text-gray-500 ml-2">({totalMuscle ? ((tK/totalMuscle)*100).toFixed(0) : 0}% dari total)</span>
-                            <p className="text-gray-500 mt-0.5">Core strength berperan dalam stabilitas pelvis dan efisiensi stride (Leetun et al. 2004).</p>
+                            <span className="text-gray-500 ml-2">({totalMuscle ? ((tK / totalMuscle) * 100).toFixed(0) : 0}% dari total segmental)</span>
+                            <p className="text-gray-500 mt-0.5">Core muscle (trunk) berperan dalam stabilitas pelvis dan efisiensi stride saat berlari (Leetun et al. 2004, Med Sci Sports Exerc).</p>
                           </div>
                         )}
 
-                        <p className="text-xs text-gray-400 mt-3">Croisier et al. 2008 · Niemuth et al. 2005 · Tanner & Gore 2013 · Leetun et al. 2004. Data skeletal muscle mass dari BIA segmental.</p>
+                        <p className="text-xs text-gray-400 mt-3">
+                          SMI: AWGS 2019 · Chen et al. 2020 · Asimetri: InBody Professional Guide ·
+                          Core: Leetun et al. 2004 · Data skeletal muscle mass dari BIA segmental (akurasi r=0.95 vs DXA, Ling et al. 2011).
+                        </p>
                       </>
                     )
                   })() : (
-                    <div>
-                      <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>
-                    </div>
+                    <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>
                   )}
                 </div>
               </div>
