@@ -693,34 +693,82 @@ All values must be numbers or null. No other text.` }
                 {/* Segmental Fat Analysis */}
                 <div className={sectionCls + ' !mb-0'}>
                   <h2 className={headerCls}>Segmental Fat Analysis</h2>
-                  {latest.seg_arm_left || latest.seg_arm_right || latest.seg_leg_left || latest.seg_leg_right ? (
-                    <>
-                      <div className="grid grid-cols-3 gap-3 mb-3">
+                  {latest && (latest.seg_arm_left || latest.seg_arm_right || latest.seg_leg_left || latest.seg_leg_right) ? (() => {
+                    const aL = latest.seg_arm_left ?? 0, aR = latest.seg_arm_right ?? 0
+                    const tK = latest.seg_trunk ?? 0
+                    const lL = latest.seg_leg_left ?? 0, lR = latest.seg_leg_right ?? 0
+                    const totalFat = aL + aR + tK + lL + lR
+                    const trunkPct = totalFat ? (tK / totalFat) * 100 : 0
+                    // Android pattern: trunk fat dominan (>45% dari total segmental fat) — Kissebah & Krakower 1994
+                    const isAndroid = trunkPct > 45
+                    return (
+                      <>
+                        {/* Distribusi proporsional — bar horizontal */}
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Distribusi Lemak per Segmen</p>
                         {[
-                          { label: 'Lemak Lengan Kiri', value: latest.seg_arm_left ? `${latest.seg_arm_left} kg` : '—' },
-                          { label: 'Lemak Lengan Kanan', value: latest.seg_arm_right ? `${latest.seg_arm_right} kg` : '—' },
-                          { label: 'Gap Lemak Lengan', value: armGap ? `${armGap.pct}%` : '—', flag: armGap?.flag },
-                          { label: 'Lemak Tungkai Kiri', value: latest.seg_leg_left ? `${latest.seg_leg_left} kg` : '—' },
-                          { label: 'Lemak Tungkai Kanan', value: latest.seg_leg_right ? `${latest.seg_leg_right} kg` : '—' },
-                          { label: 'Gap Lemak Tungkai', value: legGap ? `${legGap.pct}%` : '—', flag: legGap?.flag },
-                        ].map(s => (
-                          <div key={s.label} className={cardCls}>
-                            <p className={labelCls}>{s.label}</p>
-                            <p className={`text-sm font-bold ${s.flag === true ? 'text-red-500' : s.flag === false ? 'text-green-600' : 'text-gray-800'}`}>
-                              {s.value}{s.flag === true ? ' ⚠' : s.flag === false ? ' ✓' : ''}
+                          { label: 'Lengan Kiri', val: aL, color: '#818cf8' },
+                          { label: 'Lengan Kanan', val: aR, color: '#6366f1' },
+                          { label: 'Trunk', val: tK, color: '#f59e0b' },
+                          { label: 'Tungkai Kiri', val: lL, color: '#34d399' },
+                          { label: 'Tungkai Kanan', val: lR, color: '#10b981' },
+                        ].map(seg => {
+                          const pct = totalFat ? (seg.val / totalFat) * 100 : 0
+                          return (
+                            <div key={seg.label} className="flex items-center gap-2 mb-1.5">
+                              <div className="w-24 text-xs text-gray-500 flex-shrink-0">{seg.label}</div>
+                              <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: seg.color }} />
+                              </div>
+                              <div className="w-20 text-xs text-right font-mono text-gray-600">{seg.val} kg ({pct.toFixed(0)}%)</div>
+                            </div>
+                          )
+                        })}
+
+                        {/* Asimetri L/R */}
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-4">Asimetri Kiri–Kanan</p>
+                        {[
+                          { label: 'Lengan', L: aL, R: aR, gap: armGap },
+                          { label: 'Tungkai', L: lL, R: lR, gap: legGap },
+                        ].map(seg => (
+                          <div key={seg.label} className="mb-3 p-3 rounded-lg bg-gray-50">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                              <span>Kiri {seg.L} kg</span>
+                              <span className="font-semibold text-gray-700">{seg.label}</span>
+                              <span>Kanan {seg.R} kg</span>
+                            </div>
+                            <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
+                              {(() => {
+                                const total = seg.L + seg.R
+                                const leftPct = total ? (seg.L / total) * 100 : 50
+                                const flagColor = seg.gap?.flag
+                                return <>
+                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: flagColor ? '#f59e0b' : '#818cf8' }} />
+                                  <div className="h-full flex-1" style={{ background: flagColor ? '#fde68a' : '#c7d2fe' }} />
+                                </>
+                              })()}
+                            </div>
+                            <p className={`text-xs mt-1 font-medium ${seg.gap?.flag ? 'text-amber-600' : 'text-gray-500'}`}>
+                              {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% — asimetri distribusi lemak signifikan` : `✓ Gap ${seg.gap.pct}% — simetris`) : '—'}
                             </p>
                           </div>
                         ))}
-                      </div>
-                      {latest.seg_trunk !== null && (
-                        <div className={cardCls + ' mb-3'}>
-                          <p className={labelCls}>Lemak Trunk</p>
-                          <p className={valueCls}>{latest.seg_trunk} kg</p>
+
+                        {/* Pola distribusi — Android vs Gynoid */}
+                        <div className={`p-3 rounded-lg text-xs ${isAndroid ? 'bg-amber-50 border border-amber-200' : 'bg-green-50 border border-green-200'}`}>
+                          <p className={`font-semibold mb-1 ${isAndroid ? 'text-amber-700' : 'text-green-700'}`}>
+                            {isAndroid ? '⚠ Pola Android (Central Obesity)' : '✓ Pola Gynoid / Perifer'}
+                          </p>
+                          <p className={isAndroid ? 'text-amber-600' : 'text-green-600'}>
+                            Trunk menyumbang {trunkPct.toFixed(0)}% dari total lemak segmental.
+                            {isAndroid
+                              ? ' Lemak viseral dominan meningkatkan risiko kardiovaskular dan resistensi insulin. Prioritaskan reduksi lemak trunk melalui defisit kalori dan latihan aerobik (Kissebah & Krakower 1994).'
+                              : ' Distribusi lemak perifer lebih menguntungkan secara metabolik. Pertahankan dengan latihan aerobik konsisten (Kissebah & Krakower 1994).'}
+                          </p>
                         </div>
-                      )}
-                      <p className="text-xs text-gray-400">Distribusi lemak per segmen dari BIA. Gap L/R &gt;15% dapat mengindikasikan asimetri distribusi lemak.</p>
-                    </>
-                  ) : (
+                        <p className="text-xs text-gray-400 mt-2">Data dari BIA segmental. Gap L/R &gt;15% = asimetri signifikan.</p>
+                      </>
+                    )
+                  })() : (
                     <p className="text-xs text-gray-400">Input data segmental fat di tab Input Data.</p>
                   )}
                 </div>
@@ -728,83 +776,105 @@ All values must be numbers or null. No other text.` }
                 {/* Muscle Balance */}
                 <div className={sectionCls + ' !mb-0'}>
                   <h2 className={headerCls}>Muscle Balance</h2>
-                  {latestMuscle ? (
-                    <>
-                      {latestMuscle.recorded_date !== latest?.recorded_date && (
-                        <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} (entri terbaru belum memiliki data muscle)</p>
-                      )}
-                      {/* Tungkai — paling kritis untuk runner */}
-                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Tungkai (kritis untuk runner)</p>
-                      <div className="grid grid-cols-3 gap-3 mb-3">
+                  {latestMuscle ? (() => {
+                    const aL = latestMuscle.seg_muscle_arm_left ?? 0
+                    const aR = latestMuscle.seg_muscle_arm_right ?? 0
+                    const tK = latestMuscle.seg_muscle_trunk ?? 0
+                    const lL = latestMuscle.seg_muscle_leg_left ?? 0
+                    const lR = latestMuscle.seg_muscle_leg_right ?? 0
+                    const totalMuscle = aL + aR + tK + lL + lR
+                    // Upper-Lower ratio: (arm × 2) / (leg × 2) — optimal untuk runner < 0.4 (leg dominan)
+                    const upperLowerRatio = (lL + lR) > 0 ? (aL + aR) / (lL + lR) : null
+                    const isLegDominant = upperLowerRatio != null && upperLowerRatio < 0.40
+                    return (
+                      <>
+                        {latestMuscle.recorded_date !== latest?.recorded_date && (
+                          <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} (entri terbaru belum memiliki data muscle)</p>
+                        )}
+
+                        {/* Distribusi proporsional */}
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Distribusi Otot per Segmen</p>
                         {[
-                          { label: 'Otot Tungkai Kiri', value: latestMuscle?.seg_muscle_leg_left ? `${latestMuscle?.seg_muscle_leg_left} kg` : '—' },
-                          { label: 'Otot Tungkai Kanan', value: latestMuscle?.seg_muscle_leg_right ? `${latestMuscle?.seg_muscle_leg_right} kg` : '—' },
-                          { label: 'Gap Tungkai', value: muscleLegGap ? `${muscleLegGap.pct}%` : '—', flag: muscleLegGap?.flag },
-                        ].map(s => (
-                          <div key={s.label} className={cardCls}>
-                            <p className={labelCls}>{s.label}</p>
-                            <p className={`text-sm font-bold ${s.flag === true ? 'text-red-500' : s.flag === false ? 'text-green-600' : 'text-gray-800'}`}>
-                              {s.value}{s.flag === true ? ' ⚠' : s.flag === false ? ' ✓' : ''}
+                          { label: 'Lengan Kiri', val: aL, color: '#818cf8' },
+                          { label: 'Lengan Kanan', val: aR, color: '#6366f1' },
+                          { label: 'Trunk', val: tK, color: '#f59e0b' },
+                          { label: 'Tungkai Kiri', val: lL, color: '#34d399' },
+                          { label: 'Tungkai Kanan', val: lR, color: '#10b981' },
+                        ].map(seg => {
+                          const pct = totalMuscle ? (seg.val / totalMuscle) * 100 : 0
+                          return (
+                            <div key={seg.label} className="flex items-center gap-2 mb-1.5">
+                              <div className="w-24 text-xs text-gray-500 flex-shrink-0">{seg.label}</div>
+                              <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: seg.color }} />
+                              </div>
+                              <div className="w-20 text-xs text-right font-mono text-gray-600">{seg.val} kg ({pct.toFixed(0)}%)</div>
+                            </div>
+                          )
+                        })}
+
+                        {/* Asimetri Lengan & Tungkai */}
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-4">Asimetri Kiri–Kanan</p>
+                        {[
+                          { label: 'Lengan', L: aL, R: aR, gap: muscleArmGap, threshold: 10, ref: 'Rauh et al. 2006' },
+                          { label: 'Tungkai', L: lL, R: lR, gap: muscleLegGap, threshold: 10, ref: 'Croisier et al. 2008' },
+                        ].map(seg => (
+                          <div key={seg.label} className="mb-3 p-3 rounded-lg bg-gray-50">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                              <span>Kiri {seg.L} kg</span>
+                              <span className="font-semibold text-gray-700">{seg.label}</span>
+                              <span>Kanan {seg.R} kg</span>
+                            </div>
+                            <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
+                              {(() => {
+                                const total = seg.L + seg.R
+                                const leftPct = total ? (seg.L / total) * 100 : 50
+                                const isFlag = seg.gap?.flag
+                                return <>
+                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: isFlag ? '#ef4444' : '#6366f1' }} />
+                                  <div className="h-full flex-1" style={{ background: isFlag ? '#fca5a5' : '#a5b4fc' }} />
+                                </>
+                              })()}
+                            </div>
+                            <p className={`text-xs mt-1 font-medium ${seg.gap?.flag ? 'text-red-600' : 'text-green-600'}`}>
+                              {seg.gap
+                                ? seg.gap.flag
+                                  ? `⚠ Gap ${seg.gap.pct}% — melebihi threshold ${seg.threshold}%, risiko cedera overuse (${seg.ref})`
+                                  : `✓ Gap ${seg.gap.pct}% — dalam batas normal (<${seg.threshold}%)`
+                                : '—'}
                             </p>
                           </div>
                         ))}
-                      </div>
-                      {/* Visual bar asimetri tungkai */}
-                      {muscleLegGap && (
-                        <div className="mb-3 p-3 rounded-lg bg-gray-50">
-                          <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                            <span>Kiri {latestMuscle?.seg_muscle_leg_left} kg</span>
-                            <span>Kanan {latestMuscle?.seg_muscle_leg_right} kg</span>
-                          </div>
-                          <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
-                            {(() => {
-                              const l = latestMuscle?.seg_muscle_leg_left ?? 0
-                              const r = latestMuscle?.seg_muscle_leg_right ?? 0
-                              const total = l + r
-                              const leftPct = total ? (l / total) * 100 : 50
-                              return <>
-                                <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: muscleLegGap.flag ? '#ef4444' : '#6366f1' }} />
-                                <div className="h-full flex-1" style={{ background: muscleLegGap.flag ? '#fca5a5' : '#a5b4fc' }} />
-                              </>
-                            })()}
-                          </div>
-                          <div className="mt-1.5">
-                            {muscleLegGap.flag
-                              ? <p className="text-xs text-red-600 font-medium">⚠ Gap {muscleLegGap.pct}% — asimetri tungkai berisiko cedera overuse (Croisier et al. 2008). Konsultasikan dengan fisioterapis.</p>
-                              : <p className="text-xs text-green-600 font-medium">✓ Gap {muscleLegGap.pct}% — asimetri tungkai dalam batas normal (&lt;10%).</p>
-                            }
-                          </div>
-                        </div>
-                      )}
-                      {/* Lengan */}
-                      <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-1">Lengan</p>
-                      <div className="grid grid-cols-3 gap-3 mb-3">
-                        {[
-                          { label: 'Otot Lengan Kiri', value: latestMuscle?.seg_muscle_arm_left ? `${latestMuscle?.seg_muscle_arm_left} kg` : '—' },
-                          { label: 'Otot Lengan Kanan', value: latestMuscle?.seg_muscle_arm_right ? `${latestMuscle?.seg_muscle_arm_right} kg` : '—' },
-                          { label: 'Gap Lengan', value: muscleArmGap ? `${muscleArmGap.pct}%` : '—', flag: muscleArmGap?.flag },
-                        ].map(s => (
-                          <div key={s.label} className={cardCls}>
-                            <p className={labelCls}>{s.label}</p>
-                            <p className={`text-sm font-bold ${s.flag === true ? 'text-amber-500' : s.flag === false ? 'text-green-600' : 'text-gray-800'}`}>
-                              {s.value}{s.flag === true ? ' ⚠' : s.flag === false ? ' ✓' : ''}
+
+                        {/* Upper-Lower Ratio */}
+                        {upperLowerRatio != null && (
+                          <div className={`p-3 rounded-lg text-xs mt-1 ${isLegDominant ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
+                            <p className={`font-semibold mb-1 ${isLegDominant ? 'text-green-700' : 'text-amber-700'}`}>
+                              Upper–Lower Ratio: {upperLowerRatio.toFixed(2)} {isLegDominant ? '✓ Leg-dominant (profil runner)' : '⚠ Perlu penguatan tungkai'}
+                            </p>
+                            <p className={isLegDominant ? 'text-green-600' : 'text-amber-600'}>
+                              {isLegDominant
+                                ? 'Massa otot tungkai dominan terhadap lengan — profil komposisi yang mendukung ekonomi lari (Tanner & Gore 2013).'
+                                : `Rasio otot lengan:tungkai = ${upperLowerRatio.toFixed(2)}. Untuk runner, tungkai idealnya lebih dominan. Tambahkan strength training tungkai (squat, lunge, calf raise) untuk meningkatkan running economy.`}
                             </p>
                           </div>
-                        ))}
-                      </div>
-                      {/* Trunk */}
-                      {latestMuscle?.seg_muscle_trunk !== null && (
-                        <div className={cardCls + ' mb-3'}>
-                          <p className={labelCls}>Otot Trunk</p>
-                          <p className={valueCls}>{latestMuscle?.seg_muscle_trunk} kg</p>
-                        </div>
-                      )}
-                      <p className="text-xs text-gray-400">Threshold: gap tungkai &gt;10% = risiko cedera overuse (Croisier et al. 2008; Niemuth et al. 2005). Data skeletal muscle mass dari BIA segmental.</p>
-                    </>
-                  ) : (
+                        )}
+
+                        {/* Trunk */}
+                        {tK > 0 && (
+                          <div className="mt-3 p-3 rounded-lg bg-gray-50 text-xs">
+                            <span className="font-semibold text-gray-700">Otot Trunk: {tK} kg</span>
+                            <span className="text-gray-500 ml-2">({totalMuscle ? ((tK/totalMuscle)*100).toFixed(0) : 0}% dari total)</span>
+                            <p className="text-gray-500 mt-0.5">Core strength berperan dalam stabilitas pelvis dan efisiensi stride (Leetun et al. 2004).</p>
+                          </div>
+                        )}
+
+                        <p className="text-xs text-gray-400 mt-3">Croisier et al. 2008 · Niemuth et al. 2005 · Tanner & Gore 2013 · Leetun et al. 2004. Data skeletal muscle mass dari BIA segmental.</p>
+                      </>
+                    )
+                  })() : (
                     <div>
                       <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Croisier et al. 2008; Niemuth et al. 2005</p>
                     </div>
                   )}
                 </div>
