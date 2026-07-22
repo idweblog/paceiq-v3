@@ -374,6 +374,36 @@ export default function BodyMetricsPage() {
     showToast('Data dihapus.')
   }
 
+  function handleEdit(l: BodyMetric) {
+    setForm({
+      recorded_date: l.recorded_date,
+      weight_kg: l.weight_kg?.toString() ?? '',
+      body_fat_pct: l.body_fat_pct?.toString() ?? '',
+      skeletal_muscle_pct: l.skeletal_muscle_pct?.toString() ?? '',
+      visceral_fat_index: l.visceral_fat_index?.toString() ?? '',
+      bmr_kcal: l.bmr_kcal?.toString() ?? '',
+      body_water_pct: l.body_water_pct?.toString() ?? '',
+      lean_body_mass_kg: l.lean_body_mass_kg?.toString() ?? '',
+      smi: l.smi?.toString() ?? '',
+      health_score: l.health_score?.toString() ?? '',
+      protein_pct: l.protein_pct?.toString() ?? '',
+      waist_cm: l.waist_cm?.toString() ?? '',
+      seg_arm_left: l.seg_arm_left?.toString() ?? '',
+      seg_arm_right: l.seg_arm_right?.toString() ?? '',
+      seg_trunk: l.seg_trunk?.toString() ?? '',
+      seg_leg_left: l.seg_leg_left?.toString() ?? '',
+      seg_leg_right: l.seg_leg_right?.toString() ?? '',
+      seg_muscle_arm_left: l.seg_muscle_arm_left?.toString() ?? '',
+      seg_muscle_arm_right: l.seg_muscle_arm_right?.toString() ?? '',
+      seg_muscle_trunk: l.seg_muscle_trunk?.toString() ?? '',
+      seg_muscle_leg_left: l.seg_muscle_leg_left?.toString() ?? '',
+      seg_muscle_leg_right: l.seg_muscle_leg_right?.toString() ?? '',
+      notes: l.notes ?? '',
+    })
+    setActiveTab('input')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   async function handleAIImport() {
     if (!aiFile) { showToast('Pilih foto laporan terlebih dahulu.'); return }
     setAiLoading(true)
@@ -1075,10 +1105,16 @@ All values must be numbers or null. No other text.` }
                             : '—'}
                         </td>
                         <td className="py-2">
-                          <button onClick={() => handleDelete(l.id)}
-                            className="border border-red-200 text-red-500 text-xs px-3 py-1 rounded-lg hover:bg-red-50 transition-colors">
-                            Hapus
-                          </button>
+                          <div className="flex gap-1">
+                            <button onClick={() => handleEdit(l)}
+                              className="border border-indigo-500 text-indigo-600 text-xs px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors">
+                              Edit
+                            </button>
+                            <button onClick={() => handleDelete(l.id)}
+                              className="border border-red-200 text-red-500 text-xs px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
+                              Hapus
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     )
