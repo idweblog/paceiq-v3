@@ -478,6 +478,11 @@ All values must be numbers or null. No other text.` }
 
   // ── Derived ──
   const latest = logs[0] ?? null
+  // Entri paling baru yang punya data muscle (bisa berbeda dari latest jika entri terbaru belum diisi)
+  const latestMuscle = logs.find(l =>
+    l.seg_muscle_leg_left != null || l.seg_muscle_leg_right != null ||
+    l.seg_muscle_arm_left != null || l.seg_muscle_arm_right != null
+  ) ?? null
   const age = calcAge(profile.birth_date)
   const gender = profile.gender ?? 'male'
   const heightCm = profile.height_cm ?? 170
@@ -507,8 +512,8 @@ All values must be numbers or null. No other text.` }
 
   const armGap = latest ? segGap(latest.seg_arm_left, latest.seg_arm_right) : null
   const legGap = latest ? segGap(latest.seg_leg_left, latest.seg_leg_right) : null
-  const muscleArmGap  = latest ? segGap(latest.seg_muscle_arm_left, latest.seg_muscle_arm_right) : null
-  const muscleLegGap  = latest ? segGap(latest.seg_muscle_leg_left, latest.seg_muscle_leg_right) : null
+  const muscleArmGap  = latestMuscle ? segGap(latestMuscle.seg_muscle_arm_left, latestMuscle.seg_muscle_arm_right) : null
+  const muscleLegGap  = latestMuscle ? segGap(latestMuscle.seg_muscle_leg_left, latestMuscle.seg_muscle_leg_right) : null
 
   const chartData = useMemo(() => [...logs].reverse().map(l => ({
     date: new Date(l.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }),
@@ -723,14 +728,17 @@ All values must be numbers or null. No other text.` }
                 {/* Muscle Balance */}
                 <div className={sectionCls + ' !mb-0'}>
                   <h2 className={headerCls}>Muscle Balance</h2>
-                  {latest.seg_muscle_leg_left || latest.seg_muscle_leg_right || latest.seg_muscle_arm_left || latest.seg_muscle_arm_right ? (
+                  {latestMuscle ? (
                     <>
+                      {latestMuscle.recorded_date !== latest?.recorded_date && (
+                        <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} (entri terbaru belum memiliki data muscle)</p>
+                      )}
                       {/* Tungkai — paling kritis untuk runner */}
                       <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Tungkai (kritis untuk runner)</p>
                       <div className="grid grid-cols-3 gap-3 mb-3">
                         {[
-                          { label: 'Otot Tungkai Kiri', value: latest.seg_muscle_leg_left ? `${latest.seg_muscle_leg_left} kg` : '—' },
-                          { label: 'Otot Tungkai Kanan', value: latest.seg_muscle_leg_right ? `${latest.seg_muscle_leg_right} kg` : '—' },
+                          { label: 'Otot Tungkai Kiri', value: latestMuscle?.seg_muscle_leg_left ? `${latestMuscle?.seg_muscle_leg_left} kg` : '—' },
+                          { label: 'Otot Tungkai Kanan', value: latestMuscle?.seg_muscle_leg_right ? `${latestMuscle?.seg_muscle_leg_right} kg` : '—' },
                           { label: 'Gap Tungkai', value: muscleLegGap ? `${muscleLegGap.pct}%` : '—', flag: muscleLegGap?.flag },
                         ].map(s => (
                           <div key={s.label} className={cardCls}>
@@ -745,13 +753,13 @@ All values must be numbers or null. No other text.` }
                       {muscleLegGap && (
                         <div className="mb-3 p-3 rounded-lg bg-gray-50">
                           <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                            <span>Kiri {latest.seg_muscle_leg_left} kg</span>
-                            <span>Kanan {latest.seg_muscle_leg_right} kg</span>
+                            <span>Kiri {latestMuscle?.seg_muscle_leg_left} kg</span>
+                            <span>Kanan {latestMuscle?.seg_muscle_leg_right} kg</span>
                           </div>
                           <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
                             {(() => {
-                              const l = latest.seg_muscle_leg_left ?? 0
-                              const r = latest.seg_muscle_leg_right ?? 0
+                              const l = latestMuscle?.seg_muscle_leg_left ?? 0
+                              const r = latestMuscle?.seg_muscle_leg_right ?? 0
                               const total = l + r
                               const leftPct = total ? (l / total) * 100 : 50
                               return <>
@@ -772,8 +780,8 @@ All values must be numbers or null. No other text.` }
                       <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-1">Lengan</p>
                       <div className="grid grid-cols-3 gap-3 mb-3">
                         {[
-                          { label: 'Otot Lengan Kiri', value: latest.seg_muscle_arm_left ? `${latest.seg_muscle_arm_left} kg` : '—' },
-                          { label: 'Otot Lengan Kanan', value: latest.seg_muscle_arm_right ? `${latest.seg_muscle_arm_right} kg` : '—' },
+                          { label: 'Otot Lengan Kiri', value: latestMuscle?.seg_muscle_arm_left ? `${latestMuscle?.seg_muscle_arm_left} kg` : '—' },
+                          { label: 'Otot Lengan Kanan', value: latestMuscle?.seg_muscle_arm_right ? `${latestMuscle?.seg_muscle_arm_right} kg` : '—' },
                           { label: 'Gap Lengan', value: muscleArmGap ? `${muscleArmGap.pct}%` : '—', flag: muscleArmGap?.flag },
                         ].map(s => (
                           <div key={s.label} className={cardCls}>
@@ -785,10 +793,10 @@ All values must be numbers or null. No other text.` }
                         ))}
                       </div>
                       {/* Trunk */}
-                      {latest.seg_muscle_trunk !== null && (
+                      {latestMuscle?.seg_muscle_trunk !== null && (
                         <div className={cardCls + ' mb-3'}>
                           <p className={labelCls}>Otot Trunk</p>
-                          <p className={valueCls}>{latest.seg_muscle_trunk} kg</p>
+                          <p className={valueCls}>{latestMuscle?.seg_muscle_trunk} kg</p>
                         </div>
                       )}
                       <p className="text-xs text-gray-400">Threshold: gap tungkai &gt;10% = risiko cedera overuse (Croisier et al. 2008; Niemuth et al. 2005). Data skeletal muscle mass dari BIA segmental.</p>
