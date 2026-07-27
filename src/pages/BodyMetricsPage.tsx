@@ -727,168 +727,8 @@ All values must be numbers or null. No other text.` }
                 )}
               </div>
 
-              {/* Baris 2: Body Type + Segmental Fat berdampingan */}
+              {/* Baris 3: Muscle Balance + Segmental Fat berdampingan */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
-
-                {/* Body Type */}
-                {bodyShape && (
-                  <div className={sectionCls + ' !mb-0'}>
-                    <h2 className={headerCls}>Body Type — InBody Shape Classification</h2>
-                    <div className="flex items-center gap-4 mb-4">
-                      <div className="flex-shrink-0 w-20 h-20 rounded-2xl flex flex-col items-center justify-center" style={{ background: bodyShape.bg }}>
-                        <span className="text-3xl font-black" style={{ color: bodyShape.color }}>{bodyShape.shape}</span>
-                        <span className="text-[10px] font-bold uppercase" style={{ color: bodyShape.color }}>Shape</span>
-                      </div>
-                      <div>
-                        <p className="text-base font-bold mb-1" style={{ color: bodyShape.color }}>{bodyShape.label}</p>
-                        <p className="text-xs text-gray-600">{bodyShape.description}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-0 mb-4 rounded-lg overflow-hidden text-[10px] font-bold text-center">
-                      {([
-                        { key: 'C', label: 'C-Shape\nOverfat', color: '#ef4444', bg: '#fee2e2' },
-                        { key: 'I', label: 'I-Shape\nBalanced', color: '#2563eb', bg: '#dbeafe' },
-                        { key: 'D', label: 'D-Shape\nAthletic', color: '#059669', bg: '#d1fae5' },
-                      ] as const).map(s => (
-                        <div key={s.key} className="flex-1 py-2 flex flex-col items-center justify-center transition-all"
-                          style={{ background: bodyShape.shape === s.key ? s.color : s.bg, color: bodyShape.shape === s.key ? 'white' : s.color, fontWeight: bodyShape.shape === s.key ? 900 : 600 }}>
-                          <span className="text-base">{s.key}</span>
-                          <span className="whitespace-pre-line leading-tight mt-0.5">{s.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="space-y-2">
-                      <div className="p-2.5 rounded-lg bg-gray-50 text-xs">
-                        <p className="font-semibold text-gray-700 mb-0.5">⚠ Risiko</p>
-                        <p className="text-gray-600">{bodyShape.risks}</p>
-                      </div>
-                      <div className="p-2.5 rounded-lg text-xs" style={{ background: bodyShape.bg }}>
-                        <p className="font-semibold mb-0.5" style={{ color: bodyShape.color }}>✅ Rekomendasi</p>
-                        <p style={{ color: bodyShape.color }}>{bodyShape.actions}</p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-2">{bodyShape.ref}</p>
-                  </div>
-                )}
-
-                {/* Segmental Fat Analysis */}
-                <div className={sectionCls + ' !mb-0'}>
-                  <h2 className={headerCls}>Segmental Fat Analysis</h2>
-                  {latest && (latest.seg_arm_left || latest.seg_arm_right || latest.seg_leg_left || latest.seg_leg_right) ? (() => {
-                    const aL = latest.seg_arm_left ?? 0, aR = latest.seg_arm_right ?? 0
-                    const tK = latest.seg_trunk ?? 0
-                    const lL = latest.seg_leg_left ?? 0, lR = latest.seg_leg_right ?? 0
-                    const totalFat = aL + aR + tK + lL + lR
-                    const limbFat = aL + aR + lL + lR
-                    const trunkToLimbRatio = limbFat > 0 ? tK / limbFat : null
-                    const trunkPct = totalFat ? (tK / totalFat) * 100 : 0
-                    const segFatStatus = (val: number, total: number, lo: number, hi: number) => {
-                      if (!total) return null
-                      const pct = (val / total) * 100
-                      if (pct < lo) return { label: 'Rendah', color: '#2563eb', bg: '#dbeafe' }
-                      if (pct > hi) return { label: 'Tinggi', color: '#ef4444', bg: '#fee2e2' }
-                      return { label: 'Normal', color: '#059669', bg: '#d1fae5' }
-                    }
-                    return (
-                      <>
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Lemak per Segmen</p>
-                        <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
-                        <div className="space-y-1.5 mb-4">
-                          {[
-                            { label: 'Lengan Kiri',   val: aL, lo: 3,  hi: 9  },
-                            { label: 'Lengan Kanan',  val: aR, lo: 3,  hi: 9  },
-                            { label: 'Trunk',         val: tK, lo: 45, hi: 62 },
-                            { label: 'Tungkai Kiri',  val: lL, lo: 12, hi: 22 },
-                            { label: 'Tungkai Kanan', val: lR, lo: 12, hi: 22 },
-                          ].map(seg => {
-                            const st = segFatStatus(seg.val, totalFat, seg.lo, seg.hi)
-                            const pct = totalFat ? (seg.val / totalFat) * 100 : 0
-                            return (
-                              <div key={seg.label} className="flex items-center gap-2">
-                                <div className="w-24 text-xs text-gray-600 flex-shrink-0">{seg.label}</div>
-                                <div className="flex-1 flex items-center gap-1">
-                                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
-                                    <div className="h-full rounded-full" style={{ width: `${Math.min(pct / 65 * 100, 100)}%`, background: st?.color ?? '#9ca3af' }} />
-                                  </div>
-                                  <span className="text-[10px] font-mono text-gray-500 w-12 text-right">{seg.val} kg</span>
-                                </div>
-                                {st && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 w-14 text-center" style={{ background: st.bg, color: st.color }}>{st.label}</span>}
-                              </div>
-                            )
-                          })}
-                        </div>
-                        {trunkToLimbRatio !== null && (
-                          <div className={`p-3 rounded-lg text-xs border mb-3 ${trunkToLimbRatio > 1.0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
-                            <p className={`font-semibold mb-1 ${trunkToLimbRatio > 1.0 ? 'text-amber-700' : 'text-green-700'}`}>
-                              Trunk-to-Limb Fat Ratio: {trunkToLimbRatio.toFixed(2)} {trunkToLimbRatio > 1.0 ? '⚠ Lemak trunk dominan' : '✓ Distribusi lemak perifer'}
-                            </p>
-                            <p className={`mb-1.5 ${trunkToLimbRatio > 1.0 ? 'text-amber-700' : 'text-green-700'}`}>
-                              {trunkToLimbRatio > 1.0
-                                ? `Lemak trunk (${tK} kg) melebihi total lemak ekstremitas (${limbFat.toFixed(1)} kg).`
-                                : `Lemak ekstremitas (${limbFat.toFixed(1)} kg) lebih dominan dari trunk (${tK} kg) — distribusi metabolik yang sehat.`}
-                            </p>
-                            {trunkToLimbRatio > 1.0 && (
-                              <>
-                                <p className="text-amber-600 mb-1"><strong>Risiko:</strong> Lemak visceral berkorelasi dengan resistensi insulin, dislipidemia, dan penurunan VO₂max. Pada runner, visceral fat tinggi menurunkan ekonomi lari dan meningkatkan beban kardiovaskular.</p>
-                                <p className="text-amber-600"><strong>Aksi:</strong> Defisit kalori sedang 300–500 kcal/hari, prioritaskan Zone 2 run 150+ mnt/minggu. Hindari defisit agresif agar massa otot terjaga.</p>
-                              </>
-                            )}
-                            <p className="text-gray-400 mt-1.5">Camhi et al. 2011 (Obesity) · Wilson et al. 2013 (Diabetes Care)</p>
-                          </div>
-                        )}
-                        <div className={`p-3 rounded-lg text-xs border ${trunkPct > 55 ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
-                          <p className={`font-semibold mb-1 ${trunkPct > 55 ? 'text-amber-700' : 'text-gray-700'}`}>
-                            Pola Distribusi: Trunk {trunkPct.toFixed(0)}% {trunkPct > 55 ? '— Kecenderungan Central (Android)' : '— Kecenderungan Perifer (Gynoid)'}
-                          </p>
-                          <p className={`mb-1.5 ${trunkPct > 55 ? 'text-amber-600' : 'text-gray-600'}`}>
-                            {trunkPct > 55
-                              ? `Trunk ${trunkPct.toFixed(0)}% melebihi rata-rata populasi. Pelari maraton elite memiliki distribusi trunk lebih rendah karena adaptasi aerobik jangka panjang.`
-                              : `Distribusi trunk ${trunkPct.toFixed(0)}% dalam rentang proporsional. Distribusi perifer lebih menguntungkan secara metabolik.`}
-                          </p>
-                          {trunkPct > 55 && (
-                            <>
-                              <p className="text-amber-600 mb-1"><strong>Risiko:</strong> Lemak viseral berkorelasi lebih kuat dengan risiko kardiovaskular dibanding lemak subkutan perifer. Visceral fat tinggi juga berkorelasi dengan performa lari yang lebih rendah.</p>
-                              <p className="text-amber-600"><strong>Aksi:</strong> Zone 2 run 3–4×/minggu adalah intervensi paling efektif untuk reduksi lemak trunk. Kurangi karbohidrat sederhana dan alkohol yang preferensially disimpan sebagai visceral fat.</p>
-                            </>
-                          )}
-                          <p className="text-gray-400 mt-1.5">Kissebah & Krakower 1994 (Physiol Rev) · Chan et al. 1994 (CMAJ) · PMC5367711</p>
-                        </div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1 mt-4">Asimetri Lemak Kiri–Kanan</p>
-                        <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = asimetri signifikan.</p>
-                        {[
-                          { label: 'Lengan', L: aL, R: aR, gap: armGap, threshold: 6 },
-                          { label: 'Tungkai', L: lL, R: lR, gap: legGap, threshold: 3 },
-                        ].map(seg => (
-                          <div key={seg.label} className="mb-2 p-2.5 rounded-lg bg-gray-50">
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                              <span>Kiri {seg.L} kg</span>
-                              <span className="font-semibold text-gray-700">{seg.label}</span>
-                              <span>Kanan {seg.R} kg</span>
-                            </div>
-                            <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-200">
-                              {(() => {
-                                const total = seg.L + seg.R
-                                const leftPct = total ? (seg.L / total) * 100 : 50
-                                return <>
-                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#f59e0b' : '#818cf8' }} />
-                                  <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fde68a' : '#c7d2fe' }} />
-                                </>
-                              })()}
-                            </div>
-                            <p className={`text-[10px] mt-1 font-medium ${seg.gap?.flag ? 'text-amber-600' : 'text-gray-500'}`}>
-                              {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% > ${seg.threshold}%` : `✓ Gap ${seg.gap.pct}% (simetris)`) : '—'}
-                            </p>
-                          </div>
-                        ))}
-                        <p className="text-[10px] text-gray-400 mt-1">⚠ BIA segmental cenderung underestimate fat mass di ekstremitas vs DXA. Gunakan untuk monitoring tren (Ling et al. 2011).</p>
-                      </>
-                    )
-                  })() : <p className="text-xs text-gray-400">Input data segmental fat di tab Input Data.</p>}
-                </div>
-              </div>
-
-              {/* Baris 3: Muscle Balance (full width) */}
-              <div className="mb-5">
                 <div className={sectionCls + ' !mb-0'}>
                   <h2 className={headerCls}>Muscle Balance</h2>
                   {latestMuscle ? (() => {
@@ -1013,7 +853,162 @@ All values must be numbers or null. No other text.` }
                     )
                   })() : <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>}
                 </div>
+                </div>
+                {/* Segmental Fat Analysis */}
+                <div className={sectionCls + ' !mb-0'}>
+                  <h2 className={headerCls}>Segmental Fat Analysis</h2>
+                  {latest && (latest.seg_arm_left || latest.seg_arm_right || latest.seg_leg_left || latest.seg_leg_right) ? (() => {
+                    const aL = latest.seg_arm_left ?? 0, aR = latest.seg_arm_right ?? 0
+                    const tK = latest.seg_trunk ?? 0
+                    const lL = latest.seg_leg_left ?? 0, lR = latest.seg_leg_right ?? 0
+                    const totalFat = aL + aR + tK + lL + lR
+                    const limbFat = aL + aR + lL + lR
+                    const trunkToLimbRatio = limbFat > 0 ? tK / limbFat : null
+                    const trunkPct = totalFat ? (tK / totalFat) * 100 : 0
+                    const segFatStatus = (val: number, total: number, lo: number, hi: number) => {
+                      if (!total) return null
+                      const pct = (val / total) * 100
+                      if (pct < lo) return { label: 'Rendah', color: '#2563eb', bg: '#dbeafe' }
+                      if (pct > hi) return { label: 'Tinggi', color: '#ef4444', bg: '#fee2e2' }
+                      return { label: 'Normal', color: '#059669', bg: '#d1fae5' }
+                    }
+                    return (
+                      <>
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Lemak per Segmen</p>
+                        <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
+                        <div className="space-y-1.5 mb-4">
+                          {[
+                            { label: 'Lengan Kiri',   val: aL, lo: 3,  hi: 9  },
+                            { label: 'Lengan Kanan',  val: aR, lo: 3,  hi: 9  },
+                            { label: 'Trunk',         val: tK, lo: 45, hi: 62 },
+                            { label: 'Tungkai Kiri',  val: lL, lo: 12, hi: 22 },
+                            { label: 'Tungkai Kanan', val: lR, lo: 12, hi: 22 },
+                          ].map(seg => {
+                            const st = segFatStatus(seg.val, totalFat, seg.lo, seg.hi)
+                            const pct = totalFat ? (seg.val / totalFat) * 100 : 0
+                            return (
+                              <div key={seg.label} className="flex items-center gap-2">
+                                <div className="w-24 text-xs text-gray-600 flex-shrink-0">{seg.label}</div>
+                                <div className="flex-1 flex items-center gap-1">
+                                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width: `${Math.min(pct / 65 * 100, 100)}%`, background: st?.color ?? '#9ca3af' }} />
+                                  </div>
+                                  <span className="text-[10px] font-mono text-gray-500 w-12 text-right">{seg.val} kg</span>
+                                </div>
+                                {st && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 w-14 text-center" style={{ background: st.bg, color: st.color }}>{st.label}</span>}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        {trunkToLimbRatio !== null && (
+                          <div className={`p-3 rounded-lg text-xs border mb-3 ${trunkToLimbRatio > 1.0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                            <p className={`font-semibold mb-1 ${trunkToLimbRatio > 1.0 ? 'text-amber-700' : 'text-green-700'}`}>
+                              Trunk-to-Limb Fat Ratio: {trunkToLimbRatio.toFixed(2)} {trunkToLimbRatio > 1.0 ? '⚠ Lemak trunk dominan' : '✓ Distribusi lemak perifer'}
+                            </p>
+                            <p className={`mb-1.5 ${trunkToLimbRatio > 1.0 ? 'text-amber-700' : 'text-green-700'}`}>
+                              {trunkToLimbRatio > 1.0
+                                ? `Lemak trunk (${tK} kg) melebihi total lemak ekstremitas (${limbFat.toFixed(1)} kg).`
+                                : `Lemak ekstremitas (${limbFat.toFixed(1)} kg) lebih dominan dari trunk (${tK} kg) — distribusi metabolik yang sehat.`}
+                            </p>
+                            {trunkToLimbRatio > 1.0 && (
+                              <>
+                                <p className="text-amber-600 mb-1"><strong>Risiko:</strong> Lemak visceral berkorelasi dengan resistensi insulin, dislipidemia, dan penurunan VO₂max. Pada runner, visceral fat tinggi menurunkan ekonomi lari dan meningkatkan beban kardiovaskular.</p>
+                                <p className="text-amber-600"><strong>Aksi:</strong> Defisit kalori sedang 300–500 kcal/hari, prioritaskan Zone 2 run 150+ mnt/minggu. Hindari defisit agresif agar massa otot terjaga.</p>
+                              </>
+                            )}
+                            <p className="text-gray-400 mt-1.5">Camhi et al. 2011 (Obesity) · Wilson et al. 2013 (Diabetes Care)</p>
+                          </div>
+                        )}
+                        <div className={`p-3 rounded-lg text-xs border ${trunkPct > 55 ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                          <p className={`font-semibold mb-1 ${trunkPct > 55 ? 'text-amber-700' : 'text-gray-700'}`}>
+                            Pola Distribusi: Trunk {trunkPct.toFixed(0)}% {trunkPct > 55 ? '— Kecenderungan Central (Android)' : '— Kecenderungan Perifer (Gynoid)'}
+                          </p>
+                          <p className={`mb-1.5 ${trunkPct > 55 ? 'text-amber-600' : 'text-gray-600'}`}>
+                            {trunkPct > 55
+                              ? `Trunk ${trunkPct.toFixed(0)}% melebihi rata-rata populasi. Pelari maraton elite memiliki distribusi trunk lebih rendah karena adaptasi aerobik jangka panjang.`
+                              : `Distribusi trunk ${trunkPct.toFixed(0)}% dalam rentang proporsional. Distribusi perifer lebih menguntungkan secara metabolik.`}
+                          </p>
+                          {trunkPct > 55 && (
+                            <>
+                              <p className="text-amber-600 mb-1"><strong>Risiko:</strong> Lemak viseral berkorelasi lebih kuat dengan risiko kardiovaskular dibanding lemak subkutan perifer. Visceral fat tinggi juga berkorelasi dengan performa lari yang lebih rendah.</p>
+                              <p className="text-amber-600"><strong>Aksi:</strong> Zone 2 run 3–4×/minggu adalah intervensi paling efektif untuk reduksi lemak trunk. Kurangi karbohidrat sederhana dan alkohol yang preferensially disimpan sebagai visceral fat.</p>
+                            </>
+                          )}
+                          <p className="text-gray-400 mt-1.5">Kissebah & Krakower 1994 (Physiol Rev) · Chan et al. 1994 (CMAJ) · PMC5367711</p>
+                        </div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1 mt-4">Asimetri Lemak Kiri–Kanan</p>
+                        <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = asimetri signifikan.</p>
+                        {[
+                          { label: 'Lengan', L: aL, R: aR, gap: armGap, threshold: 6 },
+                          { label: 'Tungkai', L: lL, R: lR, gap: legGap, threshold: 3 },
+                        ].map(seg => (
+                          <div key={seg.label} className="mb-2 p-2.5 rounded-lg bg-gray-50">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                              <span>Kiri {seg.L} kg</span>
+                              <span className="font-semibold text-gray-700">{seg.label}</span>
+                              <span>Kanan {seg.R} kg</span>
+                            </div>
+                            <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-200">
+                              {(() => {
+                                const total = seg.L + seg.R
+                                const leftPct = total ? (seg.L / total) * 100 : 50
+                                return <>
+                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#f59e0b' : '#818cf8' }} />
+                                  <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fde68a' : '#c7d2fe' }} />
+                                </>
+                              })()}
+                            </div>
+                            <p className={`text-[10px] mt-1 font-medium ${seg.gap?.flag ? 'text-amber-600' : 'text-gray-500'}`}>
+                              {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% > ${seg.threshold}%` : `✓ Gap ${seg.gap.pct}% (simetris)`) : '—'}
+                            </p>
+                          </div>
+                        ))}
+                        <p className="text-[10px] text-gray-400 mt-1">⚠ BIA segmental cenderung underestimate fat mass di ekstremitas vs DXA. Gunakan untuk monitoring tren (Ling et al. 2011).</p>
+                      </>
+                    )
+                  })() : <p className="text-xs text-gray-400">Input data segmental fat di tab Input Data.</p>}
               </div>
+
+              {/* Baris 4: Body Type — InBody Shape Classification */}
+              {bodyShape && (
+                <div className={sectionCls + ' mb-5'}>
+                  <h2 className={headerCls}>Body Type — InBody Shape Classification</h2>
+                  <div className="flex items-center gap-4 mb-4">
+                      <div className="flex-shrink-0 w-20 h-20 rounded-2xl flex flex-col items-center justify-center" style={{ background: bodyShape.bg }}>
+                        <span className="text-3xl font-black" style={{ color: bodyShape.color }}>{bodyShape.shape}</span>
+                        <span className="text-[10px] font-bold uppercase" style={{ color: bodyShape.color }}>Shape</span>
+                      </div>
+                      <div>
+                        <p className="text-base font-bold mb-1" style={{ color: bodyShape.color }}>{bodyShape.label}</p>
+                        <p className="text-xs text-gray-600">{bodyShape.description}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-0 mb-4 rounded-lg overflow-hidden text-[10px] font-bold text-center">
+                      {([
+                        { key: 'C', label: 'C-Shape\nOverfat', color: '#ef4444', bg: '#fee2e2' },
+                        { key: 'I', label: 'I-Shape\nBalanced', color: '#2563eb', bg: '#dbeafe' },
+                        { key: 'D', label: 'D-Shape\nAthletic', color: '#059669', bg: '#d1fae5' },
+                      ] as const).map(s => (
+                        <div key={s.key} className="flex-1 py-2 flex flex-col items-center justify-center transition-all"
+                          style={{ background: bodyShape.shape === s.key ? s.color : s.bg, color: bodyShape.shape === s.key ? 'white' : s.color, fontWeight: bodyShape.shape === s.key ? 900 : 600 }}>
+                          <span className="text-base">{s.key}</span>
+                          <span className="whitespace-pre-line leading-tight mt-0.5">{s.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="p-2.5 rounded-lg bg-gray-50 text-xs">
+                        <p className="font-semibold text-gray-700 mb-0.5">⚠ Risiko</p>
+                        <p className="text-gray-600">{bodyShape.risks}</p>
+                      </div>
+                      <div className="p-2.5 rounded-lg text-xs" style={{ background: bodyShape.bg }}>
+                        <p className="font-semibold mb-0.5" style={{ color: bodyShape.color }}>✅ Rekomendasi</p>
+                        <p style={{ color: bodyShape.color }}>{bodyShape.actions}</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">{bodyShape.ref}</p>
+                </div>
+              )}
 
               {/* Race Weight Estimator */}
               <div className={sectionCls}>
