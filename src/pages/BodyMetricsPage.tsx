@@ -737,21 +737,23 @@ All values must be numbers or null. No other text.` }
               </div>
 
               {/* Legenda Warna — berlaku untuk Muscle Balance & Segmental Fat Analysis */}
-              <div className="flex flex-wrap gap-x-5 gap-y-2 mb-3 px-1">
-                <p className="text-[10px] font-semibold text-gray-500 uppercase w-full">Keterangan Warna:</p>
-                {/* Status bar segmen */}
-                {[
-                  { color: '#059669', bg: '#d1fae5', label: 'Normal / Normal+', desc: 'Proporsi dalam rentang referensi populasi' },
-                  { color: '#ef4444', bg: '#fee2e2', label: 'Rendah / Tinggi',  desc: 'Di luar rentang referensi' },
-                ].map(s => (
-                  <div key={s.label} className="flex items-center gap-1.5">
-                    <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: s.bg, border: `1.5px solid ${s.color}` }} />
-                    <span className="text-[10px] font-semibold" style={{ color: s.color }}>{s.label}</span>
-                    <span className="text-[10px] text-gray-400">— {s.desc}</span>
-                  </div>
-                ))}
-                <div className="w-full border-t border-gray-100 mt-0.5 pt-1.5 flex flex-wrap gap-x-5 gap-y-1.5">
-                  {/* Asimetri bar */}
+              <div className="mb-3 px-1 space-y-2">
+                <p className="text-[10px] font-semibold text-gray-500 uppercase">Keterangan Warna:</p>
+                {/* Baris 1: Status bar segmen */}
+                <div className="flex flex-wrap gap-x-5 gap-y-1">
+                  {[
+                    { color: '#059669', bg: '#d1fae5', label: 'Normal / Normal+', desc: 'Proporsi dalam rentang referensi populasi' },
+                    { color: '#ef4444', bg: '#fee2e2', label: 'Rendah / Tinggi',  desc: 'Di luar rentang referensi' },
+                  ].map(s => (
+                    <div key={s.label} className="flex items-center gap-1.5">
+                      <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: s.bg, border: `1.5px solid ${s.color}` }} />
+                      <span className="text-[10px] font-semibold" style={{ color: s.color }}>{s.label}</span>
+                      <span className="text-[10px] text-gray-400">— {s.desc}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Baris 2: Asimetri bar */}
+                <div className="flex flex-wrap gap-x-5 gap-y-1">
                   {[
                     { leftBg: '#6366f1', rightBg: '#a5b4fc', label: 'Simetris', desc: 'Gap di bawah threshold InBody' },
                     { leftBg: '#ef4444', rightBg: '#fca5a5', label: 'Asimetri', desc: 'Gap melebihi threshold (lengan >6%, tungkai >3%)' },
@@ -765,9 +767,11 @@ All values must be numbers or null. No other text.` }
                       <span className="text-[10px] text-gray-400">— {s.desc}</span>
                     </div>
                   ))}
-                  {/* Panel analisis */}
+                </div>
+                {/* Baris 3: Panel analisis */}
+                <div className="flex flex-wrap gap-x-5 gap-y-1">
                   {[
-                    { bg: '#d1fae5', border: '#6ee7b7', label: 'Baik / Normal',  desc: 'Nilai dalam rentang sehat' },
+                    { bg: '#d1fae5', border: '#6ee7b7', label: 'Baik / Normal',   desc: 'Nilai dalam rentang sehat' },
                     { bg: '#fef3c7', border: '#fcd34d', label: 'Perlu Perhatian', desc: 'Perlu monitoring atau aksi' },
                     { bg: '#fee2e2', border: '#fca5a5', label: 'Risiko / Rendah', desc: 'Di luar rentang normal' },
                     { bg: '#f9fafb', border: '#e5e7eb', label: 'Informatif',      desc: 'Tanpa threshold klinis' },
@@ -778,14 +782,16 @@ All values must be numbers or null. No other text.` }
                       <span className="text-[10px] text-gray-400">— {s.desc}</span>
                     </div>
                   ))}
-                  {/* Kebaruan data */}
+                </div>
+                {/* Baris 4: Kebaruan data */}
+                <div className="flex flex-wrap gap-x-5 gap-y-1">
                   {[
                     { cls: 'text-green-600', icon: '✅', label: '≤7 hari',  desc: 'Data up to date' },
                     { cls: 'text-amber-600', icon: '⚠️', label: '8–30 hari', desc: 'Segera perbarui' },
                     { cls: 'text-red-500',   icon: '🔴', label: '>30 hari',  desc: 'Data expired' },
                   ].map(s => (
                     <div key={s.label} className="flex items-center gap-1.5">
-                      <span className={`text-[10px] ${s.cls}`}>{s.icon}</span>
+                      <span className="text-[10px]">{s.icon}</span>
                       <span className={`text-[10px] font-semibold ${s.cls}`}>{s.label}</span>
                       <span className="text-[10px] text-gray-400">— {s.desc}</span>
                     </div>
