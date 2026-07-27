@@ -749,9 +749,10 @@ All values must be numbers or null. No other text.` }
                     }
                     return (
                       <>
-                        {latestMuscle.recorded_date !== latest?.recorded_date && (
-                          <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
-                        )}
+                        {latestMuscle.recorded_date !== latest?.recorded_date
+                          ? <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                          : <p className="text-xs text-gray-400 mb-3">{new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                        }
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Otot per Segmen</p>
                         <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
                         <div className="space-y-1.5 mb-4">
@@ -867,6 +868,9 @@ All values must be numbers or null. No other text.` }
                     }
                     return (
                       <>
+                        {/* Tanggal entri */}
+                        <p className="text-xs text-gray-400 mb-3">{new Date(latest.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Lemak per Segmen</p>
                         <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
                         <div className="space-y-1.5 mb-4">
@@ -893,8 +897,38 @@ All values must be numbers or null. No other text.` }
                             )
                           })}
                         </div>
+
+                        {/* Asimetri — dipindah ke atas, konsisten dengan Muscle Balance */}
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Asimetri Lemak Kiri–Kanan</p>
+                        <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = asimetri signifikan.</p>
+                        {[
+                          { label: 'Lengan', L: aL, R: aR, gap: armGap, threshold: 6 },
+                          { label: 'Tungkai', L: lL, R: lR, gap: legGap, threshold: 3 },
+                        ].map(seg => (
+                          <div key={seg.label} className="mb-2 p-2.5 rounded-lg bg-gray-50">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                              <span>Kiri {seg.L} kg</span>
+                              <span className="font-semibold text-gray-700">{seg.label}</span>
+                              <span>Kanan {seg.R} kg</span>
+                            </div>
+                            <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-200">
+                              {(() => {
+                                const total = seg.L + seg.R
+                                const leftPct = total ? (seg.L / total) * 100 : 50
+                                return <>
+                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#ef4444' : '#6366f1' }} />
+                                  <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fca5a5' : '#a5b4fc' }} />
+                                </>
+                              })()}
+                            </div>
+                            <p className={`text-[10px] mt-1 font-medium ${seg.gap?.flag ? 'text-red-600' : 'text-green-600'}`}>
+                              {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% > ${seg.threshold}%` : `✓ Gap ${seg.gap.pct}% (simetris)`) : '—'}
+                            </p>
+                          </div>
+                        ))}
+
                         {trunkToLimbRatio !== null && (
-                          <div className={`p-3 rounded-lg text-xs border mb-3 ${trunkToLimbRatio > 1.0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                          <div className={`p-3 rounded-lg text-xs border mb-3 mt-3 ${trunkToLimbRatio > 1.0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
                             <p className={`font-semibold mb-1 ${trunkToLimbRatio > 1.0 ? 'text-amber-700' : 'text-green-700'}`}>
                               Trunk-to-Limb Fat Ratio: {trunkToLimbRatio.toFixed(2)} {trunkToLimbRatio > 1.0 ? '⚠ Lemak trunk dominan' : '✓ Distribusi lemak perifer'}
                             </p>
@@ -929,34 +963,7 @@ All values must be numbers or null. No other text.` }
                           )}
                           <p className="text-gray-400 mt-1.5">Kissebah & Krakower 1994 (Physiol Rev) · Chan et al. 1994 (CMAJ) · PMC5367711</p>
                         </div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1 mt-4">Asimetri Lemak Kiri–Kanan</p>
-                        <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = asimetri signifikan.</p>
-                        {[
-                          { label: 'Lengan', L: aL, R: aR, gap: armGap, threshold: 6 },
-                          { label: 'Tungkai', L: lL, R: lR, gap: legGap, threshold: 3 },
-                        ].map(seg => (
-                          <div key={seg.label} className="mb-2 p-2.5 rounded-lg bg-gray-50">
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                              <span>Kiri {seg.L} kg</span>
-                              <span className="font-semibold text-gray-700">{seg.label}</span>
-                              <span>Kanan {seg.R} kg</span>
-                            </div>
-                            <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-200">
-                              {(() => {
-                                const total = seg.L + seg.R
-                                const leftPct = total ? (seg.L / total) * 100 : 50
-                                return <>
-                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#f59e0b' : '#818cf8' }} />
-                                  <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fde68a' : '#c7d2fe' }} />
-                                </>
-                              })()}
-                            </div>
-                            <p className={`text-[10px] mt-1 font-medium ${seg.gap?.flag ? 'text-amber-600' : 'text-gray-500'}`}>
-                              {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% > ${seg.threshold}%` : `✓ Gap ${seg.gap.pct}% (simetris)`) : '—'}
-                            </p>
-                          </div>
-                        ))}
-                        <p className="text-[10px] text-gray-400 mt-1">⚠ BIA segmental cenderung underestimate fat mass di ekstremitas vs DXA. Gunakan untuk monitoring tren (Ling et al. 2011).</p>
+                        <p className="text-[10px] text-gray-400 mt-2">⚠ BIA segmental cenderung underestimate fat mass di ekstremitas vs DXA. Gunakan untuk monitoring tren (Ling et al. 2011).</p>
                       </>
                     )
                   })() : <p className="text-xs text-gray-400">Input data segmental fat di tab Input Data.</p>}
