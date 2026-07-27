@@ -152,21 +152,76 @@ function rcsLabel(score: number): { label: string; color: string } {
   return { label: 'Perlu Perbaikan', color: '#ef4444' }
 }
 
-function calcBodyTypeTag(bodyFatPct: number | null, skeletalMusclePct: number | null, gender: string): string | null {
+// InBody C/I/D Shape Classification
+// Referensi: InBody Muscle-Fat Analysis (Walker Wellness 2025; Lagree MT 2022; CrossFit Des Plaines 2022)
+// D-shape = athletic ideal: SMM bar paling panjang (SM% tinggi, BF% rendah/normal)
+// I-shape = balanced: Weight, SMM, BFM relatif sejajar (SM% normal, BF% normal)
+// C-shape = overfat: BFM > SMM (BF% tinggi, SM% rendah/normal)
+interface BodyShapeResult {
+  shape: 'D' | 'I' | 'C'
+  label: string
+  color: string
+  bg: string
+  description: string
+  risks: string
+  actions: string
+  ref: string
+}
+
+function calcBodyShape(bodyFatPct: number | null, skeletalMusclePct: number | null, gender: string): BodyShapeResult | null {
   if (bodyFatPct === null || skeletalMusclePct === null) return null
   const isMale = gender === 'male'
-  const bfHigh = isMale ? 25 : 33
-  const bfLow  = isMale ? 10 : 18
-  const smHigh = isMale ? 48 : 40
-  const smLow  = isMale ? 38 : 30
-  const bfCat = bodyFatPct < bfLow ? 'low' : bodyFatPct <= bfHigh ? 'normal' : 'high'
-  const smCat = skeletalMusclePct > smHigh ? 'high' : skeletalMusclePct >= smLow ? 'normal' : 'low'
-  const matrix: Record<string, Record<string, string>> = {
-    high:   { low: 'Active / Muscular', normal: 'Strong',              high: 'Masked Obesity' },
-    normal: { low: 'Slightly Lean',     normal: 'Standard',            high: 'Slightly Chubby' },
-    low:    { low: 'Too Lean',          normal: 'Standard — Low Muscle', high: 'Obese' },
+  // Normal range BF%: pria 10–25%, wanita 18–33% (Gallagher et al. 2000)
+  // Normal range SM%: pria 38–48%, wanita 30–40% (InBody/Tanita reference)
+  const bfNormalHigh = isMale ? 25 : 33
+  const bfNormalLow  = isMale ? 10 : 18
+  const smNormalHigh = isMale ? 48 : 40
+  const smNormalLow  = isMale ? 38 : 30
+  const bfHigh = bodyFatPct > bfNormalHigh
+  const bfLow  = bodyFatPct < bfNormalLow
+  const smHigh = skeletalMusclePct > smNormalHigh
+  const smLow  = skeletalMusclePct < smNormalLow
+
+  if (smHigh && !bfHigh) {
+    return {
+      shape: 'D', label: 'D-Shape — Athletic', color: '#059669', bg: '#ecfdf5',
+      description: `SM% ${skeletalMusclePct}% (di atas normal) · BF% ${bodyFatPct}% (${bfLow ? 'rendah' : 'normal'}). Massa otot mendominasi — profil komposisi atletis ideal.`,
+      risks: 'Risiko metabolik dan kardiovaskular minimal. Pada runner, profil ini mendukung running economy dan daya tahan optimal.',
+      actions: 'Pertahankan dengan latihan konsisten, protein 1.6–2.0 g/kg/hari, dan pemulihan adekuat. Monitor BF% agar tidak turun berlebihan.',
+      ref: 'InBody Muscle-Fat Analysis · Gallagher et al. 2000 (Am J Clin Nutr)'
+    }
   }
-  return matrix[smCat]?.[bfCat] ?? null
+  if (!smLow && !bfHigh) {
+    return {
+      shape: 'I', label: 'I-Shape — Balanced', color: '#2563eb', bg: '#eff6ff',
+      description: `SM% ${skeletalMusclePct}% (normal) · BF% ${bodyFatPct}% (normal). Komposisi seimbang — berat, otot, dan lemak proporsional.`,
+      risks: 'Risiko metabolik rendah hingga moderat. Untuk runner kompetitif, ada ruang untuk meningkatkan SM% dan menurunkan BF% agar mencapai profil D-shape.',
+      actions: 'Tambahkan resistance training 2×/minggu untuk meningkatkan SM%. Pertahankan defisit kalori ringan (200–300 kcal) untuk mengoptimalkan body composition menuju D-shape.',
+      ref: 'InBody Muscle-Fat Analysis · Lohman 1992 (Exercise Sport Sciences Reviews)'
+    }
+  }
+  if (!smHigh && bfHigh) {
+    return {
+      shape: 'C', label: 'C-Shape — Overfat', color: '#dc2626', bg: '#fef2f2',
+      description: `SM% ${skeletalMusclePct}% (${smLow ? 'rendah' : 'normal'}) · BF% ${bodyFatPct}% (tinggi). Lemak dominan terhadap otot — komposisi perlu diperbaiki.`,
+      risks: 'Peningkatan risiko resistensi insulin, hipertensi, dan penyakit kardiovaskular. Untuk runner, excess fat mass meningkatkan beban mekanikal per langkah dan menurunkan running economy (Tolfrey & Jones 2014).',
+      actions: 'Prioritaskan defisit kalori 300–500 kcal/hari dengan diet tinggi protein (1.8–2.2 g/kg). Kombinasikan lari aerobik dengan resistance training untuk mempertahankan lean mass selama fat loss.',
+      ref: 'InBody Muscle-Fat Analysis · Tolfrey & Jones 2014 (Sports Med) · Despres et al. 2006'
+    }
+  }
+  // smLow && !bfHigh — lean but undermuscled
+  return {
+    shape: 'I', label: 'I-Shape — Lean/Undermuscled', color: '#7c3aed', bg: '#f5f3ff',
+    description: `SM% ${skeletalMusclePct}% (rendah) · BF% ${bodyFatPct}% (${bfLow ? 'sangat rendah' : 'normal'}). Massa otot rendah relatif terhadap berat badan.`,
+    risks: 'Risiko sarcopenia jangka panjang. Pada runner, massa otot tungkai rendah meningkatkan risiko kelelahan dini dan cedera overuse (AWGS 2019).',
+    actions: 'Fokus pada peningkatan skeletal muscle mass: resistance training 2–3×/minggu, protein 1.8–2.2 g/kg/hari, pastikan surplus kalori moderat. Pertimbangkan creatine monohydrate 3–5 g/hari.',
+    ref: 'InBody Muscle-Fat Analysis · AWGS 2019 · Chen et al. 2020 (J Cachexia Sarcopenia Muscle)'
+  }
+}
+
+function calcBodyTypeTag(bodyFatPct: number | null, skeletalMusclePct: number | null, gender: string): string | null {
+  const result = calcBodyShape(bodyFatPct, skeletalMusclePct, gender)
+  return result ? result.label : null
 }
 
 function vfiStatus(vfi: number): { label: string; color: string; bg: string } {
@@ -493,7 +548,8 @@ All values must be numbers or null. No other text.` }
   const fatMass = latest?.weight_kg && latest?.body_fat_pct ? (latest.body_fat_pct / 100) * latest.weight_kg : null
   const leanMass = latest?.lean_body_mass_kg ?? (latest?.weight_kg && fatMass !== null ? latest.weight_kg - fatMass : null)
   const rcs = calcRCS(latest?.body_fat_pct ?? null, latest?.skeletal_muscle_pct ?? null, latest?.visceral_fat_index ?? null, gender)
-  const bodyTypeTag = calcBodyTypeTag(latest?.body_fat_pct ?? null, latest?.skeletal_muscle_pct ?? null, gender)
+  const bodyShape = calcBodyShape(latest?.body_fat_pct ?? null, latest?.skeletal_muscle_pct ?? null, gender)
+  // bodyTypeTag removed — label ditampilkan langsung dari bodyShape?.label
   const trendMsgs = useMemo(() => buildTrendAnalysis(logs), [logs])
 
   const targetRace = races.length > 0 ? races[0] : null
@@ -671,22 +727,47 @@ All values must be numbers or null. No other text.` }
                 )}
               </div>
 
-              {/* Baris 2: Body Type + Muscle Balance */}
+              {/* Baris 2: Body Type + Segmental Fat berdampingan */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
 
                 {/* Body Type */}
-                {bodyTypeTag && (
+                {bodyShape && (
                   <div className={sectionCls + ' !mb-0'}>
-                    <h2 className={headerCls}>Body Type</h2>
-                    <div className="flex items-center gap-4">
-                      <div className="px-4 py-3 bg-indigo-50 rounded-lg">
-                        <p className="text-lg font-bold text-indigo-700">{bodyTypeTag}</p>
+                    <h2 className={headerCls}>Body Type — InBody Shape Classification</h2>
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="flex-shrink-0 w-20 h-20 rounded-2xl flex flex-col items-center justify-center" style={{ background: bodyShape.bg }}>
+                        <span className="text-3xl font-black" style={{ color: bodyShape.color }}>{bodyShape.shape}</span>
+                        <span className="text-[10px] font-bold uppercase" style={{ color: bodyShape.color }}>Shape</span>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-600">Berdasarkan kombinasi Skeletal Muscle % dan Body Fat % relatif terhadap norma gender.</p>
-                        <p className="text-xs text-gray-400 mt-1">Gallagher et al. 2000; sistem InBody/Tanita</p>
+                        <p className="text-base font-bold mb-1" style={{ color: bodyShape.color }}>{bodyShape.label}</p>
+                        <p className="text-xs text-gray-600">{bodyShape.description}</p>
                       </div>
                     </div>
+                    <div className="flex items-center gap-0 mb-4 rounded-lg overflow-hidden text-[10px] font-bold text-center">
+                      {([
+                        { key: 'C', label: 'C-Shape\nOverfat', color: '#ef4444', bg: '#fee2e2' },
+                        { key: 'I', label: 'I-Shape\nBalanced', color: '#2563eb', bg: '#dbeafe' },
+                        { key: 'D', label: 'D-Shape\nAthletic', color: '#059669', bg: '#d1fae5' },
+                      ] as const).map(s => (
+                        <div key={s.key} className="flex-1 py-2 flex flex-col items-center justify-center transition-all"
+                          style={{ background: bodyShape.shape === s.key ? s.color : s.bg, color: bodyShape.shape === s.key ? 'white' : s.color, fontWeight: bodyShape.shape === s.key ? 900 : 600 }}>
+                          <span className="text-base">{s.key}</span>
+                          <span className="whitespace-pre-line leading-tight mt-0.5">{s.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="space-y-2">
+                      <div className="p-2.5 rounded-lg bg-gray-50 text-xs">
+                        <p className="font-semibold text-gray-700 mb-0.5">⚠ Risiko</p>
+                        <p className="text-gray-600">{bodyShape.risks}</p>
+                      </div>
+                      <div className="p-2.5 rounded-lg text-xs" style={{ background: bodyShape.bg }}>
+                        <p className="font-semibold mb-0.5" style={{ color: bodyShape.color }}>✅ Rekomendasi</p>
+                        <p style={{ color: bodyShape.color }}>{bodyShape.actions}</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">{bodyShape.ref}</p>
                   </div>
                 )}
 
@@ -699,77 +780,92 @@ All values must be numbers or null. No other text.` }
                     const lL = latest.seg_leg_left ?? 0, lR = latest.seg_leg_right ?? 0
                     const totalFat = aL + aR + tK + lL + lR
                     const limbFat = aL + aR + lL + lR
-                    // Trunk-to-Limb Fat Ratio — makin rendah makin baik (Camhi et al. 2011; Wilson et al. 2013)
                     const trunkToLimbRatio = limbFat > 0 ? tK / limbFat : null
-                    // Pola Android: waist-to-hip berbasis segmental — trunk dominant vs perifer (Kissebah & Krakower 1994)
                     const trunkPct = totalFat ? (tK / totalFat) * 100 : 0
-                    // InBody threshold asimetri: lengan >6%, tungkai >3% (InBody Professional Guide)
+                    const segFatStatus = (val: number, total: number, lo: number, hi: number) => {
+                      if (!total) return null
+                      const pct = (val / total) * 100
+                      if (pct < lo) return { label: 'Rendah', color: '#2563eb', bg: '#dbeafe' }
+                      if (pct > hi) return { label: 'Tinggi', color: '#ef4444', bg: '#fee2e2' }
+                      return { label: 'Normal', color: '#059669', bg: '#d1fae5' }
+                    }
                     return (
                       <>
-                        {/* Distribusi — bar proporsional antar segmen */}
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Distribusi Lemak per Segmen</p>
-                        <p className="text-xs text-gray-400 mb-2">Bar menunjukkan proporsi lemak tiap segmen terhadap total lemak segmental. Bukan indikator baik/buruk secara sendiri — gunakan bersama analisis di bawah.</p>
-                        {[
-                          { label: 'Lengan Kiri',   val: aL, color: '#818cf8' },
-                          { label: 'Lengan Kanan',  val: aR, color: '#6366f1' },
-                          { label: 'Trunk',         val: tK, color: '#f59e0b' },
-                          { label: 'Tungkai Kiri',  val: lL, color: '#34d399' },
-                          { label: 'Tungkai Kanan', val: lR, color: '#10b981' },
-                        ].map(seg => {
-                          const pct = totalFat ? (seg.val / totalFat) * 100 : 0
-                          return (
-                            <div key={seg.label} className="flex items-center gap-2 mb-1.5">
-                              <div className="w-24 text-xs text-gray-500 flex-shrink-0">{seg.label}</div>
-                              <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: seg.color }} />
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Lemak per Segmen</p>
+                        <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
+                        <div className="space-y-1.5 mb-4">
+                          {[
+                            { label: 'Lengan Kiri',   val: aL, lo: 3,  hi: 9  },
+                            { label: 'Lengan Kanan',  val: aR, lo: 3,  hi: 9  },
+                            { label: 'Trunk',         val: tK, lo: 45, hi: 62 },
+                            { label: 'Tungkai Kiri',  val: lL, lo: 12, hi: 22 },
+                            { label: 'Tungkai Kanan', val: lR, lo: 12, hi: 22 },
+                          ].map(seg => {
+                            const st = segFatStatus(seg.val, totalFat, seg.lo, seg.hi)
+                            const pct = totalFat ? (seg.val / totalFat) * 100 : 0
+                            return (
+                              <div key={seg.label} className="flex items-center gap-2">
+                                <div className="w-24 text-xs text-gray-600 flex-shrink-0">{seg.label}</div>
+                                <div className="flex-1 flex items-center gap-1">
+                                  <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width: `${Math.min(pct / 65 * 100, 100)}%`, background: st?.color ?? '#9ca3af' }} />
+                                  </div>
+                                  <span className="text-[10px] font-mono text-gray-500 w-12 text-right">{seg.val} kg</span>
+                                </div>
+                                {st && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 w-14 text-center" style={{ background: st.bg, color: st.color }}>{st.label}</span>}
                               </div>
-                              <div className="w-20 text-xs text-right font-mono text-gray-600">{seg.val} kg ({pct.toFixed(0)}%)</div>
-                            </div>
-                          )
-                        })}
-
-                        {/* Trunk-to-Limb Fat Ratio */}
+                            )
+                          })}
+                        </div>
                         {trunkToLimbRatio !== null && (
-                          <div className={`mt-4 p-3 rounded-lg text-xs border ${trunkToLimbRatio > 1.0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+                          <div className={`p-3 rounded-lg text-xs border mb-3 ${trunkToLimbRatio > 1.0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
                             <p className={`font-semibold mb-1 ${trunkToLimbRatio > 1.0 ? 'text-amber-700' : 'text-green-700'}`}>
-                              Trunk-to-Limb Fat Ratio: {trunkToLimbRatio.toFixed(2)}
-                              {trunkToLimbRatio > 1.0 ? ' ⚠ Lemak trunk dominan' : ' ✓ Distribusi lemak perifer'}
+                              Trunk-to-Limb Fat Ratio: {trunkToLimbRatio.toFixed(2)} {trunkToLimbRatio > 1.0 ? '⚠ Lemak trunk dominan' : '✓ Distribusi lemak perifer'}
                             </p>
-                            <p className={trunkToLimbRatio > 1.0 ? 'text-amber-600' : 'text-green-600'}>
+                            <p className={`mb-1.5 ${trunkToLimbRatio > 1.0 ? 'text-amber-700' : 'text-green-700'}`}>
                               {trunkToLimbRatio > 1.0
-                                ? `Lemak trunk (${tK} kg) melebihi total lemak ekstremitas (${limbFat.toFixed(1)} kg). Distribusi lemak sentral berkorelasi dengan risiko metabolik dan kardiovaskular yang lebih tinggi.`
-                                : `Lemak ekstremitas (${limbFat.toFixed(1)} kg) lebih dominan dari trunk (${tK} kg) — distribusi lemak perifer lebih menguntungkan secara metabolik.`}
+                                ? `Lemak trunk (${tK} kg) melebihi total lemak ekstremitas (${limbFat.toFixed(1)} kg).`
+                                : `Lemak ekstremitas (${limbFat.toFixed(1)} kg) lebih dominan dari trunk (${tK} kg) — distribusi metabolik yang sehat.`}
                             </p>
-                            <p className="text-gray-400 mt-1">Camhi et al. 2011 (Obesity) · Wilson et al. 2013 (Diabetes Care)</p>
+                            {trunkToLimbRatio > 1.0 && (
+                              <>
+                                <p className="text-amber-600 mb-1"><strong>Risiko:</strong> Lemak visceral berkorelasi dengan resistensi insulin, dislipidemia, dan penurunan VO₂max. Pada runner, visceral fat tinggi menurunkan ekonomi lari dan meningkatkan beban kardiovaskular.</p>
+                                <p className="text-amber-600"><strong>Aksi:</strong> Defisit kalori sedang 300–500 kcal/hari, prioritaskan Zone 2 run 150+ mnt/minggu. Hindari defisit agresif agar massa otot terjaga.</p>
+                              </>
+                            )}
+                            <p className="text-gray-400 mt-1.5">Camhi et al. 2011 (Obesity) · Wilson et al. 2013 (Diabetes Care)</p>
                           </div>
                         )}
-
-                        {/* Pola Android vs Gynoid */}
-                        <div className={`mt-3 p-3 rounded-lg text-xs border ${trunkPct > 50 ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
-                          <p className={`font-semibold mb-1 ${trunkPct > 50 ? 'text-amber-700' : 'text-gray-700'}`}>
-                            Pola distribusi: Trunk {trunkPct.toFixed(0)}% dari total lemak segmental
-                            {trunkPct > 50 ? ' — Kecenderungan Central (Android)' : ' — Kecenderungan Perifer (Gynoid)'}
+                        <div className={`p-3 rounded-lg text-xs border ${trunkPct > 55 ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                          <p className={`font-semibold mb-1 ${trunkPct > 55 ? 'text-amber-700' : 'text-gray-700'}`}>
+                            Pola Distribusi: Trunk {trunkPct.toFixed(0)}% {trunkPct > 55 ? '— Kecenderungan Central (Android)' : '— Kecenderungan Perifer (Gynoid)'}
                           </p>
-                          <p className="text-gray-500">
-                            Lemak viseral (trunk) berkorelasi lebih kuat dengan risiko kardiovaskular dibanding lemak subkutan perifer. Pada pelari maraton, distribusi lemak trunk lebih rendah 73% dibanding non-runner.
+                          <p className={`mb-1.5 ${trunkPct > 55 ? 'text-amber-600' : 'text-gray-600'}`}>
+                            {trunkPct > 55
+                              ? `Trunk ${trunkPct.toFixed(0)}% melebihi rata-rata populasi. Pelari maraton elite memiliki distribusi trunk lebih rendah karena adaptasi aerobik jangka panjang.`
+                              : `Distribusi trunk ${trunkPct.toFixed(0)}% dalam rentang proporsional. Distribusi perifer lebih menguntungkan secara metabolik.`}
                           </p>
-                          <p className="text-gray-400 mt-1">Kissebah & Krakower 1994 (Physiol Rev) · Chan et al. 1994 (CMAJ) · Townsend et al. 2020 (PMC7073848)</p>
+                          {trunkPct > 55 && (
+                            <>
+                              <p className="text-amber-600 mb-1"><strong>Risiko:</strong> Lemak viseral berkorelasi lebih kuat dengan risiko kardiovaskular dibanding lemak subkutan perifer. Visceral fat tinggi juga berkorelasi dengan performa lari yang lebih rendah.</p>
+                              <p className="text-amber-600"><strong>Aksi:</strong> Zone 2 run 3–4×/minggu adalah intervensi paling efektif untuk reduksi lemak trunk. Kurangi karbohidrat sederhana dan alkohol yang preferensially disimpan sebagai visceral fat.</p>
+                            </>
+                          )}
+                          <p className="text-gray-400 mt-1.5">Kissebah & Krakower 1994 (Physiol Rev) · Chan et al. 1994 (CMAJ) · PMC5367711</p>
                         </div>
-
-                        {/* Asimetri L/R */}
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-4">Asimetri Kiri–Kanan</p>
-                        <p className="text-xs text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = asimetri signifikan (kemungkinan imbalance atau retensi cairan lokal).</p>
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1 mt-4">Asimetri Lemak Kiri–Kanan</p>
+                        <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = asimetri signifikan.</p>
                         {[
                           { label: 'Lengan', L: aL, R: aR, gap: armGap, threshold: 6 },
                           { label: 'Tungkai', L: lL, R: lR, gap: legGap, threshold: 3 },
                         ].map(seg => (
-                          <div key={seg.label} className="mb-3 p-3 rounded-lg bg-gray-50">
+                          <div key={seg.label} className="mb-2 p-2.5 rounded-lg bg-gray-50">
                             <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
                               <span>Kiri {seg.L} kg</span>
                               <span className="font-semibold text-gray-700">{seg.label}</span>
                               <span>Kanan {seg.R} kg</span>
                             </div>
-                            <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
+                            <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-200">
                               {(() => {
                                 const total = seg.L + seg.R
                                 const leftPct = total ? (seg.L / total) * 100 : 50
@@ -779,24 +875,20 @@ All values must be numbers or null. No other text.` }
                                 </>
                               })()}
                             </div>
-                            <p className={`text-xs mt-1 font-medium ${seg.gap?.flag ? 'text-amber-600' : 'text-gray-500'}`}>
-                              {seg.gap
-                                ? seg.gap.flag
-                                  ? `⚠ Gap ${seg.gap.pct}% — melebihi threshold ${seg.threshold}% (InBody Professional Guide)`
-                                  : `✓ Gap ${seg.gap.pct}% — simetris (threshold ${seg.threshold}%)`
-                                : '—'}
+                            <p className={`text-[10px] mt-1 font-medium ${seg.gap?.flag ? 'text-amber-600' : 'text-gray-500'}`}>
+                              {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% > ${seg.threshold}%` : `✓ Gap ${seg.gap.pct}% (simetris)`) : '—'}
                             </p>
                           </div>
                         ))}
-                        <p className="text-xs text-gray-400 mt-1">⚠ Catatan: BIA segmental cenderung underestimate fat mass di ekstremitas dibanding DXA. Gunakan sebagai monitoring tren, bukan nilai absolut klinis (Ling et al. 2011, J Clin Densitom).</p>
+                        <p className="text-[10px] text-gray-400 mt-1">⚠ BIA segmental cenderung underestimate fat mass di ekstremitas vs DXA. Gunakan untuk monitoring tren (Ling et al. 2011).</p>
                       </>
                     )
-                  })() : (
-                    <p className="text-xs text-gray-400">Input data segmental fat di tab Input Data.</p>
-                  )}
+                  })() : <p className="text-xs text-gray-400">Input data segmental fat di tab Input Data.</p>}
                 </div>
+              </div>
 
-                {/* Muscle Balance */}
+              {/* Baris 3: Muscle Balance (full width) */}
+              <div className="mb-5">
                 <div className={sectionCls + ' !mb-0'}>
                   <h2 className={headerCls}>Muscle Balance</h2>
                   {latestMuscle ? (() => {
@@ -806,127 +898,120 @@ All values must be numbers or null. No other text.` }
                     const lL = latestMuscle.seg_muscle_leg_left ?? 0
                     const lR = latestMuscle.seg_muscle_leg_right ?? 0
                     const totalMuscle = aL + aR + tK + lL + lR
-                    // SMI dari DB (Skeletal Muscle Index = total SMM / height²) — AWGS 2019: pria normal ≥7.0, rendah <7.0
                     const smiVal = latestMuscle.smi ?? null
-                    // Upper-Lower Ratio (informatif, bukan threshold klinis)
                     const upperLowerRatio = (lL + lR) > 0 ? (aL + aR) / (lL + lR) : null
+                    const segMuscleStatus = (val: number, total: number, lo: number, hi: number) => {
+                      if (!total) return null
+                      const pct = (val / total) * 100
+                      if (pct < lo) return { label: 'Rendah', color: '#ef4444', bg: '#fee2e2' }
+                      if (pct > hi) return { label: 'Normal+', color: '#059669', bg: '#d1fae5' }
+                      return { label: 'Normal', color: '#2563eb', bg: '#dbeafe' }
+                    }
                     return (
                       <>
                         {latestMuscle.recorded_date !== latest?.recorded_date && (
-                          <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })} (entri terbaru belum memiliki data muscle)</p>
+                          <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                         )}
-
-                        {/* Distribusi proporsional */}
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Distribusi Otot per Segmen</p>
-                        <p className="text-xs text-gray-400 mb-2">Bar menunjukkan proporsi otot tiap segmen. Gunakan bersama analisis asimetri dan SMI di bawah.</p>
-                        {[
-                          { label: 'Lengan Kiri',   val: aL, color: '#818cf8' },
-                          { label: 'Lengan Kanan',  val: aR, color: '#6366f1' },
-                          { label: 'Trunk',         val: tK, color: '#f59e0b' },
-                          { label: 'Tungkai Kiri',  val: lL, color: '#34d399' },
-                          { label: 'Tungkai Kanan', val: lR, color: '#10b981' },
-                        ].map(seg => {
-                          const pct = totalMuscle ? (seg.val / totalMuscle) * 100 : 0
-                          return (
-                            <div key={seg.label} className="flex items-center gap-2 mb-1.5">
-                              <div className="w-24 text-xs text-gray-500 flex-shrink-0">{seg.label}</div>
-                              <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
-                                <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: seg.color }} />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                          <div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Otot per Segmen</p>
+                            <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
+                            <div className="space-y-1.5 mb-4">
+                              {[
+                                { label: 'Lengan Kiri',   val: aL, lo: 4,  hi: 8  },
+                                { label: 'Lengan Kanan',  val: aR, lo: 4,  hi: 8  },
+                                { label: 'Trunk',         val: tK, lo: 45, hi: 58 },
+                                { label: 'Tungkai Kiri',  val: lL, lo: 16, hi: 22 },
+                                { label: 'Tungkai Kanan', val: lR, lo: 16, hi: 22 },
+                              ].map(seg => {
+                                const st = segMuscleStatus(seg.val, totalMuscle, seg.lo, seg.hi)
+                                const pct = totalMuscle ? (seg.val / totalMuscle) * 100 : 0
+                                return (
+                                  <div key={seg.label} className="flex items-center gap-2">
+                                    <div className="w-24 text-xs text-gray-600 flex-shrink-0">{seg.label}</div>
+                                    <div className="flex-1 flex items-center gap-1">
+                                      <div className="flex-1 h-3 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full" style={{ width: `${Math.min(pct / 58 * 100, 100)}%`, background: st?.color ?? '#9ca3af' }} />
+                                      </div>
+                                      <span className="text-[10px] font-mono text-gray-500 w-12 text-right">{seg.val} kg</span>
+                                    </div>
+                                    {st && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 w-14 text-center" style={{ background: st.bg, color: st.color }}>{st.label}</span>}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Asimetri Otot Kiri–Kanan</p>
+                            <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3%.</p>
+                            {[
+                              { label: 'Lengan', L: aL, R: aR, gap: muscleArmGap, threshold: 6 },
+                              { label: 'Tungkai', L: lL, R: lR, gap: muscleLegGap, threshold: 3 },
+                            ].map(seg => (
+                              <div key={seg.label} className="mb-2 p-2.5 rounded-lg bg-gray-50">
+                                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                  <span>Kiri {seg.L} kg</span>
+                                  <span className="font-semibold text-gray-700">{seg.label}</span>
+                                  <span>Kanan {seg.R} kg</span>
+                                </div>
+                                <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-200">
+                                  {(() => {
+                                    const total = seg.L + seg.R
+                                    const leftPct = total ? (seg.L / total) * 100 : 50
+                                    return <>
+                                      <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#ef4444' : '#6366f1' }} />
+                                      <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fca5a5' : '#a5b4fc' }} />
+                                    </>
+                                  })()}
+                                </div>
+                                <p className={`text-[10px] mt-1 font-medium ${seg.gap?.flag ? 'text-red-600' : 'text-green-600'}`}>
+                                  {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% > ${seg.threshold}% — pertimbangkan unilateral training` : `✓ Gap ${seg.gap.pct}% (simetris)`) : '—'}
+                                </p>
                               </div>
-                              <div className="w-20 text-xs text-right font-mono text-gray-600">{seg.val} kg ({pct.toFixed(0)}%)</div>
-                            </div>
-                          )
-                        })}
-
-                        {/* SMI — satu-satunya threshold yang benar-benar tervalidasi */}
-                        {smiVal !== null && (
-                          <div className={`mt-4 p-3 rounded-lg text-xs border ${
-                            smiVal >= 7.0 ? 'bg-green-50 border-green-200' :
-                            smiVal >= 5.7 ? 'bg-amber-50 border-amber-200' :
-                            'bg-red-50 border-red-200'
-                          }`}>
-                            <p className={`font-semibold mb-1 ${
-                              smiVal >= 7.0 ? 'text-green-700' :
-                              smiVal >= 5.7 ? 'text-amber-700' : 'text-red-700'
-                            }`}>
-                              SMI (Skeletal Muscle Index): {smiVal} kg/m²
-                              {smiVal >= 7.0 ? ' ✓ Normal' : smiVal >= 5.7 ? ' ⚠ Moderat — perlu diperhatikan' : ' 🔴 Rendah — risiko sarcopenia'}
-                            </p>
-                            <p className={smiVal >= 7.0 ? 'text-green-600' : smiVal >= 5.7 ? 'text-amber-600' : 'text-red-600'}>
-                              {smiVal >= 7.0
-                                ? `SMI ${smiVal} kg/m² berada di rentang normal untuk pria Asia. Massa otot total proporsional terhadap tinggi badan.`
-                                : smiVal >= 5.7
-                                ? `SMI ${smiVal} kg/m² di bawah normal (≥7.0). Pertimbangkan peningkatan protein (1.6–2.0 g/kg/hari) dan resistance training 2×/minggu.`
-                                : `SMI ${smiVal} kg/m² menunjukkan kemungkinan sarcopenia. Konsultasikan dengan dokter dan ahli gizi.`}
-                            </p>
-                            <p className="text-gray-400 mt-1">AWGS 2019 (Asian Working Group for Sarcopenia) · Chen et al. 2020 (J Cachexia Sarcopenia Muscle) · Threshold pria Asia: normal ≥7.0 kg/m²</p>
+                            ))}
                           </div>
-                        )}
-
-                        {/* Asimetri L/R */}
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-2 mt-4">Asimetri Kiri–Kanan</p>
-                        <p className="text-xs text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = kemungkinan strength imbalance atau efek cedera sebelumnya.</p>
-                        {[
-                          { label: 'Lengan', L: aL, R: aR, gap: muscleArmGap, threshold: 6 },
-                          { label: 'Tungkai', L: lL, R: lR, gap: muscleLegGap, threshold: 3 },
-                        ].map(seg => (
-                          <div key={seg.label} className="mb-3 p-3 rounded-lg bg-gray-50">
-                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                              <span>Kiri {seg.L} kg</span>
-                              <span className="font-semibold text-gray-700">{seg.label}</span>
-                              <span>Kanan {seg.R} kg</span>
-                            </div>
-                            <div className="flex h-3 rounded-full overflow-hidden bg-gray-200">
-                              {(() => {
-                                const total = seg.L + seg.R
-                                const leftPct = total ? (seg.L / total) * 100 : 50
-                                return <>
-                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#ef4444' : '#6366f1' }} />
-                                  <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fca5a5' : '#a5b4fc' }} />
-                                </>
-                              })()}
-                            </div>
-                            <p className={`text-xs mt-1 font-medium ${seg.gap?.flag ? 'text-red-600' : 'text-green-600'}`}>
-                              {seg.gap
-                                ? seg.gap.flag
-                                  ? `⚠ Gap ${seg.gap.pct}% — melebihi threshold ${seg.threshold}% (InBody Professional Guide). Pertimbangkan unilateral strength training.`
-                                  : `✓ Gap ${seg.gap.pct}% — dalam batas normal (<${seg.threshold}%)`
-                                : '—'}
-                            </p>
+                          <div className="space-y-3">
+                            {smiVal !== null && (
+                              <div className={`p-3 rounded-lg text-xs border ${smiVal >= 7.0 ? 'bg-green-50 border-green-200' : smiVal >= 5.7 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+                                <p className={`font-semibold mb-1 ${smiVal >= 7.0 ? 'text-green-700' : smiVal >= 5.7 ? 'text-amber-700' : 'text-red-700'}`}>
+                                  SMI: {smiVal} kg/m² {smiVal >= 7.0 ? '✓ Normal' : smiVal >= 5.7 ? '⚠ Moderat' : '🔴 Rendah'}
+                                </p>
+                                <p className={`mb-1 ${smiVal >= 7.0 ? 'text-green-600' : smiVal >= 5.7 ? 'text-amber-600' : 'text-red-600'}`}>
+                                  {smiVal >= 7.0
+                                    ? `SMI ${smiVal} kg/m² dalam rentang normal pria Asia (≥7.0). Massa otot total proporsional terhadap tinggi badan.`
+                                    : smiVal >= 5.7
+                                    ? `SMI ${smiVal} kg/m² di bawah normal (≥7.0 kg/m²). Massa otot relatif kurang terhadap tinggi badan.`
+                                    : `SMI ${smiVal} kg/m² menunjukkan kemungkinan sarcopenia. Konsultasikan dengan dokter.`}
+                                </p>
+                                {smiVal < 7.0 && (
+                                  <p className={smiVal >= 5.7 ? 'text-amber-600' : 'text-red-600'}>
+                                    <strong>Aksi:</strong> Tingkatkan asupan protein (1.6–2.0 g/kg/hari) dan tambahkan resistance training 2–3×/minggu (squat, deadlift, lunges).
+                                  </p>
+                                )}
+                                <p className="text-gray-400 mt-1">AWGS 2019 · Chen et al. 2020 · Threshold pria Asia: ≥7.0 kg/m²</p>
+                              </div>
+                            )}
+                            {upperLowerRatio !== null && (
+                              <div className="p-3 rounded-lg bg-gray-50 text-xs border border-gray-200">
+                                <p className="font-semibold text-gray-700 mb-1">
+                                  Upper–Lower Muscle Ratio: {upperLowerRatio.toFixed(2)}
+                                  <span className="ml-1 text-gray-500">{upperLowerRatio < 0.35 ? '— Tungkai sangat dominan' : upperLowerRatio < 0.50 ? '— Tungkai dominan' : '— Upper-lower relatif seimbang'}</span>
+                                </p>
+                                <p className="text-gray-600 mb-1">Rasio otot lengan ({(aL+aR).toFixed(1)} kg) terhadap tungkai ({(lL+lR).toFixed(1)} kg). Untuk pelari jarak jauh, dominasi tungkai adalah adaptasi fisiologis yang lazim.</p>
+                                <p className="text-gray-500 italic text-[10px]">Nilai informatif — belum ada threshold klinis tervalidasi spesifik untuk runner dari BIA segmental.</p>
+                              </div>
+                            )}
+                            {tK > 0 && (
+                              <div className="p-3 rounded-lg bg-gray-50 text-xs border border-gray-200">
+                                <p className="font-semibold text-gray-700 mb-1">Otot Trunk (Core): {tK} kg <span className="text-gray-500">({totalMuscle ? ((tK/totalMuscle)*100).toFixed(0) : 0}%)</span></p>
+                                <p className="text-gray-600">Core muscle berperan dalam stabilitas pelvis dan efisiensi stride. Kelemahan core berkorelasi dengan peningkatan risiko IT band syndrome dan low back pain pada pelari.</p>
+                                <p className="text-gray-400 mt-1">Leetun et al. 2004 (Med Sci Sports Exerc) · Reiman & Manske 2009</p>
+                              </div>
+                            )}
+                            <p className="text-[10px] text-gray-400">Asimetri: InBody Professional Guide · SMI: AWGS 2019 · Distribusi: NHANES DXA PMC5367711 · Core: Leetun et al. 2004</p>
                           </div>
-                        ))}
-
-                        {/* Upper-Lower Ratio — informatif, tanpa threshold klinis */}
-                        {upperLowerRatio !== null && (
-                          <div className="mt-1 p-3 rounded-lg bg-gray-50 text-xs">
-                            <p className="font-semibold text-gray-700 mb-1">
-                              Upper–Lower Muscle Ratio: {upperLowerRatio.toFixed(2)}
-                              {upperLowerRatio < 0.35 ? ' — Tungkai sangat dominan' : upperLowerRatio < 0.50 ? ' — Tungkai dominan' : ' — Relatif seimbang upper-lower'}
-                            </p>
-                            <p className="text-gray-500">
-                              Rasio otot lengan terhadap tungkai. Untuk pelari, dominasi otot tungkai adalah profil yang lazim. Nilai ini bersifat informatif — belum ada threshold klinis tervalidasi spesifik untuk runner dari BIA segmental.
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Trunk */}
-                        {tK > 0 && (
-                          <div className="mt-3 p-3 rounded-lg bg-gray-50 text-xs">
-                            <span className="font-semibold text-gray-700">Otot Trunk: {tK} kg</span>
-                            <span className="text-gray-500 ml-2">({totalMuscle ? ((tK / totalMuscle) * 100).toFixed(0) : 0}% dari total segmental)</span>
-                            <p className="text-gray-500 mt-0.5">Core muscle (trunk) berperan dalam stabilitas pelvis dan efisiensi stride saat berlari (Leetun et al. 2004, Med Sci Sports Exerc).</p>
-                          </div>
-                        )}
-
-                        <p className="text-xs text-gray-400 mt-3">
-                          SMI: AWGS 2019 · Chen et al. 2020 · Asimetri: InBody Professional Guide ·
-                          Core: Leetun et al. 2004 · Data skeletal muscle mass dari BIA segmental (akurasi r=0.95 vs DXA, Ling et al. 2011).
-                        </p>
+                        </div>
                       </>
                     )
-                  })() : (
-                    <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>
-                  )}
+                  })() : <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>}
                 </div>
               </div>
 
