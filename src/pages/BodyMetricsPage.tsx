@@ -853,7 +853,6 @@ All values must be numbers or null. No other text.` }
                     )
                   })() : <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>}
                 </div>
-                </div>
                 {/* Segmental Fat Analysis */}
                 <div className={sectionCls + ' !mb-0'}>
                   <h2 className={headerCls}>Segmental Fat Analysis</h2>
@@ -967,6 +966,7 @@ All values must be numbers or null. No other text.` }
                       </>
                     )
                   })() : <p className="text-xs text-gray-400">Input data segmental fat di tab Input Data.</p>}
+                </div>
               </div>
 
               {/* Baris 4: Body Type — InBody Shape Classification */}
