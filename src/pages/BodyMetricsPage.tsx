@@ -752,11 +752,9 @@ All values must be numbers or null. No other text.` }
                         {latestMuscle.recorded_date !== latest?.recorded_date && (
                           <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                         )}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                          <div>
-                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Otot per Segmen</p>
-                            <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
-                            <div className="space-y-1.5 mb-4">
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Otot per Segmen</p>
+                        <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
+                        <div className="space-y-1.5 mb-4">
                               {[
                                 { label: 'Lengan Kiri',   val: aL, lo: 4,  hi: 8  },
                                 { label: 'Lengan Kanan',  val: aR, lo: 4,  hi: 8  },
@@ -779,76 +777,72 @@ All values must be numbers or null. No other text.` }
                                   </div>
                                 )
                               })}
-                            </div>
-                            <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Asimetri Otot Kiri–Kanan</p>
-                            <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3%.</p>
-                            {[
-                              { label: 'Lengan', L: aL, R: aR, gap: muscleArmGap, threshold: 6 },
-                              { label: 'Tungkai', L: lL, R: lR, gap: muscleLegGap, threshold: 3 },
-                            ].map(seg => (
-                              <div key={seg.label} className="mb-2 p-2.5 rounded-lg bg-gray-50">
-                                <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                  <span>Kiri {seg.L} kg</span>
-                                  <span className="font-semibold text-gray-700">{seg.label}</span>
-                                  <span>Kanan {seg.R} kg</span>
-                                </div>
-                                <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-200">
-                                  {(() => {
-                                    const total = seg.L + seg.R
-                                    const leftPct = total ? (seg.L / total) * 100 : 50
-                                    return <>
-                                      <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#ef4444' : '#6366f1' }} />
-                                      <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fca5a5' : '#a5b4fc' }} />
-                                    </>
-                                  })()}
-                                </div>
-                                <p className={`text-[10px] mt-1 font-medium ${seg.gap?.flag ? 'text-red-600' : 'text-green-600'}`}>
-                                  {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% > ${seg.threshold}% — pertimbangkan unilateral training` : `✓ Gap ${seg.gap.pct}% (simetris)`) : '—'}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="space-y-3">
-                            {smiVal !== null && (
-                              <div className={`p-3 rounded-lg text-xs border ${smiVal >= 7.0 ? 'bg-green-50 border-green-200' : smiVal >= 5.7 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
-                                <p className={`font-semibold mb-1 ${smiVal >= 7.0 ? 'text-green-700' : smiVal >= 5.7 ? 'text-amber-700' : 'text-red-700'}`}>
-                                  SMI: {smiVal} kg/m² {smiVal >= 7.0 ? '✓ Normal' : smiVal >= 5.7 ? '⚠ Moderat' : '🔴 Rendah'}
-                                </p>
-                                <p className={`mb-1 ${smiVal >= 7.0 ? 'text-green-600' : smiVal >= 5.7 ? 'text-amber-600' : 'text-red-600'}`}>
-                                  {smiVal >= 7.0
-                                    ? `SMI ${smiVal} kg/m² dalam rentang normal pria Asia (≥7.0). Massa otot total proporsional terhadap tinggi badan.`
-                                    : smiVal >= 5.7
-                                    ? `SMI ${smiVal} kg/m² di bawah normal (≥7.0 kg/m²). Massa otot relatif kurang terhadap tinggi badan.`
-                                    : `SMI ${smiVal} kg/m² menunjukkan kemungkinan sarcopenia. Konsultasikan dengan dokter.`}
-                                </p>
-                                {smiVal < 7.0 && (
-                                  <p className={smiVal >= 5.7 ? 'text-amber-600' : 'text-red-600'}>
-                                    <strong>Aksi:</strong> Tingkatkan asupan protein (1.6–2.0 g/kg/hari) dan tambahkan resistance training 2–3×/minggu (squat, deadlift, lunges).
-                                  </p>
-                                )}
-                                <p className="text-gray-400 mt-1">AWGS 2019 · Chen et al. 2020 · Threshold pria Asia: ≥7.0 kg/m²</p>
-                              </div>
-                            )}
-                            {upperLowerRatio !== null && (
-                              <div className="p-3 rounded-lg bg-gray-50 text-xs border border-gray-200">
-                                <p className="font-semibold text-gray-700 mb-1">
-                                  Upper–Lower Muscle Ratio: {upperLowerRatio.toFixed(2)}
-                                  <span className="ml-1 text-gray-500">{upperLowerRatio < 0.35 ? '— Tungkai sangat dominan' : upperLowerRatio < 0.50 ? '— Tungkai dominan' : '— Upper-lower relatif seimbang'}</span>
-                                </p>
-                                <p className="text-gray-600 mb-1">Rasio otot lengan ({(aL+aR).toFixed(1)} kg) terhadap tungkai ({(lL+lR).toFixed(1)} kg). Untuk pelari jarak jauh, dominasi tungkai adalah adaptasi fisiologis yang lazim.</p>
-                                <p className="text-gray-500 italic text-[10px]">Nilai informatif — belum ada threshold klinis tervalidasi spesifik untuk runner dari BIA segmental.</p>
-                              </div>
-                            )}
-                            {tK > 0 && (
-                              <div className="p-3 rounded-lg bg-gray-50 text-xs border border-gray-200">
-                                <p className="font-semibold text-gray-700 mb-1">Otot Trunk (Core): {tK} kg <span className="text-gray-500">({totalMuscle ? ((tK/totalMuscle)*100).toFixed(0) : 0}%)</span></p>
-                                <p className="text-gray-600">Core muscle berperan dalam stabilitas pelvis dan efisiensi stride. Kelemahan core berkorelasi dengan peningkatan risiko IT band syndrome dan low back pain pada pelari.</p>
-                                <p className="text-gray-400 mt-1">Leetun et al. 2004 (Med Sci Sports Exerc) · Reiman & Manske 2009</p>
-                              </div>
-                            )}
-                            <p className="text-[10px] text-gray-400">Asimetri: InBody Professional Guide · SMI: AWGS 2019 · Distribusi: NHANES DXA PMC5367711 · Core: Leetun et al. 2004</p>
-                          </div>
                         </div>
+                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Asimetri Otot Kiri–Kanan</p>
+                        <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3%.</p>
+                        {[
+                          { label: 'Lengan', L: aL, R: aR, gap: muscleArmGap, threshold: 6 },
+                          { label: 'Tungkai', L: lL, R: lR, gap: muscleLegGap, threshold: 3 },
+                        ].map(seg => (
+                          <div key={seg.label} className="mb-2 p-2.5 rounded-lg bg-gray-50">
+                            <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                              <span>Kiri {seg.L} kg</span>
+                              <span className="font-semibold text-gray-700">{seg.label}</span>
+                              <span>Kanan {seg.R} kg</span>
+                            </div>
+                            <div className="flex h-2.5 rounded-full overflow-hidden bg-gray-200">
+                              {(() => {
+                                const total = seg.L + seg.R
+                                const leftPct = total ? (seg.L / total) * 100 : 50
+                                return <>
+                                  <div className="h-full transition-all" style={{ width: `${leftPct}%`, background: seg.gap?.flag ? '#ef4444' : '#6366f1' }} />
+                                  <div className="h-full flex-1" style={{ background: seg.gap?.flag ? '#fca5a5' : '#a5b4fc' }} />
+                                </>
+                              })()}
+                            </div>
+                            <p className={`text-[10px] mt-1 font-medium ${seg.gap?.flag ? 'text-red-600' : 'text-green-600'}`}>
+                              {seg.gap ? (seg.gap.flag ? `⚠ Gap ${seg.gap.pct}% > ${seg.threshold}% — pertimbangkan unilateral training` : `✓ Gap ${seg.gap.pct}% (simetris)`) : '—'}
+                            </p>
+                          </div>
+                        ))}
+                        {smiVal !== null && (
+                          <div className={`p-3 rounded-lg text-xs border mt-3 ${smiVal >= 7.0 ? 'bg-green-50 border-green-200' : smiVal >= 5.7 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200'}`}>
+                            <p className={`font-semibold mb-1 ${smiVal >= 7.0 ? 'text-green-700' : smiVal >= 5.7 ? 'text-amber-700' : 'text-red-700'}`}>
+                              SMI: {smiVal} kg/m² {smiVal >= 7.0 ? '✓ Normal' : smiVal >= 5.7 ? '⚠ Moderat' : '🔴 Rendah'}
+                            </p>
+                            <p className={`mb-1 ${smiVal >= 7.0 ? 'text-green-600' : smiVal >= 5.7 ? 'text-amber-600' : 'text-red-600'}`}>
+                              {smiVal >= 7.0
+                                ? `SMI ${smiVal} kg/m² dalam rentang normal pria Asia (≥7.0). Massa otot total proporsional terhadap tinggi badan.`
+                                : smiVal >= 5.7
+                                ? `SMI ${smiVal} kg/m² di bawah normal (≥7.0 kg/m²). Massa otot relatif kurang terhadap tinggi badan.`
+                                : `SMI ${smiVal} kg/m² menunjukkan kemungkinan sarcopenia. Konsultasikan dengan dokter.`}
+                            </p>
+                            {smiVal < 7.0 && (
+                              <p className={smiVal >= 5.7 ? 'text-amber-600' : 'text-red-600'}>
+                                <strong>Aksi:</strong> Tingkatkan asupan protein (1.6–2.0 g/kg/hari) dan tambahkan resistance training 2–3×/minggu (squat, deadlift, lunges).
+                              </p>
+                            )}
+                            <p className="text-gray-400 mt-1">AWGS 2019 · Chen et al. 2020 · Threshold pria Asia: ≥7.0 kg/m²</p>
+                          </div>
+                        )}
+                        {upperLowerRatio !== null && (
+                          <div className="p-3 rounded-lg bg-gray-50 text-xs border border-gray-200 mt-3">
+                            <p className="font-semibold text-gray-700 mb-1">
+                              Upper–Lower Muscle Ratio: {upperLowerRatio.toFixed(2)}
+                              <span className="ml-1 text-gray-500">{upperLowerRatio < 0.35 ? '— Tungkai sangat dominan' : upperLowerRatio < 0.50 ? '— Tungkai dominan' : '— Upper-lower relatif seimbang'}</span>
+                            </p>
+                            <p className="text-gray-600 mb-1">Rasio otot lengan ({(aL+aR).toFixed(1)} kg) terhadap tungkai ({(lL+lR).toFixed(1)} kg). Untuk pelari jarak jauh, dominasi tungkai adalah adaptasi fisiologis yang lazim.</p>
+                            <p className="text-gray-500 italic text-[10px]">Nilai informatif — belum ada threshold klinis tervalidasi spesifik untuk runner dari BIA segmental.</p>
+                          </div>
+                        )}
+                        {tK > 0 && (
+                          <div className="p-3 rounded-lg bg-gray-50 text-xs border border-gray-200 mt-3">
+                            <p className="font-semibold text-gray-700 mb-1">Otot Trunk (Core): {tK} kg <span className="text-gray-500">({totalMuscle ? ((tK/totalMuscle)*100).toFixed(0) : 0}%)</span></p>
+                            <p className="text-gray-600">Core muscle berperan dalam stabilitas pelvis dan efisiensi stride. Kelemahan core berkorelasi dengan peningkatan risiko IT band syndrome dan low back pain pada pelari.</p>
+                            <p className="text-gray-400 mt-1">Leetun et al. 2004 (Med Sci Sports Exerc) · Reiman & Manske 2009</p>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-gray-400 mt-3">Asimetri: InBody Professional Guide · SMI: AWGS 2019 · Distribusi: NHANES DXA PMC5367711 · Core: Leetun et al. 2004</p>
                       </>
                     )
                   })() : <p className="text-xs text-gray-400">Input data skeletal muscle per segmen di tab Input Data.</p>}
