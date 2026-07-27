@@ -579,12 +579,21 @@ All values must be numbers or null. No other text.` }
   })), [logs])
 
   // ── Styles ──
-  const sectionCls = 'bg-white rounded-xl shadow-sm p-5 mb-5'
-  const headerCls  = 'font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4'
-  const labelCls   = 'block text-xs font-medium text-gray-500 uppercase mb-1'
-  const valueCls   = 'text-sm font-bold text-gray-800'
-  const inputCls   = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300'
-  const cardCls    = 'bg-gray-50 rounded-lg p-3'
+  const sectionCls   = 'bg-white rounded-xl shadow-sm p-5 mb-5'
+  const headerCls    = 'font-gsans text-xl text-indigo-700 uppercase border-b border-indigo-100 pb-2 mb-4'
+  const subHeaderCls = 'text-xs font-bold text-indigo-600 uppercase tracking-wide bg-indigo-50 border-l-4 border-indigo-400 px-2 py-1 rounded-r-md mb-2'
+  const labelCls     = 'block text-xs font-medium text-gray-500 uppercase mb-1'
+  const valueCls     = 'text-sm font-bold text-gray-800'
+  const inputCls     = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300'
+  const cardCls      = 'bg-gray-50 rounded-lg p-3'
+
+  // Freshness label untuk tanggal data — berdasarkan selisih hari
+  function dateFreshnessLabel(dateStr: string): { icon: string; text: string; cls: string } {
+    const days = Math.floor((new Date().getTime() - new Date(dateStr).getTime()) / 86400000)
+    if (days <= 7)  return { icon: '✅', text: `Data ${days === 0 ? 'hari ini' : days + ' hari lalu'} — up to date`, cls: 'text-green-600' }
+    if (days <= 30) return { icon: '⚠️', text: `Data ${days} hari lalu — segera perbarui`, cls: 'text-amber-600' }
+    return { icon: '🔴', text: `Data ${days} hari lalu — expired, mohon update`, cls: 'text-red-500' }
+  }
 
   if (loading) return (
     <div className="max-w-[1400px] mx-auto px-4 py-6">
@@ -733,8 +742,7 @@ All values must be numbers or null. No other text.` }
                 {/* Status bar segmen */}
                 {[
                   { color: '#059669', bg: '#d1fae5', label: 'Normal / Normal+', desc: 'Proporsi dalam rentang referensi populasi' },
-                  { color: '#ef4444', bg: '#fee2e2', label: 'Rendah',           desc: 'Di bawah rentang referensi' },
-                  { color: '#ef4444', bg: '#fee2e2', label: 'Tinggi',           desc: 'Di atas rentang referensi (lemak)' },
+                  { color: '#ef4444', bg: '#fee2e2', label: 'Rendah / Tinggi',  desc: 'Di luar rentang referensi' },
                 ].map(s => (
                   <div key={s.label} className="flex items-center gap-1.5">
                     <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: s.bg, border: `1.5px solid ${s.color}` }} />
@@ -745,8 +753,8 @@ All values must be numbers or null. No other text.` }
                 <div className="w-full border-t border-gray-100 mt-0.5 pt-1.5 flex flex-wrap gap-x-5 gap-y-1.5">
                   {/* Asimetri bar */}
                   {[
-                    { leftBg: '#6366f1', rightBg: '#a5b4fc', label: 'Simetris',  desc: 'Gap di bawah threshold InBody' },
-                    { leftBg: '#ef4444', rightBg: '#fca5a5', label: 'Asimetri',  desc: 'Gap melebihi threshold (lengan >6%, tungkai >3%)' },
+                    { leftBg: '#6366f1', rightBg: '#a5b4fc', label: 'Simetris', desc: 'Gap di bawah threshold InBody' },
+                    { leftBg: '#ef4444', rightBg: '#fca5a5', label: 'Asimetri', desc: 'Gap melebihi threshold (lengan >6%, tungkai >3%)' },
                   ].map(s => (
                     <div key={s.label} className="flex items-center gap-1.5">
                       <span className="inline-flex w-8 h-2.5 rounded-full overflow-hidden flex-shrink-0">
@@ -759,14 +767,26 @@ All values must be numbers or null. No other text.` }
                   ))}
                   {/* Panel analisis */}
                   {[
-                    { bg: '#d1fae5', border: '#6ee7b7', label: 'Baik / Normal',        desc: 'Nilai dalam rentang yang sehat' },
-                    { bg: '#fef3c7', border: '#fcd34d', label: 'Perlu Perhatian',       desc: 'Nilai membutuhkan monitoring' },
-                    { bg: '#fee2e2', border: '#fca5a5', label: 'Risiko / Rendah',       desc: 'Nilai di luar rentang normal' },
-                    { bg: '#f9fafb', border: '#e5e7eb', label: 'Informatif',            desc: 'Tanpa threshold klinis tervalidasi' },
+                    { bg: '#d1fae5', border: '#6ee7b7', label: 'Baik / Normal',  desc: 'Nilai dalam rentang sehat' },
+                    { bg: '#fef3c7', border: '#fcd34d', label: 'Perlu Perhatian', desc: 'Perlu monitoring atau aksi' },
+                    { bg: '#fee2e2', border: '#fca5a5', label: 'Risiko / Rendah', desc: 'Di luar rentang normal' },
+                    { bg: '#f9fafb', border: '#e5e7eb', label: 'Informatif',      desc: 'Tanpa threshold klinis' },
                   ].map(s => (
                     <div key={s.label} className="flex items-center gap-1.5">
                       <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: s.bg, border: `1.5px solid ${s.border}` }} />
                       <span className="text-[10px] font-semibold text-gray-600">{s.label}</span>
+                      <span className="text-[10px] text-gray-400">— {s.desc}</span>
+                    </div>
+                  ))}
+                  {/* Kebaruan data */}
+                  {[
+                    { cls: 'text-green-600', icon: '✅', label: '≤7 hari',  desc: 'Data up to date' },
+                    { cls: 'text-amber-600', icon: '⚠️', label: '8–30 hari', desc: 'Segera perbarui' },
+                    { cls: 'text-red-500',   icon: '🔴', label: '>30 hari',  desc: 'Data expired' },
+                  ].map(s => (
+                    <div key={s.label} className="flex items-center gap-1.5">
+                      <span className={`text-[10px] ${s.cls}`}>{s.icon}</span>
+                      <span className={`text-[10px] font-semibold ${s.cls}`}>{s.label}</span>
                       <span className="text-[10px] text-gray-400">— {s.desc}</span>
                     </div>
                   ))}
@@ -795,11 +815,16 @@ All values must be numbers or null. No other text.` }
                     }
                     return (
                       <>
-                        {latestMuscle.recorded_date !== latest?.recorded_date
-                          ? <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                          : <p className="text-xs text-gray-500 mb-3">{new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                        }
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Otot per Segmen</p>
+                        {(() => {
+                          const f = dateFreshnessLabel(latestMuscle.recorded_date)
+                          return (
+                            <p className={`text-xs mb-3 ${f.cls}`}>
+                              {f.icon} {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — {f.text.split('—')[1]?.trim()}
+                              {latestMuscle.recorded_date !== latest?.recorded_date && <span className="ml-1 text-amber-600 font-semibold">(berbeda dari entri terkini)</span>}
+                            </p>
+                          )
+                        })()}
+                        <p className={subHeaderCls}>Status Otot per Segmen</p>
                         <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
                         <div className="space-y-1.5 mb-4">
                               {[
@@ -825,7 +850,7 @@ All values must be numbers or null. No other text.` }
                                 )
                               })}
                         </div>
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Asimetri Otot Kiri–Kanan</p>
+                        <p className={subHeaderCls}>Asimetri Otot Kiri–Kanan</p>
                         <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3%.</p>
                         {[
                           { label: 'Lengan', L: aL, R: aR, gap: muscleArmGap, threshold: 6 },
@@ -915,9 +940,16 @@ All values must be numbers or null. No other text.` }
                     return (
                       <>
                         {/* Tanggal entri */}
-                        <p className="text-xs text-gray-500 mb-3">{new Date(latest.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                        {(() => {
+                          const f = dateFreshnessLabel(latest.recorded_date)
+                          return (
+                            <p className={`text-xs mb-3 ${f.cls}`}>
+                              {f.icon} {new Date(latest.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} — {f.text.split('—')[1]?.trim()}
+                            </p>
+                          )
+                        })()}
 
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Lemak per Segmen</p>
+                        <p className={subHeaderCls}>Status Lemak per Segmen</p>
                         <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
                         <div className="space-y-1.5 mb-4">
                           {[
@@ -945,7 +977,7 @@ All values must be numbers or null. No other text.` }
                         </div>
 
                         {/* Asimetri — dipindah ke atas, konsisten dengan Muscle Balance */}
-                        <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Asimetri Lemak Kiri–Kanan</p>
+                        <p className={subHeaderCls}>Asimetri Lemak Kiri–Kanan</p>
                         <p className="text-[10px] text-gray-400 mb-2">Threshold InBody: lengan &gt;6%, tungkai &gt;3% = asimetri signifikan.</p>
                         {[
                           { label: 'Lengan', L: aL, R: aR, gap: armGap, threshold: 6 },
