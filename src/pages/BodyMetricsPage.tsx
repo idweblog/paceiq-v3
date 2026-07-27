@@ -727,6 +727,52 @@ All values must be numbers or null. No other text.` }
                 )}
               </div>
 
+              {/* Legenda Warna — berlaku untuk Muscle Balance & Segmental Fat Analysis */}
+              <div className="flex flex-wrap gap-x-5 gap-y-2 mb-3 px-1">
+                <p className="text-[10px] font-semibold text-gray-500 uppercase w-full">Keterangan Warna:</p>
+                {/* Status bar segmen */}
+                {[
+                  { color: '#059669', bg: '#d1fae5', label: 'Normal / Normal+', desc: 'Proporsi dalam rentang referensi populasi' },
+                  { color: '#ef4444', bg: '#fee2e2', label: 'Rendah',           desc: 'Di bawah rentang referensi' },
+                  { color: '#ef4444', bg: '#fee2e2', label: 'Tinggi',           desc: 'Di atas rentang referensi (lemak)' },
+                ].map(s => (
+                  <div key={s.label} className="flex items-center gap-1.5">
+                    <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: s.bg, border: `1.5px solid ${s.color}` }} />
+                    <span className="text-[10px] font-semibold" style={{ color: s.color }}>{s.label}</span>
+                    <span className="text-[10px] text-gray-400">— {s.desc}</span>
+                  </div>
+                ))}
+                <div className="w-full border-t border-gray-100 mt-0.5 pt-1.5 flex flex-wrap gap-x-5 gap-y-1.5">
+                  {/* Asimetri bar */}
+                  {[
+                    { leftBg: '#6366f1', rightBg: '#a5b4fc', label: 'Simetris',  desc: 'Gap di bawah threshold InBody' },
+                    { leftBg: '#ef4444', rightBg: '#fca5a5', label: 'Asimetri',  desc: 'Gap melebihi threshold (lengan >6%, tungkai >3%)' },
+                  ].map(s => (
+                    <div key={s.label} className="flex items-center gap-1.5">
+                      <span className="inline-flex w-8 h-2.5 rounded-full overflow-hidden flex-shrink-0">
+                        <span className="w-1/2 h-full" style={{ background: s.leftBg }} />
+                        <span className="w-1/2 h-full" style={{ background: s.rightBg }} />
+                      </span>
+                      <span className="text-[10px] font-semibold text-gray-600">{s.label}</span>
+                      <span className="text-[10px] text-gray-400">— {s.desc}</span>
+                    </div>
+                  ))}
+                  {/* Panel analisis */}
+                  {[
+                    { bg: '#d1fae5', border: '#6ee7b7', label: 'Baik / Normal',        desc: 'Nilai dalam rentang yang sehat' },
+                    { bg: '#fef3c7', border: '#fcd34d', label: 'Perlu Perhatian',       desc: 'Nilai membutuhkan monitoring' },
+                    { bg: '#fee2e2', border: '#fca5a5', label: 'Risiko / Rendah',       desc: 'Nilai di luar rentang normal' },
+                    { bg: '#f9fafb', border: '#e5e7eb', label: 'Informatif',            desc: 'Tanpa threshold klinis tervalidasi' },
+                  ].map(s => (
+                    <div key={s.label} className="flex items-center gap-1.5">
+                      <span className="inline-block w-3 h-3 rounded-sm flex-shrink-0" style={{ background: s.bg, border: `1.5px solid ${s.border}` }} />
+                      <span className="text-[10px] font-semibold text-gray-600">{s.label}</span>
+                      <span className="text-[10px] text-gray-400">— {s.desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Baris 3: Muscle Balance + Segmental Fat berdampingan */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                 <div className={sectionCls + ' !mb-0'}>
@@ -745,13 +791,13 @@ All values must be numbers or null. No other text.` }
                       const pct = (val / total) * 100
                       if (pct < lo) return { label: 'Rendah', color: '#ef4444', bg: '#fee2e2' }
                       if (pct > hi) return { label: 'Normal+', color: '#059669', bg: '#d1fae5' }
-                      return { label: 'Normal', color: '#2563eb', bg: '#dbeafe' }
+                      return { label: 'Normal', color: '#059669', bg: '#d1fae5' }
                     }
                     return (
                       <>
                         {latestMuscle.recorded_date !== latest?.recorded_date
-                          ? <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
-                          : <p className="text-xs text-gray-400 mb-3">{new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                          ? <p className="text-xs text-amber-600 mb-3">⚠ Data dari entri {new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                          : <p className="text-xs text-gray-500 mb-3">{new Date(latestMuscle.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         }
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Otot per Segmen</p>
                         <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
@@ -869,7 +915,7 @@ All values must be numbers or null. No other text.` }
                     return (
                       <>
                         {/* Tanggal entri */}
-                        <p className="text-xs text-gray-400 mb-3">{new Date(latest.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                        <p className="text-xs text-gray-500 mb-3">{new Date(latest.recorded_date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
 
                         <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Status Lemak per Segmen</p>
                         <p className="text-[10px] text-gray-400 mb-2">Proporsi terhadap total. Ref: NHANES DXA pria dewasa (PMC5367711).</p>
