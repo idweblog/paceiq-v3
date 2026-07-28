@@ -7,7 +7,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 interface EwsEntry {
   id: string; athlete_id: string; entry_date: string
   resting_hr: number | null; hrv: number | null; sleep_hours: number | null
-  sleep_quality: number | null; muscle_soreness: number | null; motivation: number | null
+  sleep_quality: number | null; sleep_onset_min: number | null; sleep_disturbances: number | null
+  muscle_soreness: number | null; motivation: number | null
   mood: number | null; fatigue: number | null; stress: number | null
   composite_score: number | null; notes: string | null
 }
@@ -23,8 +24,11 @@ interface EwsResult {
   baseRhr: number; baseHrv: number; baseSource: string
   scorePhys: number; scoreSleep: number; scoreDoms: number; scoreEnergy: number
   scoreFatigue: number; scoreMood: number; scoreStress: number
-  rawScore: number     // composite sebelum override
-  totalScore: number   // composite setelah override (yang disimpan ke DB)
+  // Sleep sub-components (PSQI-Proxy 5-komponen)
+  sleepC1: number; sleepC2: number; sleepC3: number; sleepC3b: number
+  sleepC5: number; sleepC7: number
+  rawScore: number     // composite tanpa override
+  totalScore: number   // = rawScore (tidak ada override lagi)
   flags: FlagItem[]
   overrideApplied: boolean
 }
@@ -32,6 +36,7 @@ interface EwsResult {
 interface EwsForm {
   entry_date: string; resting_hr: string; hrv: string
   sleep_str: string; sleep_hours: string; sleep_quality: string
+  sleep_onset_min: string; sleep_disturbances: string
   muscle_soreness: string; motivation: string
   mood: string; fatigue: string; stress: string; notes: string
 }
@@ -41,7 +46,8 @@ interface EwsForm {
 const FORM_BLANK: EwsForm = {
   entry_date: new Date().toISOString().slice(0, 10),
   resting_hr: '', hrv: '', sleep_str: '', sleep_hours: '',
-  sleep_quality: '', muscle_soreness: '', motivation: '',
+  sleep_quality: '', sleep_onset_min: '', sleep_disturbances: '',
+  muscle_soreness: '', motivation: '',
   mood: '', fatigue: '', stress: '', notes: ''
 }
 
@@ -89,32 +95,31 @@ function trendArrow(current: number | null, baseline: number | null, higherIsBet
   }
 }
 
-// ── Algorithm v3 — 7-Component + Flag Override ──────────────────────────────
-// Referensi:
-//   McLean et al. (2010) — 5-item subjective wellness questionnaire
-//   Saw et al. (2016)    — subjective > objective untuk monitoring respons atlet
-//   Hooper & Mackinnon (1995) — Hooper Index (fatigue, DOMS, sleep, stress)
-//   Halson (2014)        — sleep deprivation ↓ performance 10-30%
-//   Meeusen et al. (2013) — ECSS consensus: overtraining prevention
-//   Kellmann (2010)      — RESTQ-Sport: psychosocial stress modulates recovery
-//   Morgan (1985)        — Iceberg Profile: mood as early overreaching marker
-//   Kiviniemi (2007) / Plews (2013) — HRV individual baseline
+// ── Algorithm v4 — PSQI-Proxy Sleep (5 Komponen) + Hapus Hard Override ──────
+// Sleep Score berbasis PSQI-Proxy:
+//   C1 Kualitas Subjektif    — Buysse et al. 1989 (PSQI)
+//   C2 Sleep Latency         — Buysse et al. 1989 (PSQI)
+//   C3 Defisit vs Personal   — Kiviniemi 2007 / Plews 2013 (individual baseline)
+//   C3b Defisit vs Kritis    — Van Dongen et al. 2003 (<5 jam = critical)
+//   C5 Gangguan Tidur        — Buysse et al. 1989 (PSQI)
+//   C7 Daytime Dysfunction   — Proxy dari fatigue + energy (Buysse et al. 1989)
+// Override keras dihapus — flag tetap informatif, tidak mengubah skor
+// Referensi: Carpenter & Andrykowski 1998 (r=0.94 dengan PSQI penuh, 5 komponen)
 
 function calculateEWS(
   dateStr: string, rhr: number, hrv: number,
   sleep: number, sleepQual: number, doms: number, energy: number,
   mood: number | null, fatigue: number | null, stress: number | null,
+  sleepOnsetMin: number | null, sleepDisturbances: number | null,
   history: EwsEntry[], profileHRrest: number, profileHRVBase: number | null
 ): EwsResult {
   const past = history.filter(e => e.entry_date < dateStr).sort((a, b) => b.entry_date.localeCompare(a.entry_date))
 
-  // ── Baseline 3 Lapis (Kiviniemi 2007 / Plews 2013 / Whoop onboarding) ──────
+  // ── Baseline 3 Lapis (Kiviniemi 2007 / Plews 2013) ───────────────────────
   const profileRhr = profileHRrest || rhr
   const profileHrv = profileHRVBase || hrv
 
-  let baseRhr: number
-  let baseHrv: number
-  let baseSource: string
+  let baseRhr: number, baseHrv: number, baseSource: string
 
   if (past.length >= 21) {
     const last30 = past.slice(0, 30)
@@ -134,11 +139,17 @@ function calculateEWS(
   } else {
     baseRhr = profileRhr
     baseHrv = profileHrv
-    const src = (profileHRrest && profileHRVBase) ? 'profil RHR & HRV Baseline' : profileHRrest ? 'profil RHR + HRV hari ini' : profileHRVBase ? 'profil HRV + RHR hari ini' : 'nilai hari ini (isi RHR & HRV Baseline di Profil)'
-    baseSource = `${src} (Lapis 1 — ${past.length === 0 ? 'entri pertama' : past.length + ' entri, akumulasi data'})`
+    const src = (profileHRrest && profileHRVBase) ? 'profil RHR & HRV Baseline' : profileHRrest ? 'profil RHR + HRV hari ini' : 'nilai hari ini'
+    baseSource = `${src} (Lapis 1 — ${past.length === 0 ? 'entri pertama' : past.length + ' entri'})`
   }
 
-  // ── Component Scores (0–100, higher = worse) ──────────────────────────────
+  // ── Personal Sleep Baseline (rolling avg, min 7 entri) ───────────────────
+  const sleepHistory = past.map(e => e.sleep_hours).filter((v): v is number => v != null)
+  const personalAvgSleep = sleepHistory.length >= 7
+    ? sleepHistory.slice(0, 30).reduce((a, b) => a + b, 0) / Math.min(sleepHistory.length, 30)
+    : 6.0  // fallback populasi umum jika belum cukup data
+
+  // ── Component Scores (0–100, higher = worse) ─────────────────────────────
 
   // 1. Physio (HRV + RHR) — objektif
   let scoreRhr = 0, scoreHrv = 0
@@ -146,8 +157,29 @@ function calculateEWS(
   if (hrv > 0 && baseHrv > 0) scoreHrv = Math.min(Math.max(((hrv - baseHrv) / baseHrv) * -200, 0), 100)
   const scorePhys = (0.6 * scoreHrv) + (0.4 * scoreRhr)
 
-  // 2. Sleep (durasi + kualitas) — Halson 2014
-  const scoreSleep = Math.min(100, ((Math.max(0, 7 - sleep) / 7) * 60) + ((Math.max(0, 5 - sleepQual) / 5) * 40))
+  // 2. Sleep — PSQI-Proxy 5 Komponen (Buysse et al. 1989, Carpenter & Andrykowski 1998)
+  // C1: Kualitas subjektif (20%)
+  const sleepC1 = ((5 - sleepQual) / 4) * 100
+  // C2: Sleep latency — menit untuk tertidur (15%)
+  //     PSQI: 0-14 mnt=0, 15-29 mnt=1, 30-59 mnt=2, ≥60 mnt=3 → linearisasi ke 0-100
+  const latency = sleepOnsetMin ?? 10  // default 10 mnt jika tidak diisi
+  const sleepC2 = Math.min((latency / 60) * 100, 100)
+  // C3: Defisit vs personal average — individual baseline (30%)
+  //     Kiviniemi 2007: penyimpangan dari baseline personal lebih prediktif
+  const sleepC3 = Math.max(0, (personalAvgSleep - sleep) / personalAvgSleep) * 100
+  // C3b: Defisit vs batas kritis 5 jam — Van Dongen et al. 2003 (10%)
+  const sleepC3b = Math.max(0, (5 - sleep) / 5) * 100
+  // C5: Gangguan tidur — kali terbangun (15%)
+  //     0=tidak ada, 1=1×, 2=2×, 3=≥3× → skor 0-100
+  const disturbances = sleepDisturbances ?? 0
+  const sleepC5 = Math.min((disturbances / 3) * 100, 100)
+  // C7: Daytime dysfunction — proxy fatigue + energy (10%)
+  const fatigueProxy = fatigue != null ? ((fatigue - 1) / 4) * 50 : 25
+  const energyProxy  = ((10 - energy) / 9) * 50
+  const sleepC7 = fatigueProxy + energyProxy
+
+  const scoreSleep = (0.20 * sleepC1) + (0.15 * sleepC2) + (0.30 * sleepC3) +
+                     (0.10 * sleepC3b) + (0.15 * sleepC5) + (0.10 * sleepC7)
 
   // 3. DOMS (0-10 → 0-100)
   const scoreDoms = (doms / 10) * 100
@@ -156,24 +188,19 @@ function calculateEWS(
   const scoreEnergy = ((10 - energy) / 10) * 100
 
   // 5. Fatigue / Kelelahan (1-5, inverted → 0-100) — Hooper Index
-  //    1=segar, 5=sangat lelah
   const scoreFatigue = fatigue != null ? ((fatigue - 1) / 4) * 100 : 0
 
   // 6. Mood (1-5, inverted → 0-100) — Morgan's Iceberg Profile
-  //    5=sangat baik, 1=sangat buruk → invert
   const scoreMood = mood != null ? ((5 - mood) / 4) * 100 : 0
 
-  // 7. Stress (1-5, inverted → 0-100) — Kellmann RESTQ-Sport
-  //    1=sangat rendah, 5=sangat tinggi
+  // 7. Stress (1-5 → 0-100) — Kellmann RESTQ-Sport
   const scoreStress = stress != null ? ((stress - 1) / 4) * 100 : 0
 
-  // ── Composite Score (Saw et al. 2016 — bobot subjective > objective) ──────
-  // Bobot: Physio 0.20, Sleep 0.20, DOMS 0.15, Fatigue 0.15, Mood 0.10, Stress 0.10, Energy 0.10
+  // ── Composite Score ───────────────────────────────────────────────────────
   const hasMFS = mood != null && fatigue != null && stress != null
   let rawScore: number
 
   if (hasMFS) {
-    // Full 7-component
     rawScore =
       (0.20 * scorePhys) +
       (0.20 * scoreSleep) +
@@ -183,7 +210,6 @@ function calculateEWS(
       (0.10 * scoreStress) +
       (0.10 * scoreEnergy)
   } else {
-    // Fallback 4-component (backward compat ketika mood/fatigue/stress null)
     rawScore =
       (0.30 * scorePhys) +
       (0.30 * scoreSleep) +
@@ -191,43 +217,43 @@ function calculateEWS(
       (0.20 * scoreEnergy)
   }
 
-  // ── Critical Threshold Flag System (Meeusen et al. 2013) ──────────────────
-  // Override: bahkan jika composite rendah, item individual buruk harus warning
-  // SWC (Smallest Worthwhile Change) = 0.5 × CV baseline → simplified to fixed thresholds
-
+  // ── Flag System — INFORMATIF SAJA, tidak mengubah skor ───────────────────
+  // Flags hanya sebagai peringatan visual, override keras dihapus
+  // (Meeusen et al. 2013: monitor signals, bukan paksa skor)
   const flags: FlagItem[] = []
 
-  // DOMS flags
   if (doms >= 8) flags.push({ level: 'red', item: 'DOMS', value: `${doms}/10`, message: 'Kerusakan otot berat — wajib Active Recovery atau Rest' })
   else if (doms >= 6) flags.push({ level: 'yellow', item: 'DOMS', value: `${doms}/10`, message: 'Nyeri otot signifikan pasca latihan berat — pertimbangkan recovery' })
 
-  // Fatigue flags
   if (fatigue != null) {
     if (fatigue >= 5) flags.push({ level: 'red', item: 'Kelelahan', value: `${fatigue}/5`, message: 'Kelelahan ekstrim — risiko overtraining (Hooper Index)' })
     else if (fatigue >= 4) flags.push({ level: 'yellow', item: 'Kelelahan', value: `${fatigue}/5`, message: 'Kelelahan tinggi — kurangi volume/intensitas' })
   }
 
-  // Stress flags
   if (stress != null) {
     if (stress >= 5) flags.push({ level: 'red', item: 'Stres', value: `${stress}/5`, message: 'Stres psikososial ekstrim — recovery capacity terganggu (Kellmann 2010)' })
     else if (stress >= 4) flags.push({ level: 'yellow', item: 'Stres', value: `${stress}/5`, message: 'Stres tinggi — dampak negatif pada pemulihan' })
   }
 
-  // Mood flags (inverted: low = bad)
   if (mood != null) {
     if (mood <= 1) flags.push({ level: 'red', item: 'Mood', value: `${mood}/5`, message: 'Mood sangat rendah — tanda awal overreaching (Morgan 1985)' })
     else if (mood <= 2) flags.push({ level: 'yellow', item: 'Mood', value: `${mood}/5`, message: 'Mood rendah — monitor potensi non-functional overreaching' })
   }
 
-  // Sleep hours flags (Halson 2014)
-  if (sleep < 5) flags.push({ level: 'red', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: 'Tidur sangat kurang — gangguan hormon pertumbuhan dan cortisol' })
-  else if (sleep < 6) flags.push({ level: 'yellow', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: 'Durasi tidur kurang — pemulihan terhambat' })
+  // Sleep flags — berbasis personal baseline (Kiviniemi 2007) bukan threshold absolut
+  const sleepDeficitPct = personalAvgSleep > 0 ? ((personalAvgSleep - sleep) / personalAvgSleep) * 100 : 0
+  if (sleep < 5) flags.push({ level: 'red', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: `Tidur sangat kurang (batas kritis 5 jam, Van Dongen 2003)` })
+  else if (sleepDeficitPct >= 20) flags.push({ level: 'yellow', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: `Defisit ${sleepDeficitPct.toFixed(0)}% dari rata-rata personal (${personalAvgSleep.toFixed(1)} jam)` })
 
-  // Energy flags
+  if (latency >= 60) flags.push({ level: 'red', item: 'Sleep Latency', value: `${latency} mnt`, message: 'Sulit tertidur (≥60 mnt) — kemungkinan overarousal atau stres tinggi (PSQI)' })
+  else if (latency >= 30) flags.push({ level: 'yellow', item: 'Sleep Latency', value: `${latency} mnt`, message: 'Latency tinggi (≥30 mnt) — monitor kualitas pre-sleep routine' })
+
+  if (disturbances >= 3) flags.push({ level: 'red', item: 'Gangguan Tidur', value: `${disturbances}×`, message: 'Tidur terganggu sering — kualitas pemulihan sangat terganggu (PSQI C5)' })
+  else if (disturbances >= 2) flags.push({ level: 'yellow', item: 'Gangguan Tidur', value: `${disturbances}×`, message: 'Tidur terganggu beberapa kali — monitor pola tidur' })
+
   if (energy <= 2) flags.push({ level: 'red', item: 'Energy', value: `${energy}/10`, message: 'Energi sangat rendah — tubuh butuh istirahat penuh' })
   else if (energy <= 3) flags.push({ level: 'yellow', item: 'Energy', value: `${energy}/10`, message: 'Energi rendah — pertimbangkan sesi ringan' })
 
-  // HRV/RHR flags (simplified SWC using percentage deviation from baseline)
   if (baseRhr > 0 && rhr > 0) {
     const rhrPct = ((rhr - baseRhr) / baseRhr) * 100
     if (rhrPct >= 8) flags.push({ level: 'red', item: 'RHR', value: `${rhr} bpm (+${rhrPct.toFixed(0)}%)`, message: 'RHR jauh di atas baseline — kemungkinan stress sistemik' })
@@ -239,31 +265,28 @@ function calculateEWS(
     else if (hrvPct >= 10) flags.push({ level: 'yellow', item: 'HRV', value: `${hrv} ms (-${hrvPct.toFixed(0)}%)`, message: 'HRV menurun signifikan — parasympathetic withdrawal' })
   }
 
-  // ── Override Rules (Meeusen et al. 2013 ECSS consensus) ───────────────────
-  const redCount = flags.filter(f => f.level === 'red').length
-  const yellowCount = flags.filter(f => f.level === 'yellow').length
-  let overrideApplied = false
-  let totalScore = rawScore
-
-  if (redCount >= 2) {
-    // 2+ Red Flag → minimum "Kelelahan Tingkat Tinggi" (score ≥ 46)
-    if (totalScore < 46) { totalScore = 46; overrideApplied = true }
-  } else if (redCount >= 1 || yellowCount >= 3) {
-    // 1 Red OR 3+ Yellow → minimum "Perlu Perhatian" (score ≥ 31)
-    if (totalScore < 31) { totalScore = 31; overrideApplied = true }
-  } else if (yellowCount >= 1) {
-    // 1+ Yellow → minimum "Perlu Perhatian" (score ≥ 31) — but softer: cap at 31
-    if (totalScore < 31) { totalScore = 31; overrideApplied = true }
-  }
+  // totalScore = rawScore (tidak ada override)
+  const totalScore = rawScore
 
   return {
     baseRhr, baseHrv, baseSource,
     scorePhys, scoreSleep, scoreDoms, scoreEnergy,
     scoreFatigue, scoreMood, scoreStress,
+    sleepC1, sleepC2, sleepC3, sleepC3b, sleepC5, sleepC7,
     rawScore, totalScore,
-    flags, overrideApplied
+    flags, overrideApplied: false
   }
 }
+// Referensi:
+//   McLean et al. (2010) — 5-item subjective wellness questionnaire
+//   Saw et al. (2016)    — subjective > objective untuk monitoring respons atlet
+//   Hooper & Mackinnon (1995) — Hooper Index (fatigue, DOMS, sleep, stress)
+//   Halson (2014)        — sleep deprivation ↓ performance 10-30%
+//   Meeusen et al. (2013) — ECSS consensus: overtraining prevention
+//   Kellmann (2010)      — RESTQ-Sport: psychosocial stress modulates recovery
+//   Morgan (1985)        — Iceberg Profile: mood as early overreaching marker
+//   Kiviniemi (2007) / Plews (2013) — HRV individual baseline
+
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -315,7 +338,7 @@ export default function EwsPage() {
     setEntries(data || [])
   }
 
-  // Real-time calc — sekarang include mood/fatigue/stress
+  // Real-time calc — include all fields including new sleep fields
   useEffect(() => {
     const rhr = parseFloat(form.resting_hr), hrv = parseFloat(form.hrv)
     const sleep = parseSleepStr(form.sleep_str) ?? parseFloat(form.sleep_hours)
@@ -326,7 +349,9 @@ export default function EwsPage() {
     const moodVal = form.mood ? parseInt(form.mood) : null
     const fatigueVal = form.fatigue ? parseInt(form.fatigue) : null
     const stressVal = form.stress ? parseInt(form.stress) : null
-    setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, entries, profileHRrest, profileHRVBase))
+    const onsetVal = form.sleep_onset_min ? parseInt(form.sleep_onset_min) : null
+    const distVal = form.sleep_disturbances ? parseInt(form.sleep_disturbances) : null
+    setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, onsetVal, distVal, entries, profileHRrest, profileHRVBase))
   }, [form, entries, profileHRrest, profileHRVBase])
 
   function handleSleepStr(val: string) {
@@ -348,13 +373,16 @@ export default function EwsPage() {
     const moodVal = form.mood ? parseInt(form.mood) : null
     const fatigueVal = form.fatigue ? parseInt(form.fatigue) : null
     const stressVal = form.stress ? parseInt(form.stress) : null
+    const onsetVal = form.sleep_onset_min ? parseInt(form.sleep_onset_min) : null
+    const distVal = form.sleep_disturbances ? parseInt(form.sleep_disturbances) : null
     let score: number | null = null
     if (rhr && hrv && sleep != null && sq != null && doms != null && energy != null)
-      score = calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, entries, profileHRrest, profileHRVBase).totalScore
+      score = calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, onsetVal, distVal, entries, profileHRrest, profileHRVBase).totalScore
     const payload = {
       athlete_id: athleteId, entry_date: form.entry_date,
       resting_hr: rhr || null, hrv: hrv || null, sleep_hours: sleep,
-      sleep_quality: sq, muscle_soreness: doms, motivation: energy,
+      sleep_quality: sq, sleep_onset_min: onsetVal, sleep_disturbances: distVal,
+      muscle_soreness: doms, motivation: energy,
       mood: moodVal, fatigue: fatigueVal, stress: stressVal,
       composite_score: score != null ? parseFloat(score.toFixed(1)) : null,
       notes: form.notes || null
@@ -381,7 +409,10 @@ export default function EwsPage() {
       entry_date: e.entry_date, resting_hr: e.resting_hr?.toString() || '',
       hrv: e.hrv?.toString() || '', sleep_str: sleepStr,
       sleep_hours: (e.sleep_hours ?? 0) > 0 ? (e.sleep_hours!).toFixed(2) : '',
-      sleep_quality: e.sleep_quality?.toString() || '', muscle_soreness: e.muscle_soreness?.toString() || '',
+      sleep_quality: e.sleep_quality?.toString() || '',
+      sleep_onset_min: e.sleep_onset_min?.toString() || '',
+      sleep_disturbances: e.sleep_disturbances?.toString() || '',
+      muscle_soreness: e.muscle_soreness?.toString() || '',
       motivation: e.motivation?.toString() || '', mood: e.mood?.toString() || '',
       fatigue: e.fatigue?.toString() || '', stress: e.stress?.toString() || '', notes: e.notes || ''
     })
@@ -399,14 +430,14 @@ export default function EwsPage() {
   // ── Recalculate all entries (v3 — 7-component) ──
   async function recalculateAll() {
     if (!athleteId) return
-    if (!confirm(`Recalculate composite_score untuk ${entries.length} entri menggunakan algoritma v3 (7-komponen + flag override)?`)) return
+    if (!confirm(`Recalculate composite_score untuk ${entries.length} entri menggunakan algoritma v4 (PSQI-Proxy 5-komponen, tanpa override)?`)) return
     let updated = 0
     for (const e of entries) {
       const rhr = e.resting_hr, hrv = e.hrv
       const sleep = e.sleep_hours, sq = e.sleep_quality
       const doms = e.muscle_soreness, energy = e.motivation
       if (!rhr || !hrv || sleep == null || sq == null || doms == null || energy == null) continue
-      const res = calculateEWS(e.entry_date, rhr, hrv, sleep, sq, doms, energy, e.mood, e.fatigue, e.stress, entries, profileHRrest, profileHRVBase)
+      const res = calculateEWS(e.entry_date, rhr, hrv, sleep, sq, doms, energy, e.mood, e.fatigue, e.stress, e.sleep_onset_min, e.sleep_disturbances, entries, profileHRrest, profileHRVBase)
       await (supabase as any).from('ews_entries').update({ composite_score: parseFloat(res.totalScore.toFixed(1)) }).eq('id', e.id)
       updated++
     }
@@ -549,7 +580,7 @@ export default function EwsPage() {
     const sleep = latest.sleep_hours, sq = latest.sleep_quality
     const doms = latest.muscle_soreness, energy = latest.motivation
     if (!rhr || !hrv || sleep == null || sq == null || doms == null || energy == null) return []
-    const res = calculateEWS(latest.entry_date, rhr, hrv, sleep, sq, doms, energy, latest.mood, latest.fatigue, latest.stress, entries, profileHRrest, profileHRVBase)
+    const res = calculateEWS(latest.entry_date, rhr, hrv, sleep, sq, doms, energy, latest.mood, latest.fatigue, latest.stress, latest.sleep_onset_min, latest.sleep_disturbances, entries, profileHRrest, profileHRVBase)
     return res.flags
   })()
 
@@ -573,7 +604,7 @@ export default function EwsPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Training Readiness — EWS Tracker</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Algoritma 7-Komponen + Flag Override · McLean 2010 · Saw 2016 · Hooper 1995 · Meeusen 2013</p>
+            <p className="text-xs text-gray-400 mt-0.5">Algoritma 7-Komponen + PSQI-Proxy Sleep (5 Sub-komponen) · McLean 2010 · Saw 2016 · Buysse 1989 · Meeusen 2013</p>
           </div>
           <button onClick={() => { setActiveTab('input'); setForm(FORM_BLANK); setEditingId(null) }}
             className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700">
@@ -890,13 +921,15 @@ export default function EwsPage() {
               )}
             </div>
 
-            {/* Row 1 */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal *</div>
-                <input type="date" value={form.entry_date} onChange={e => setForm(f => ({ ...f, entry_date: e.target.value }))}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
+            {/* Row 1 — Tanggal */}
+            <div className="mb-4">
+              <div className="text-xs font-medium text-gray-500 uppercase mb-1">Tanggal *</div>
+              <input type="date" value={form.entry_date} onChange={e => setForm(f => ({ ...f, entry_date: e.target.value }))}
+                className="w-full sm:w-64 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+            </div>
+
+            {/* Row 2 — Sleep fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
               <div>
                 <div className="text-xs font-medium text-gray-500 uppercase mb-1">Sleep (HH:MM)</div>
                 <div className="flex gap-2">
@@ -911,6 +944,18 @@ export default function EwsPage() {
                 <input type="number" min={1} max={5} value={form.sleep_quality}
                   onChange={e => setForm(f => ({ ...f, sleep_quality: e.target.value }))}
                   placeholder="4" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Sleep Onset (mnt) <span className="text-indigo-400 font-normal">— dari Garmin</span></div>
+                <input type="number" min={0} max={180} value={form.sleep_onset_min}
+                  onChange={e => setForm(f => ({ ...f, sleep_onset_min: e.target.value }))}
+                  placeholder="10" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Gangguan Tidur (0–3) <span className="text-indigo-400 font-normal">— dari Garmin</span></div>
+                <input type="number" min={0} max={3} value={form.sleep_disturbances}
+                  onChange={e => setForm(f => ({ ...f, sleep_disturbances: e.target.value }))}
+                  placeholder="0" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
             </div>
 
@@ -974,9 +1019,6 @@ export default function EwsPage() {
                     <span className="text-2xl">{status!.icon}</span>
                     <strong className="text-base" style={{ color: status!.color }}>{status!.label}</strong>
                     <span className="text-sm font-bold text-gray-600">(Skor: {result.totalScore.toFixed(1)})</span>
-                    {result.overrideApplied && (
-                      <span className="text-[10px] bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">FLAG OVERRIDE ↑{(result.totalScore - result.rawScore).toFixed(1)}</span>
-                    )}
                   </div>
                   <div className="text-sm text-gray-700 leading-relaxed mb-3">{status!.rec}</div>
 
@@ -992,16 +1034,28 @@ export default function EwsPage() {
                     </div>
                   )}
 
-                  {/* 7-component breakdown */}
-                  <div className="flex flex-wrap gap-4 text-xs bg-white/60 rounded-lg px-3 py-2">
-                    <span><strong>Physio:</strong> {result.scorePhys.toFixed(1)}</span>
-                    <span><strong>Sleep:</strong> {result.scoreSleep.toFixed(1)}</span>
-                    <span><strong>DOMS:</strong> {result.scoreDoms.toFixed(1)}</span>
-                    <span><strong>Energy:</strong> {result.scoreEnergy.toFixed(1)}</span>
-                    <span><strong>Fatigue:</strong> {result.scoreFatigue.toFixed(1)}</span>
-                    <span><strong>Mood:</strong> {result.scoreMood.toFixed(1)}</span>
-                    <span><strong>Stress:</strong> {result.scoreStress.toFixed(1)}</span>
-                    {result.overrideApplied && <span className="text-amber-600 font-semibold">| Raw: {result.rawScore.toFixed(1)} → Override: {result.totalScore.toFixed(1)}</span>}
+                  {/* 7-component + sleep sub-component breakdown */}
+                  <div className="bg-white/60 rounded-lg px-3 py-2 space-y-1.5">
+                    <div className="flex flex-wrap gap-4 text-xs">
+                      <span><strong>Physio:</strong> {result.scorePhys.toFixed(1)}</span>
+                      <span><strong>Sleep:</strong> {result.scoreSleep.toFixed(1)}</span>
+                      <span><strong>DOMS:</strong> {result.scoreDoms.toFixed(1)}</span>
+                      <span><strong>Energy:</strong> {result.scoreEnergy.toFixed(1)}</span>
+                      <span><strong>Fatigue:</strong> {result.scoreFatigue.toFixed(1)}</span>
+                      <span><strong>Mood:</strong> {result.scoreMood.toFixed(1)}</span>
+                      <span><strong>Stress:</strong> {result.scoreStress.toFixed(1)}</span>
+                    </div>
+                    <div className="border-t border-gray-200 pt-1.5">
+                      <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Sleep Sub-komponen (PSQI-Proxy):</p>
+                      <div className="flex flex-wrap gap-3 text-[10px] text-gray-600">
+                        <span>C1 Kualitas: {result.sleepC1.toFixed(1)}</span>
+                        <span>C2 Latency: {result.sleepC2.toFixed(1)}</span>
+                        <span>C3 Defisit Personal: {result.sleepC3.toFixed(1)}</span>
+                        <span>C3b Kritis: {result.sleepC3b.toFixed(1)}</span>
+                        <span>C5 Gangguan: {result.sleepC5.toFixed(1)}</span>
+                        <span>C7 Disfungsi: {result.sleepC7.toFixed(1)}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1016,7 +1070,7 @@ export default function EwsPage() {
                 <div className="flex gap-2">
                   <button onClick={recalculateAll}
                     className="border border-indigo-500 text-indigo-600 text-xs px-3 py-1 rounded-lg hover:bg-indigo-50">
-                    🔄 Recalculate Semua (v3)
+                    🔄 Recalculate Semua (v4)
                   </button>
                   <button onClick={downloadCSV}
                     className="border border-gray-300 text-gray-600 text-xs px-3 py-1 rounded-lg hover:bg-gray-50">
