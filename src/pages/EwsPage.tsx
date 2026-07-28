@@ -36,7 +36,9 @@ interface EwsResult {
 interface EwsForm {
   entry_date: string; resting_hr: string; hrv: string
   sleep_str: string; sleep_hours: string; sleep_quality: string
-  sleep_deep_min: string; sleep_rem_min: string; sleep_awake_min: string
+  sleep_deep_str: string; sleep_deep_min: string
+  sleep_rem_str: string;  sleep_rem_min: string
+  sleep_awake_str: string; sleep_awake_min: string
   muscle_soreness: string; motivation: string
   mood: string; fatigue: string; stress: string; notes: string
 }
@@ -46,7 +48,10 @@ interface EwsForm {
 const FORM_BLANK: EwsForm = {
   entry_date: new Date().toISOString().slice(0, 10),
   resting_hr: '', hrv: '', sleep_str: '', sleep_hours: '',
-  sleep_quality: '', sleep_deep_min: '', sleep_rem_min: '', sleep_awake_min: '',
+  sleep_quality: '',
+  sleep_deep_str: '',  sleep_deep_min: '',
+  sleep_rem_str: '',   sleep_rem_min: '',
+  sleep_awake_str: '', sleep_awake_min: '',
   muscle_soreness: '', motivation: '',
   mood: '', fatigue: '', stress: '', notes: ''
 }
@@ -384,6 +389,15 @@ export default function EwsPage() {
     setForm(f => ({ ...f, sleep_str: c, sleep_hours: hours != null ? hours.toFixed(2) : '' }))
   }
 
+  // Generic handler untuk stage fields (Deep, REM, Awake) — format J:MM → menit
+  function handleStageStr(val: string, strKey: 'sleep_deep_str' | 'sleep_rem_str' | 'sleep_awake_str', minKey: 'sleep_deep_min' | 'sleep_rem_min' | 'sleep_awake_min') {
+    let c = val.replace(/\D/g, '')
+    if (c.length >= 3) c = c.slice(0, 2) + ':' + c.slice(2, 4)
+    const parsed = parseSleepStr(c)
+    const mins = parsed != null ? Math.round(parsed * 60).toString() : ''
+    setForm(f => ({ ...f, [strKey]: c, [minKey]: mins }))
+  }
+
   async function saveEntry() {
     if (!athleteId) return
     if (!form.entry_date || !form.resting_hr || !form.hrv) { showToast('Tanggal, RHR, dan HRV wajib diisi', false); return }
@@ -429,14 +443,20 @@ export default function EwsPage() {
   function editEntry(e: EwsEntry) {
     const h = Math.floor(e.sleep_hours ?? 0), m = Math.round(((e.sleep_hours ?? 0) - h) * 60)
     const sleepStr = (e.sleep_hours ?? 0) > 0 ? `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}` : ''
+    // Helper: menit → J:MM string
+    const minsToStr = (m: number | null): string => {
+      if (m == null || m === 0) return ''
+      const h = Math.floor(m / 60), mm = m % 60
+      return `${h.toString().padStart(2,'0')}:${mm.toString().padStart(2,'0')}`
+    }
     setForm({
       entry_date: e.entry_date, resting_hr: e.resting_hr?.toString() || '',
       hrv: e.hrv?.toString() || '', sleep_str: sleepStr,
       sleep_hours: (e.sleep_hours ?? 0) > 0 ? (e.sleep_hours!).toFixed(2) : '',
       sleep_quality: e.sleep_quality?.toString() || '',
-      sleep_deep_min:  e.sleep_deep_min?.toString()  || '',
-      sleep_rem_min:   e.sleep_rem_min?.toString()   || '',
-      sleep_awake_min: e.sleep_awake_min?.toString() || '',
+      sleep_deep_str:  minsToStr(e.sleep_deep_min),  sleep_deep_min:  e.sleep_deep_min?.toString()  || '',
+      sleep_rem_str:   minsToStr(e.sleep_rem_min),   sleep_rem_min:   e.sleep_rem_min?.toString()   || '',
+      sleep_awake_str: minsToStr(e.sleep_awake_min), sleep_awake_min: e.sleep_awake_min?.toString() || '',
       muscle_soreness: e.muscle_soreness?.toString() || '',
       motivation: e.motivation?.toString() || '', mood: e.mood?.toString() || '',
       fatigue: e.fatigue?.toString() || '', stress: e.stress?.toString() || '', notes: e.notes || ''
@@ -970,24 +990,24 @@ export default function EwsPage() {
                   onChange={e => setForm(f => ({ ...f, sleep_quality: e.target.value }))}
                   placeholder="4" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Deep Sleep (mnt)</div>
-                <input type="number" min={0} max={480} value={form.sleep_deep_min}
-                  onChange={e => setForm(f => ({ ...f, sleep_deep_min: e.target.value }))}
-                  placeholder="90" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">REM Sleep (mnt)</div>
-                <input type="number" min={0} max={480} value={form.sleep_rem_min}
-                  onChange={e => setForm(f => ({ ...f, sleep_rem_min: e.target.value }))}
-                  placeholder="100" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
-              <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Awake Time (mnt)</div>
-                <input type="number" min={0} max={480} value={form.sleep_awake_min}
-                  onChange={e => setForm(f => ({ ...f, sleep_awake_min: e.target.value }))}
-                  placeholder="15" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
-              </div>
+              {([
+                { label: 'Deep Sleep (J:MM)', strKey: 'sleep_deep_str' as const, minKey: 'sleep_deep_min' as const, placeholder: '1:30' },
+                { label: 'REM Sleep (J:MM)',  strKey: 'sleep_rem_str'  as const, minKey: 'sleep_rem_min'  as const, placeholder: '1:40' },
+                { label: 'Awake (J:MM)',      strKey: 'sleep_awake_str'as const, minKey: 'sleep_awake_min'as const, placeholder: '0:15' },
+              ]).map(({ label, strKey, minKey, placeholder }) => (
+                <div key={label}>
+                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">{label}</div>
+                  <div className="flex gap-1">
+                    <input type="text" value={form[strKey]} maxLength={5}
+                      onChange={e => handleStageStr(e.target.value, strKey, minKey)}
+                      placeholder={placeholder}
+                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                    <div className="w-10 border border-gray-100 bg-gray-50 rounded-lg flex items-center justify-center text-[10px] font-bold text-indigo-700 text-center">
+                      {form[minKey] ? `${form[minKey]}m` : '—'}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Row 2 */}
