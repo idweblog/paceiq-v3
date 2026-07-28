@@ -7,8 +7,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 interface EwsEntry {
   id: string; athlete_id: string; entry_date: string
   resting_hr: number | null; hrv: number | null; sleep_hours: number | null
-  sleep_quality: number | null; sleep_onset_min: number | null; sleep_disturbances: number | null
-  muscle_soreness: number | null; motivation: number | null
+  sleep_quality: number | null; sleep_deep_min: number | null; sleep_rem_min: number | null
+  sleep_awake_min: number | null; muscle_soreness: number | null; motivation: number | null
   mood: number | null; fatigue: number | null; stress: number | null
   composite_score: number | null; notes: string | null
 }
@@ -24,7 +24,7 @@ interface EwsResult {
   baseRhr: number; baseHrv: number; baseSource: string
   scorePhys: number; scoreSleep: number; scoreDoms: number; scoreEnergy: number
   scoreFatigue: number; scoreMood: number; scoreStress: number
-  // Sleep sub-components (PSQI-Proxy 5-komponen)
+  // Sleep sub-components (PSQI-Proxy — Garmin stage-based)
   sleepC1: number; sleepC2: number; sleepC3: number; sleepC3b: number
   sleepC5: number; sleepC7: number
   rawScore: number     // composite tanpa override
@@ -36,7 +36,7 @@ interface EwsResult {
 interface EwsForm {
   entry_date: string; resting_hr: string; hrv: string
   sleep_str: string; sleep_hours: string; sleep_quality: string
-  sleep_onset_min: string; sleep_disturbances: string
+  sleep_deep_min: string; sleep_rem_min: string; sleep_awake_min: string
   muscle_soreness: string; motivation: string
   mood: string; fatigue: string; stress: string; notes: string
 }
@@ -46,7 +46,7 @@ interface EwsForm {
 const FORM_BLANK: EwsForm = {
   entry_date: new Date().toISOString().slice(0, 10),
   resting_hr: '', hrv: '', sleep_str: '', sleep_hours: '',
-  sleep_quality: '', sleep_onset_min: '', sleep_disturbances: '',
+  sleep_quality: '', sleep_deep_min: '', sleep_rem_min: '', sleep_awake_min: '',
   muscle_soreness: '', motivation: '',
   mood: '', fatigue: '', stress: '', notes: ''
 }
@@ -110,7 +110,7 @@ function calculateEWS(
   dateStr: string, rhr: number, hrv: number,
   sleep: number, sleepQual: number, doms: number, energy: number,
   mood: number | null, fatigue: number | null, stress: number | null,
-  sleepOnsetMin: number | null, sleepDisturbances: number | null,
+  sleepDeepMin: number | null, sleepRemMin: number | null, sleepAwakeMin: number | null,
   history: EwsEntry[], profileHRrest: number, profileHRVBase: number | null
 ): EwsResult {
   const past = history.filter(e => e.entry_date < dateStr).sort((a, b) => b.entry_date.localeCompare(a.entry_date))
@@ -157,23 +157,37 @@ function calculateEWS(
   if (hrv > 0 && baseHrv > 0) scoreHrv = Math.min(Math.max(((hrv - baseHrv) / baseHrv) * -200, 0), 100)
   const scorePhys = (0.6 * scoreHrv) + (0.4 * scoreRhr)
 
-  // 2. Sleep — PSQI-Proxy 5 Komponen (Buysse et al. 1989, Carpenter & Andrykowski 1998)
-  // C1: Kualitas subjektif (20%)
+  // 2. Sleep — PSQI-Proxy 5 Komponen (Garmin stage-based)
+  // C1: Kualitas subjektif (20%) — Buysse et al. 1989
   const sleepC1 = ((5 - sleepQual) / 4) * 100
-  // C2: Sleep latency — menit untuk tertidur (15%)
-  //     PSQI: 0-14 mnt=0, 15-29 mnt=1, 30-59 mnt=2, ≥60 mnt=3 → linearisasi ke 0-100
-  const latency = sleepOnsetMin ?? 10  // default 10 mnt jika tidak diisi
-  const sleepC2 = Math.min((latency / 60) * 100, 100)
+
+  // C2: Sleep stage quality — Deep + REM proportion (15%)
+  //     Walker 2017: Deep ≥13–23%, REM ≥20–25% dari total = restoratif optimal
+  //     Jika tidak ada data stage → default netral (50)
+  const totalSleepMin = sleep * 60
+  let sleepC2 = 50  // default netral jika tidak ada data stage
+  if (sleepDeepMin != null && sleepRemMin != null && totalSleepMin > 0) {
+    const restorativePct = ((sleepDeepMin + sleepRemMin) / totalSleepMin) * 100
+    // Target restoratif ≥38% (13% deep + 25% REM minimum)
+    // Makin rendah dari 38% → makin tinggi skor (makin buruk)
+    sleepC2 = Math.max(0, Math.min(100, (38 - restorativePct) / 38 * 100))
+  }
+
   // C3: Defisit vs personal average — individual baseline (30%)
   //     Kiviniemi 2007: penyimpangan dari baseline personal lebih prediktif
   const sleepC3 = Math.max(0, (personalAvgSleep - sleep) / personalAvgSleep) * 100
+
   // C3b: Defisit vs batas kritis 5 jam — Van Dongen et al. 2003 (10%)
   const sleepC3b = Math.max(0, (5 - sleep) / 5) * 100
-  // C5: Gangguan tidur — kali terbangun (15%)
-  //     0=tidak ada, 1=1×, 2=2×, 3=≥3× → skor 0-100
-  const disturbances = sleepDisturbances ?? 0
-  const sleepC5 = Math.min((disturbances / 3) * 100, 100)
+
+  // C5: Waktu terjaga (Awake time) dari Garmin (15%)
+  //     Proxy langsung untuk sleep disturbances — lebih akurat dari hitungan kasar 0-3
+  //     >60 mnt awake = sangat terganggu (PSQI C5 threshold)
+  const awakeMin = sleepAwakeMin ?? 0
+  const sleepC5 = Math.min((awakeMin / 60) * 100, 100)
+
   // C7: Daytime dysfunction — proxy fatigue + energy (10%)
+  //     Buysse et al. 1989: daytime sleepiness + lack of enthusiasm
   const fatigueProxy = fatigue != null ? ((fatigue - 1) / 4) * 50 : 25
   const energyProxy  = ((10 - energy) / 9) * 50
   const sleepC7 = fatigueProxy + energyProxy
@@ -240,16 +254,24 @@ function calculateEWS(
     else if (mood <= 2) flags.push({ level: 'yellow', item: 'Mood', value: `${mood}/5`, message: 'Mood rendah — monitor potensi non-functional overreaching' })
   }
 
-  // Sleep flags — berbasis personal baseline (Kiviniemi 2007) bukan threshold absolut
+  // Sleep flags — berbasis personal baseline (Kiviniemi 2007)
   const sleepDeficitPct = personalAvgSleep > 0 ? ((personalAvgSleep - sleep) / personalAvgSleep) * 100 : 0
-  if (sleep < 5) flags.push({ level: 'red', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: `Tidur sangat kurang (batas kritis 5 jam, Van Dongen 2003)` })
+  if (sleep < 5) flags.push({ level: 'red', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: `Tidur sangat kurang — batas kritis 5 jam (Van Dongen 2003)` })
   else if (sleepDeficitPct >= 20) flags.push({ level: 'yellow', item: 'Durasi Tidur', value: `${sleep.toFixed(1)} jam`, message: `Defisit ${sleepDeficitPct.toFixed(0)}% dari rata-rata personal (${personalAvgSleep.toFixed(1)} jam)` })
 
-  if (latency >= 60) flags.push({ level: 'red', item: 'Sleep Latency', value: `${latency} mnt`, message: 'Sulit tertidur (≥60 mnt) — kemungkinan overarousal atau stres tinggi (PSQI)' })
-  else if (latency >= 30) flags.push({ level: 'yellow', item: 'Sleep Latency', value: `${latency} mnt`, message: 'Latency tinggi (≥30 mnt) — monitor kualitas pre-sleep routine' })
+  // Sleep stage flags (Walker 2017)
+  if (sleepDeepMin != null && sleepRemMin != null && totalSleepMin > 0) {
+    const deepPct = (sleepDeepMin / totalSleepMin) * 100
+    const remPct  = (sleepRemMin  / totalSleepMin) * 100
+    if (deepPct < 10) flags.push({ level: 'red',    item: 'Deep Sleep', value: `${sleepDeepMin} mnt (${deepPct.toFixed(0)}%)`, message: 'Deep sleep sangat rendah — pemulihan fisik terganggu (Walker 2017)' })
+    else if (deepPct < 13) flags.push({ level: 'yellow', item: 'Deep Sleep', value: `${sleepDeepMin} mnt (${deepPct.toFixed(0)}%)`, message: 'Deep sleep di bawah normal (target ≥13%)' })
+    if (remPct < 15) flags.push({ level: 'red',    item: 'REM Sleep', value: `${sleepRemMin} mnt (${remPct.toFixed(0)}%)`, message: 'REM sangat rendah — konsolidasi memori & recovery kognitif terganggu (Walker 2017)' })
+    else if (remPct < 20) flags.push({ level: 'yellow', item: 'REM Sleep', value: `${sleepRemMin} mnt (${remPct.toFixed(0)}%)`, message: 'REM di bawah normal (target ≥20%)' })
+  }
 
-  if (disturbances >= 3) flags.push({ level: 'red', item: 'Gangguan Tidur', value: `${disturbances}×`, message: 'Tidur terganggu sering — kualitas pemulihan sangat terganggu (PSQI C5)' })
-  else if (disturbances >= 2) flags.push({ level: 'yellow', item: 'Gangguan Tidur', value: `${disturbances}×`, message: 'Tidur terganggu beberapa kali — monitor pola tidur' })
+  // Awake time flags
+  if (awakeMin >= 60) flags.push({ level: 'red',    item: 'Awake Time', value: `${awakeMin} mnt`, message: 'Terlalu banyak terbangun (≥60 mnt) — kualitas tidur sangat terganggu (PSQI C5)' })
+  else if (awakeMin >= 30) flags.push({ level: 'yellow', item: 'Awake Time', value: `${awakeMin} mnt`, message: 'Cukup sering terbangun — monitor pola tidur' })
 
   if (energy <= 2) flags.push({ level: 'red', item: 'Energy', value: `${energy}/10`, message: 'Energi sangat rendah — tubuh butuh istirahat penuh' })
   else if (energy <= 3) flags.push({ level: 'yellow', item: 'Energy', value: `${energy}/10`, message: 'Energi rendah — pertimbangkan sesi ringan' })
@@ -349,9 +371,10 @@ export default function EwsPage() {
     const moodVal = form.mood ? parseInt(form.mood) : null
     const fatigueVal = form.fatigue ? parseInt(form.fatigue) : null
     const stressVal = form.stress ? parseInt(form.stress) : null
-    const onsetVal = form.sleep_onset_min ? parseInt(form.sleep_onset_min) : null
-    const distVal = form.sleep_disturbances ? parseInt(form.sleep_disturbances) : null
-    setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, onsetVal, distVal, entries, profileHRrest, profileHRVBase))
+    const onsetVal = form.sleep_deep_min ? parseInt(form.sleep_deep_min) : null
+    const remVal   = form.sleep_rem_min  ? parseInt(form.sleep_rem_min)  : null
+    const awakeVal = form.sleep_awake_min ? parseInt(form.sleep_awake_min) : null
+    setResult(calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, onsetVal, remVal, awakeVal, entries, profileHRrest, profileHRVBase))
   }, [form, entries, profileHRrest, profileHRVBase])
 
   function handleSleepStr(val: string) {
@@ -373,15 +396,16 @@ export default function EwsPage() {
     const moodVal = form.mood ? parseInt(form.mood) : null
     const fatigueVal = form.fatigue ? parseInt(form.fatigue) : null
     const stressVal = form.stress ? parseInt(form.stress) : null
-    const onsetVal = form.sleep_onset_min ? parseInt(form.sleep_onset_min) : null
-    const distVal = form.sleep_disturbances ? parseInt(form.sleep_disturbances) : null
+    const onsetVal = form.sleep_deep_min  ? parseInt(form.sleep_deep_min)  : null
+    const remVal   = form.sleep_rem_min   ? parseInt(form.sleep_rem_min)   : null
+    const awakeVal = form.sleep_awake_min ? parseInt(form.sleep_awake_min) : null
     let score: number | null = null
     if (rhr && hrv && sleep != null && sq != null && doms != null && energy != null)
-      score = calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, onsetVal, distVal, entries, profileHRrest, profileHRVBase).totalScore
+      score = calculateEWS(form.entry_date, rhr, hrv, sleep, sq, doms, energy, moodVal, fatigueVal, stressVal, onsetVal, remVal, awakeVal, entries, profileHRrest, profileHRVBase).totalScore
     const payload = {
       athlete_id: athleteId, entry_date: form.entry_date,
       resting_hr: rhr || null, hrv: hrv || null, sleep_hours: sleep,
-      sleep_quality: sq, sleep_onset_min: onsetVal, sleep_disturbances: distVal,
+      sleep_quality: sq, sleep_deep_min: onsetVal, sleep_rem_min: remVal, sleep_awake_min: awakeVal,
       muscle_soreness: doms, motivation: energy,
       mood: moodVal, fatigue: fatigueVal, stress: stressVal,
       composite_score: score != null ? parseFloat(score.toFixed(1)) : null,
@@ -410,8 +434,9 @@ export default function EwsPage() {
       hrv: e.hrv?.toString() || '', sleep_str: sleepStr,
       sleep_hours: (e.sleep_hours ?? 0) > 0 ? (e.sleep_hours!).toFixed(2) : '',
       sleep_quality: e.sleep_quality?.toString() || '',
-      sleep_onset_min: e.sleep_onset_min?.toString() || '',
-      sleep_disturbances: e.sleep_disturbances?.toString() || '',
+      sleep_deep_min:  e.sleep_deep_min?.toString()  || '',
+      sleep_rem_min:   e.sleep_rem_min?.toString()   || '',
+      sleep_awake_min: e.sleep_awake_min?.toString() || '',
       muscle_soreness: e.muscle_soreness?.toString() || '',
       motivation: e.motivation?.toString() || '', mood: e.mood?.toString() || '',
       fatigue: e.fatigue?.toString() || '', stress: e.stress?.toString() || '', notes: e.notes || ''
@@ -430,14 +455,14 @@ export default function EwsPage() {
   // ── Recalculate all entries (v3 — 7-component) ──
   async function recalculateAll() {
     if (!athleteId) return
-    if (!confirm(`Recalculate composite_score untuk ${entries.length} entri menggunakan algoritma v4 (PSQI-Proxy 5-komponen, tanpa override)?`)) return
+    if (!confirm(`Recalculate composite_score untuk ${entries.length} entri menggunakan algoritma v4 (PSQI-Proxy + Garmin stage, tanpa override)?`)) return
     let updated = 0
     for (const e of entries) {
       const rhr = e.resting_hr, hrv = e.hrv
       const sleep = e.sleep_hours, sq = e.sleep_quality
       const doms = e.muscle_soreness, energy = e.motivation
       if (!rhr || !hrv || sleep == null || sq == null || doms == null || energy == null) continue
-      const res = calculateEWS(e.entry_date, rhr, hrv, sleep, sq, doms, energy, e.mood, e.fatigue, e.stress, e.sleep_onset_min, e.sleep_disturbances, entries, profileHRrest, profileHRVBase)
+      const res = calculateEWS(e.entry_date, rhr, hrv, sleep, sq, doms, energy, e.mood, e.fatigue, e.stress, e.sleep_deep_min, e.sleep_rem_min, e.sleep_awake_min, entries, profileHRrest, profileHRVBase)
       await (supabase as any).from('ews_entries').update({ composite_score: parseFloat(res.totalScore.toFixed(1)) }).eq('id', e.id)
       updated++
     }
@@ -580,7 +605,7 @@ export default function EwsPage() {
     const sleep = latest.sleep_hours, sq = latest.sleep_quality
     const doms = latest.muscle_soreness, energy = latest.motivation
     if (!rhr || !hrv || sleep == null || sq == null || doms == null || energy == null) return []
-    const res = calculateEWS(latest.entry_date, rhr, hrv, sleep, sq, doms, energy, latest.mood, latest.fatigue, latest.stress, latest.sleep_onset_min, latest.sleep_disturbances, entries, profileHRrest, profileHRVBase)
+    const res = calculateEWS(latest.entry_date, rhr, hrv, sleep, sq, doms, energy, latest.mood, latest.fatigue, latest.stress, latest.sleep_deep_min, latest.sleep_rem_min, latest.sleep_awake_min, entries, profileHRrest, profileHRVBase)
     return res.flags
   })()
 
@@ -604,7 +629,7 @@ export default function EwsPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="font-gsans text-xl text-indigo-700 uppercase tracking-wide">Training Readiness — EWS Tracker</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Algoritma 7-Komponen + PSQI-Proxy Sleep (5 Sub-komponen) · McLean 2010 · Saw 2016 · Buysse 1989 · Meeusen 2013</p>
+            <p className="text-xs text-gray-400 mt-0.5">Algoritma 7-Komponen + PSQI-Proxy Sleep (Garmin Stage: Deep, REM, Awake) · Buysse 1989 · Walker 2017 · Kiviniemi 2007</p>
           </div>
           <button onClick={() => { setActiveTab('input'); setForm(FORM_BLANK); setEditingId(null) }}
             className="bg-indigo-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-indigo-700">
@@ -929,8 +954,8 @@ export default function EwsPage() {
             </div>
 
             {/* Row 2 — Sleep fields */}
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
-              <div>
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-4 mb-4">
+              <div className="sm:col-span-2">
                 <div className="text-xs font-medium text-gray-500 uppercase mb-1">Sleep (HH:MM)</div>
                 <div className="flex gap-2">
                   <input type="text" value={form.sleep_str} maxLength={5} onChange={e => handleSleepStr(e.target.value)}
@@ -946,16 +971,22 @@ export default function EwsPage() {
                   placeholder="4" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
               <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Sleep Onset (mnt) <span className="text-indigo-400 font-normal">— dari Garmin</span></div>
-                <input type="number" min={0} max={180} value={form.sleep_onset_min}
-                  onChange={e => setForm(f => ({ ...f, sleep_onset_min: e.target.value }))}
-                  placeholder="10" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Deep Sleep (mnt)</div>
+                <input type="number" min={0} max={480} value={form.sleep_deep_min}
+                  onChange={e => setForm(f => ({ ...f, sleep_deep_min: e.target.value }))}
+                  placeholder="90" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
               <div>
-                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Gangguan Tidur (0–3) <span className="text-indigo-400 font-normal">— dari Garmin</span></div>
-                <input type="number" min={0} max={3} value={form.sleep_disturbances}
-                  onChange={e => setForm(f => ({ ...f, sleep_disturbances: e.target.value }))}
-                  placeholder="0" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">REM Sleep (mnt)</div>
+                <input type="number" min={0} max={480} value={form.sleep_rem_min}
+                  onChange={e => setForm(f => ({ ...f, sleep_rem_min: e.target.value }))}
+                  placeholder="100" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
+              </div>
+              <div>
+                <div className="text-xs font-medium text-gray-500 uppercase mb-1">Awake Time (mnt)</div>
+                <input type="number" min={0} max={480} value={form.sleep_awake_min}
+                  onChange={e => setForm(f => ({ ...f, sleep_awake_min: e.target.value }))}
+                  placeholder="15" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300" />
               </div>
             </div>
 
@@ -1046,14 +1077,14 @@ export default function EwsPage() {
                       <span><strong>Stress:</strong> {result.scoreStress.toFixed(1)}</span>
                     </div>
                     <div className="border-t border-gray-200 pt-1.5">
-                      <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Sleep Sub-komponen (PSQI-Proxy):</p>
+                      <p className="text-[10px] text-gray-500 font-semibold uppercase mb-1">Sleep Sub-komponen (PSQI-Proxy + Garmin Stage):</p>
                       <div className="flex flex-wrap gap-3 text-[10px] text-gray-600">
                         <span>C1 Kualitas: {result.sleepC1.toFixed(1)}</span>
-                        <span>C2 Latency: {result.sleepC2.toFixed(1)}</span>
+                        <span>C2 Stage Quality (Deep+REM): {result.sleepC2.toFixed(1)}</span>
                         <span>C3 Defisit Personal: {result.sleepC3.toFixed(1)}</span>
                         <span>C3b Kritis: {result.sleepC3b.toFixed(1)}</span>
-                        <span>C5 Gangguan: {result.sleepC5.toFixed(1)}</span>
-                        <span>C7 Disfungsi: {result.sleepC7.toFixed(1)}</span>
+                        <span>C5 Awake Time: {result.sleepC5.toFixed(1)}</span>
+                        <span>C7 Daytime Dysfunction: {result.sleepC7.toFixed(1)}</span>
                       </div>
                     </div>
                   </div>
