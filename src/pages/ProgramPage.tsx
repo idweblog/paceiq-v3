@@ -530,14 +530,14 @@ export default function ProgramPage() {
                           <div className="flex items-center gap-3 min-w-0">
                             <span className="text-gray-300 text-xs flex-shrink-0">{isExpanded ? '▲' : '▼'}</span>
                             <div className="min-w-0">
-                              <div className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">{fmtDateShort(sess.session_date)}</div>
+                              <div className="text-xs font-bold text-indigo-400 uppercase tracking-wider">{fmtDateShort(sess.session_date)}</div>
                               <div className="text-sm font-bold text-gray-800 truncate">{sess.program_type}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-4 flex-shrink-0">
                             <div className="text-right">
                               <div className="text-sm font-bold text-indigo-600">~{sessKm.toFixed(1)} km</div>
-                              <div className="text-[10px] text-gray-400">{sessMin > 0 ? fmtDuration(sessMin) : '—'}</div>
+                              <div className="text-xs text-gray-400">{sessMin > 0 ? fmtDuration(sessMin) : '—'}</div>
                             </div>
                             {canEdit && !isArchived && (
                               <div className="flex gap-1" onClick={e => e.stopPropagation()}>
@@ -554,10 +554,10 @@ export default function ProgramPage() {
                         <div className="px-5 py-3">
                           {((sess.details || []).length > 0 || pendingForms.length > 0) && (
                             <div className="grid grid-cols-[1fr_110px_100px_90px_28px] gap-2 mb-2 px-1">
-                              <div className="text-[10px] font-medium text-gray-400 uppercase">Zona</div>
-                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Rep × Nilai</div>
-                              <div className="text-[10px] font-medium text-gray-400 uppercase text-center">Range Pace</div>
-                              <div className="text-[10px] font-medium text-gray-400 uppercase text-right">Est. Jarak / Waktu</div>
+                              <div className="text-xs font-medium text-gray-400 uppercase">Zona</div>
+                              <div className="text-xs font-medium text-gray-400 uppercase text-center">Rep × Nilai</div>
+                              <div className="text-xs font-medium text-gray-400 uppercase text-center">Range Pace</div>
+                              <div className="text-xs font-medium text-gray-400 uppercase text-right">Est. Jarak / Waktu</div>
                               <div />
                             </div>
                           )}
@@ -574,18 +574,18 @@ export default function ProgramPage() {
                             return (
                               <div key={det.id} className="grid grid-cols-[1fr_110px_100px_90px_28px] gap-2 items-center py-2 border-b border-gray-50 last:border-0">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-[10px] font-medium text-gray-400">{idx + 1}.</span>
-                                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full"
+                                  <span className="text-xs font-medium text-gray-400">{idx + 1}.</span>
+                                  <span className="inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full"
                                     style={{ background: zoneColor + '20', color: zoneColor }}>
                                     <span className="w-2 h-2 rounded-full" style={{ background: zoneColor }} />
                                     {det.zone_name}
                                   </span>
                                 </div>
-                                <div className="text-xs text-center font-bold text-gray-700">{rep > 1 ? `${rep}×` : ''} {valLabel}</div>
-                                <div className="text-[10px] text-center font-mono text-gray-400">{paceStr}/km</div>
+                                <div className="text-sm text-center font-bold text-gray-700">{rep > 1 ? `${rep}×` : ''} {valLabel}</div>
+                                <div className="text-xs text-center font-mono text-gray-500">{paceStr}/km</div>
                                 <div className="text-right">
-                                  <div className="text-xs font-bold text-gray-800">~{(det.distance_km || 0).toFixed(2)} km</div>
-                                  <div className="text-[10px] text-gray-400">{det.est_duration_min ? fmtDuration(det.est_duration_min) : '—'}</div>
+                                  <div className="text-sm font-bold text-gray-800">~{(det.distance_km || 0).toFixed(2)} km</div>
+                                  <div className="text-xs text-gray-400">{det.est_duration_min ? fmtDuration(det.est_duration_min) : '—'}</div>
                                 </div>
                                 {canEdit && !isArchived && (
                                   <button onClick={() => deleteDetail(det.id)} className="text-red-300 hover:text-red-500 text-xs text-center">✕</button>
@@ -603,27 +603,27 @@ export default function ProgramPage() {
                             return (
                               <div key={idx} className="grid grid-cols-[1fr_110px_100px_90px_28px] gap-2 items-center py-2 bg-indigo-50/40 rounded-lg px-1 mb-1">
                                 <select value={f.zone_name} onChange={e => updateDetailForm(sess.id, idx, 'zone_name', e.target.value)}
-                                  className="border border-indigo-200 rounded-lg px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-300">
+                                  className="border border-indigo-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-300">
                                   {ZONE_DEFINITIONS.map(z => <option key={z.name} value={z.name}>{z.name}</option>)}
                                 </select>
                                 <div className="flex gap-1 items-center">
                                   <input type="number" min="1" value={f.repetitions} onChange={e => updateDetailForm(sess.id, idx, 'repetitions', e.target.value)}
-                                    placeholder="1" className="w-9 border border-indigo-200 rounded px-1 py-1.5 text-xs text-center focus:outline-none" />
+                                    placeholder="1" className="w-9 border border-indigo-200 rounded px-1 py-1.5 text-sm text-center focus:outline-none" />
                                   <select value={f.unit} onChange={e => updateDetailForm(sess.id, idx, 'unit', e.target.value)}
-                                    className="border border-indigo-200 rounded px-1 py-1.5 text-xs text-gray-700 focus:outline-none">
+                                    className="border border-indigo-200 rounded px-1 py-1.5 text-sm text-gray-700 focus:outline-none">
                                     <option value="km">km</option>
                                     <option value="detik">dtk</option>
                                     <option value="menit">mnt</option>
                                   </select>
                                   <input type="number" step={f.unit === 'km' ? '0.01' : '1'} value={f.value_input} onChange={e => updateDetailForm(sess.id, idx, 'value_input', e.target.value)}
-                                    placeholder="0" className="w-11 border border-indigo-200 rounded px-1 py-1.5 text-xs text-center focus:outline-none" />
+                                    placeholder="0" className="w-11 border border-indigo-200 rounded px-1 py-1.5 text-sm text-center focus:outline-none" />
                                 </div>
-                                <div className="text-[10px] text-center font-mono text-gray-400">
+                                <div className="text-xs text-center font-mono text-gray-500">
                                   {zone ? `${secToMMSS(zone.pace_min_sec)}–${secToMMSS(zone.pace_max_sec)}` : '—'}
                                 </div>
                                 <div className="text-right">
-                                  <div className="text-xs font-bold text-gray-700">{out ? `~${out.totalKm.toFixed(2)} km` : '—'}</div>
-                                  <div className="text-[10px] text-gray-400">{out ? fmtDuration(out.totalMin) : '—'}</div>
+                                  <div className="text-sm font-bold text-gray-700">{out ? `~${out.totalKm.toFixed(2)} km` : '—'}</div>
+                                  <div className="text-xs text-gray-400">{out ? fmtDuration(out.totalMin) : '—'}</div>
                                 </div>
                                 <button onClick={() => removeDetailForm(sess.id, idx)} className="text-red-300 hover:text-red-500 text-xs">✕</button>
                               </div>
