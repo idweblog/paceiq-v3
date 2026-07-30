@@ -416,10 +416,10 @@ export default function ProgramPage() {
                             {isActive && <span className="text-[9px] font-bold text-white bg-indigo-500 px-1.5 py-0.5 rounded-full">AKTIF</span>}
                             {isPast && !isActive && <span className="text-[9px] text-green-600">✓</span>}
                           </div>
-                          <span className="text-[10px] text-gray-400 font-medium">{w.total_km.toFixed(1)} km</span>
+                          <span className="text-xs text-gray-400 font-medium">{w.total_km.toFixed(1)} km</span>
                         </div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">{fmtDate(w.period_start)} — {fmtDate(w.period_end)}</div>
-                        <div className="text-[10px] text-gray-500 mt-0.5">{w.sessions.length} sesi</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{fmtDate(w.period_start)} — {fmtDate(w.period_end)}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{w.sessions.length} sesi</div>
                       </div>
                     )
                   })}
@@ -582,7 +582,7 @@ export default function ProgramPage() {
                                   </span>
                                 </div>
                                 <div className="text-sm text-center font-bold text-gray-700">{rep > 1 ? `${rep}×` : ''} {valLabel}</div>
-                                <div className="text-xs text-center font-mono text-gray-500">{paceStr}/km</div>
+                                <div className="text-xs text-center font-mono text-gray-500">{paceStr}</div>
                                 <div className="text-right">
                                   <div className="text-sm font-bold text-gray-800">~{(det.distance_km || 0).toFixed(2)} km</div>
                                   <div className="text-xs text-gray-400">{det.est_duration_min ? fmtDuration(det.est_duration_min) : '—'}</div>
