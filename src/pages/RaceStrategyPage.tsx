@@ -6,9 +6,9 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 interface Race {
   id: string
   name: string
-  race_date: string
+  event_date: string
   status: 'A' | 'B' | 'C' | 'D'
-  target_time?: string
+  target_finish?: string
   distance_km?: number
 }
 
@@ -246,10 +246,10 @@ export default function RaceStrategyPage() {
 
       const { data: raceRows } = await supabase
         .from('races')
-        .select('id,name,race_date,status,target_time,distance_km')
+        .select('id,name,event_date,status,target_finish,distance_km')
         .eq('athlete_id', ath.id)
         .in('status', ['A', 'B'])
-        .order('race_date', { ascending: true })
+        .order('event_date', { ascending: true })
 
       const activeRaces = ((raceRows || []) as unknown) as Race[]
       setRaces(activeRaces)
@@ -352,12 +352,12 @@ export default function RaceStrategyPage() {
             <div>
               <div className="text-[10px] font-bold text-indigo-400 uppercase">Tanggal</div>
               <div className="text-sm font-semibold text-gray-700">
-                {new Date(activeRace.race_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                {new Date(activeRace.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
               </div>
             </div>
             <div>
               <div className="text-[10px] font-bold text-indigo-400 uppercase">Target</div>
-              <div className="text-sm font-semibold text-gray-700">{activeRace.target_time || '—'}</div>
+              <div className="text-sm font-semibold text-gray-700">{activeRace.target_finish || '—'}</div>
             </div>
             <div>
               <div className="text-[10px] font-bold text-indigo-400 uppercase">Status</div>
@@ -396,7 +396,7 @@ export default function RaceStrategyPage() {
 function StrategyNotesTab({ race, slug, data, onSave }: {
   race: Race; slug: string; data: StrategyData; onSave: (v: string) => void
 }) {
-  const defaultContent = DEFAULT_STRATEGY_NOTES[slug] || `## 🏅 Race Overview\n**Race:** ${race.name}\n**Target:** ${race.target_time || '—'}\n\n## 🏃 Pace Strategy\n- **Km 1–3:** Mulai konservatif\n- **Km 4–15:** Target pace stabil\n- **Km 16–21.1:** Push terkontrol`
+  const defaultContent = DEFAULT_STRATEGY_NOTES[slug] || `## 🏅 Race Overview\n**Race:** ${race.name}\n**Target:** ${race.target_finish || '—'}\n\n## 🏃 Pace Strategy\n- **Km 1–3:** Mulai konservatif\n- **Km 4–15:** Target pace stabil\n- **Km 16–21.1:** Push terkontrol`
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
 
@@ -446,7 +446,7 @@ function StrategyNotesTab({ race, slug, data, onSave }: {
 
 // ─── Tab: Pace Band Simulator ─────────────────────────────────────────────────
 function PaceBandTab({ race }: { race: Race }) {
-  const [target, setTarget]   = useState(race.target_time || '2:30:00')
+  const [target, setTarget]   = useState(race.target_finish || '2:30:00')
   const [strategy, setStrategy] = useState<keyof typeof PBS_STRATEGIES>('even')
   const [tol, setTol]         = useState(10)
   const [rwr, setRwr]         = useState<RwrState>({ enabled: false, runPace: '', walkPace: '', runSec: '', walkSec: '' })
@@ -582,7 +582,7 @@ function PaceBandTab({ race }: { race: Race }) {
 // ─── Tab: Split Time Calculator ───────────────────────────────────────────────
 function SplitTimeTab({ race }: { race: Race }) {
   const [pace, setPace]   = useState('')
-  const [targetFinish, setTargetFinish] = useState(race.target_time || '')
+  const [targetFinish, setTargetFinish] = useState(race.target_finish || '')
   const [startTime, setStartTime] = useState('05:00')
   const [rwr, setRwr]   = useState<RwrState>({ enabled: false, runPace: '', walkPace: '', runSec: '', walkSec: '' })
   const [result, setResult] = useState<{ rows: StcRow[]; totalSec: number; paceSec: number } | null>(null)
