@@ -22,6 +22,7 @@ import { useAuth } from './contexts/AuthContext'
 import { useRole } from './hooks/useRole'
 import GroupPage from './pages/GroupPage'
 import CoachDashboardPage from './pages/CoachDashboardPage'
+import RaceStrategyPage from './pages/RaceStrategyPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -71,6 +72,7 @@ function AppRoutes() {
         <Route path="nutrition" element={<NutritionPage />} />
         <Route path="treatment" element={<TreatmentPage />} />
         <Route path="races" element={<RacesPage />} />
+        <Route path="race-strategy" element={<RaceStrategyPage />} />
         <Route path="body-metrics" element={<BodyMetricsPage />} />
         <Route path="export" element={<ExportPage />} />
         <Route path="reference" element={<ReferensiPage />} />

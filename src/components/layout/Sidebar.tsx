@@ -15,6 +15,7 @@ const menuItems = [
   { path: '/treatment', label: 'Treatment Protocol', icon: '💊' },
   { path: '/run-walk-run', label: 'RWR Calculator', icon: '🏃' },
   { path: '/races', label: 'Race Management', icon: '🏁' },
+  { path: '/race-strategy', label: 'Race Strategy', icon: '♟️' },
   { path: '/group-training', label: 'Group Training', icon: '👥' },
   { path: '/export', label: 'Export / Import', icon: '💾' },
   { path: '/reference', label: 'Referensi & Metodologi', icon: '📚' },
