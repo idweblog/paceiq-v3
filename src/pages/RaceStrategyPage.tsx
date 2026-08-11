@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useRole } from '../hooks/useRole'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -233,6 +234,7 @@ export default function RaceStrategyPage() {
   const [strategyData, setStrategyData] = useState<Record<string, StrategyData>>({})
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'notes' | 'pbs' | 'stc' | 'cues' | 'racenotes'>('notes')
+  const { isCoach, isAdmin } = useRole()
 
   // ── Load races ──
   useEffect(() => {
@@ -248,7 +250,7 @@ export default function RaceStrategyPage() {
         .from('races')
         .select('id,name,event_date,status,target_finish,distance_km')
         .eq('athlete_id', ath.id)
-        .in('status', ['A', 'B'])
+        .in('status', ['A', 'B', 'C'])
         .order('event_date', { ascending: true })
 
       const activeRaces = ((raceRows || []) as unknown) as Race[]
@@ -278,6 +280,8 @@ export default function RaceStrategyPage() {
   const activeRace = races.find(r => r.id === activeRaceId)
   const slug = activeRace ? raceSlug(activeRace.name) : ''
   const data = strategyData[activeRaceId] || {}
+  const isPast = activeRace ? new Date(activeRace.event_date) < new Date() : false
+  const canEdit = !isPast || isCoach || isAdmin
 
   async function saveField(field: 'strategy_notes' | 'cue_cards' | 'race_day_notes', value: string) {
     const { data: { user } } = await supabase.auth.getUser()
@@ -329,16 +333,20 @@ export default function RaceStrategyPage() {
 
       {/* Race selector tabs */}
       <div className="flex gap-2 flex-wrap">
-        {races.map(r => (
-          <button key={r.id} onClick={() => setActiveRaceId(r.id)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-              activeRaceId === r.id
-                ? 'bg-indigo-600 text-white shadow'
-                : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300'
-            }`}>
-            {r.status === 'A' ? '⭐' : '🏆'} {r.name}
-          </button>
-        ))}
+        {races.map(r => {
+          const past = new Date(r.event_date) < new Date()
+          return (
+            <button key={r.id} onClick={() => setActiveRaceId(r.id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                activeRaceId === r.id
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300'
+              }`}>
+              {past ? '🏅' : r.status === 'A' ? '⭐' : '🏆'} {r.name}
+              {past && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500 font-normal">Selesai</span>}
+            </button>
+          )
+        })}
       </div>
 
       {activeRace && (
@@ -367,6 +375,15 @@ export default function RaceStrategyPage() {
             </div>
           </div>
 
+          {/* Archived banner */}
+          {isPast && (
+            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${
+              canEdit ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-gray-50 border border-gray-200 text-gray-500'
+            }`}>
+              {canEdit ? '✏️ Mode Coach/Admin — data arsip bisa diedit.' : '🔒 Race sudah selesai — data tersimpan sebagai arsip, read-only.'}
+            </div>
+          )}
+
           {/* Section tabs */}
           <div className="bg-gray-100 rounded-xl p-1 flex gap-1 flex-wrap w-fit">
             {([
@@ -381,11 +398,11 @@ export default function RaceStrategyPage() {
           </div>
 
           {/* Tab content */}
-          {activeTab === 'notes'    && <StrategyNotesTab race={activeRace} slug={slug} data={data} onSave={v => saveField('strategy_notes', v)} />}
+          {activeTab === 'notes'    && <StrategyNotesTab race={activeRace} slug={slug} data={data} canEdit={canEdit} onSave={v => saveField('strategy_notes', v)} />}
           {activeTab === 'pbs'      && <PaceBandTab race={activeRace} />}
           {activeTab === 'stc'      && <SplitTimeTab race={activeRace} />}
-          {activeTab === 'cues'     && <MentalCuesTab race={activeRace} slug={slug} data={data} onSave={v => saveField('cue_cards', JSON.stringify(v))} />}
-          {activeTab === 'racenotes'&& <RaceDayNotesTab race={activeRace} data={data} onSave={v => saveField('race_day_notes', v)} />}
+          {activeTab === 'cues'     && <MentalCuesTab race={activeRace} slug={slug} data={data} canEdit={canEdit} onSave={v => saveField('cue_cards', JSON.stringify(v))} />}
+          {activeTab === 'racenotes'&& <RaceDayNotesTab race={activeRace} data={data} canEdit={canEdit} onSave={v => saveField('race_day_notes', v)} />}
         </>
       )}
     </div>
@@ -393,8 +410,8 @@ export default function RaceStrategyPage() {
 }
 
 // ─── Tab: Strategy Notes ──────────────────────────────────────────────────────
-function StrategyNotesTab({ race, slug, data, onSave }: {
-  race: Race; slug: string; data: StrategyData; onSave: (v: string) => void
+function StrategyNotesTab({ race, slug, data, canEdit, onSave }: {
+  race: Race; slug: string; data: StrategyData; canEdit: boolean; onSave: (v: string) => void
 }) {
   const defaultContent = DEFAULT_STRATEGY_NOTES[slug] || `## 🏅 Race Overview\n**Race:** ${race.name}\n**Target:** ${race.target_finish || '—'}\n\n## 🏃 Pace Strategy\n- **Km 1–3:** Mulai konservatif\n- **Km 4–15:** Target pace stabil\n- **Km 16–21.1:** Push terkontrol`
   const [editing, setEditing] = useState(false)
@@ -416,7 +433,7 @@ function StrategyNotesTab({ race, slug, data, onSave }: {
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
         <div className="font-gsans text-base text-indigo-700 uppercase">📋 Race Strategy Notes</div>
         {!editing
-          ? <button onClick={startEdit} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100">✏️ Edit</button>
+          ? canEdit && <button onClick={startEdit} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100">✏️ Edit</button>
           : <div className="flex gap-2">
               <button onClick={save} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold">💾 Simpan</button>
               <button onClick={() => setEditing(false)} className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600">Batal</button>
@@ -688,8 +705,8 @@ function SplitTimeTab({ race }: { race: Race }) {
 }
 
 // ─── Tab: Mental Cue Cards ────────────────────────────────────────────────────
-function MentalCuesTab({ race, slug, data, onSave }: {
-  race: Race; slug: string; data: StrategyData; onSave: (v: CueCard[]) => void
+function MentalCuesTab({ race, slug, data, canEdit, onSave }: {
+  race: Race; slug: string; data: StrategyData; canEdit: boolean; onSave: (v: CueCard[]) => void
 }) {
   const defaultCues = DEFAULT_CUES[slug] || []
   const [editing, setEditing] = useState(false)
@@ -724,7 +741,7 @@ function MentalCuesTab({ race, slug, data, onSave }: {
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
         <div className="font-gsans text-base text-indigo-700 uppercase">🧠 Mental Cue Cards — {race.name}</div>
         {!editing
-          ? <button onClick={startEdit} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100">✏️ Edit</button>
+          ? canEdit && <button onClick={startEdit} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100">✏️ Edit</button>
           : <div className="flex gap-2">
               <button onClick={save} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold">💾 Simpan</button>
               <button onClick={() => setEditing(false)} className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600">Batal</button>
@@ -797,8 +814,8 @@ function MentalCuesTab({ race, slug, data, onSave }: {
 }
 
 // ─── Tab: Race Day Notes ──────────────────────────────────────────────────────
-function RaceDayNotesTab({ race, data, onSave }: {
-  race: Race; data: StrategyData; onSave: (v: string) => void
+function RaceDayNotesTab({ race, data, canEdit, onSave }: {
+  race: Race; data: StrategyData; canEdit: boolean; onSave: (v: string) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -819,7 +836,7 @@ function RaceDayNotesTab({ race, data, onSave }: {
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
         <div className="font-gsans text-base text-indigo-700 uppercase">📝 Race Day Notes — {race.name}</div>
         {!editing
-          ? <button onClick={startEdit} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100">✏️ Edit</button>
+          ? canEdit && <button onClick={startEdit} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 font-semibold hover:bg-indigo-100">✏️ Edit</button>
           : <div className="flex gap-2">
               <button onClick={save} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold">💾 Simpan</button>
               <button onClick={() => setEditing(false)} className="text-xs px-3 py-1.5 rounded-lg bg-gray-100 text-gray-600">Batal</button>
