@@ -348,88 +348,97 @@ export default function RaceStrategyPage() {
         <p className="text-sm text-gray-400">Perencanaan strategi & simulasi pace per race</p>
       </div>
 
-      {/* Year filter tabs */}
-      {(() => {
-        const years = [...new Set(races.map(r => new Date(r.event_date).getFullYear()))].sort((a,b) => b - a)
-        return years.length > 1 ? (
-          <div className="flex gap-2 flex-wrap items-center">
-            <span className="text-xs font-bold text-gray-400 uppercase">Tahun:</span>
-            {years.map(y => (
-              <button key={y} onClick={() => {
-                setYearFilter(y)
-                // Auto-select first active race in new year, or first race
-                const now = new Date()
-                const inYear = races.filter(r => new Date(r.event_date).getFullYear() === y)
-                const firstActive = inYear.find(r => new Date(r.event_date) >= now)
-                setActiveRaceId((firstActive || inYear[0])?.id || '')
-                setArchiveOpen(false)
-              }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                  yearFilter === y ? 'bg-indigo-600 text-white shadow' : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300'
-                }`}>
-                {y}
-              </button>
-            ))}
-          </div>
-        ) : null
-      })()}
-
-      {/* Race selector — aktif & arsip */}
+      {/* Race Aktif */}
       {(() => {
         const now = new Date()
-        const inYear = races.filter(r => new Date(r.event_date).getFullYear() === yearFilter)
-        const activeRaces = inYear.filter(r => new Date(r.event_date) >= now)
-        const archivedRaces = inYear.filter(r => new Date(r.event_date) < now)
+        const activeRaces = races.filter(r => new Date(r.event_date) >= now)
+        const archivedRaces = races.filter(r => new Date(r.event_date) < now)
+        const archiveYears = [...new Set(archivedRaces.map(r => new Date(r.event_date).getFullYear()))].sort((a,b) => b - a)
+        const archivedInYear = archivedRaces.filter(r => new Date(r.event_date).getFullYear() === yearFilter)
 
         return (
           <div className="space-y-3">
-            {/* Race aktif */}
+            {/* Section: Race Aktif */}
             {activeRaces.length > 0 && (
-              <div className="flex gap-2 flex-wrap">
-                {activeRaces.map(r => (
-                  <button key={r.id} onClick={() => setActiveRaceId(r.id)}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      activeRaceId === r.id
-                        ? 'bg-indigo-600 text-white shadow'
-                        : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300'
-                    }`}>
-                    {r.status === 'A' ? '⭐' : '🏆'} {r.name}
-                  </button>
-                ))}
+              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+                <div className="text-xs font-bold text-indigo-400 uppercase tracking-wide mb-3">🏁 Race Aktif</div>
+                <div className="flex gap-2 flex-wrap">
+                  {activeRaces.map(r => (
+                    <button key={r.id} onClick={() => setActiveRaceId(r.id)}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                        activeRaceId === r.id
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100'
+                      }`}>
+                      {r.status === 'A' ? '⭐' : '🏆'} {r.name}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-normal ${
+                        activeRaceId === r.id ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-500'
+                      }`}>
+                        {new Date(r.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Arsip collapsible */}
+            {/* Section: Arsip */}
             {archivedRaces.length > 0 && (
-              <div>
+              <div className="border border-gray-200 rounded-2xl overflow-hidden">
+                {/* Arsip header — toggle */}
                 <button onClick={() => setArchiveOpen(o => !o)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors py-1">
-                  <span className={`transition-transform ${archiveOpen ? 'rotate-90' : ''}`}>▶</span>
-                  Arsip {yearFilter} ({archivedRaces.length})
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-gray-400 text-xs transition-transform ${archiveOpen ? 'rotate-90' : ''}`}>▶</span>
+                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">🗄️ Arsip Race</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 font-semibold">{archivedRaces.length} race</span>
+                  </div>
+                  <span className="text-[10px] text-gray-400">{archiveOpen ? 'Tutup' : 'Lihat arsip'}</span>
                 </button>
+
+                {/* Arsip content */}
                 {archiveOpen && (
-                  <div className="flex gap-2 flex-wrap mt-2 pl-4">
-                    {archivedRaces.map(r => (
-                      <button key={r.id} onClick={() => setActiveRaceId(r.id)}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all ${
-                          activeRaceId === r.id
-                            ? 'bg-gray-600 text-white shadow'
-                            : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-gray-400'
-                        }`}>
-                        🏅 {r.name}
-                        <span className="text-[10px] opacity-70 font-normal">
-                          {new Date(r.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
-                        </span>
-                      </button>
-                    ))}
+                  <div className="p-4 space-y-3 bg-white">
+                    {/* Year tabs */}
+                    {archiveYears.length > 1 && (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {archiveYears.map(y => (
+                          <button key={y} onClick={() => setYearFilter(y)}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                              yearFilter === y
+                                ? 'bg-gray-700 text-white'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}>
+                            {y}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Race list in selected year */}
+                    <div className="flex gap-2 flex-wrap">
+                      {archivedInYear.map(r => (
+                        <button key={r.id} onClick={() => setActiveRaceId(r.id)}
+                          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all ${
+                            activeRaceId === r.id
+                              ? 'bg-gray-700 text-white shadow'
+                              : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-gray-400'
+                          }`}>
+                          🏅 {r.name}
+                          <span className={`text-[10px] font-normal ${activeRaceId === r.id ? 'opacity-70' : 'text-gray-400'}`}>
+                            {new Date(r.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Jika tidak ada race di tahun ini sama sekali */}
-            {inYear.length === 0 && (
-              <div className="text-sm text-gray-400">Tidak ada race di tahun {yearFilter}.</div>
+            {/* Jika tidak ada race sama sekali */}
+            {activeRaces.length === 0 && archivedRaces.length === 0 && (
+              <div className="text-sm text-gray-400 text-center py-4">Belum ada race. Tambahkan di Race Management.</div>
             )}
           </div>
         )
