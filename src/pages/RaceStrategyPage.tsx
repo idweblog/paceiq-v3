@@ -234,6 +234,8 @@ export default function RaceStrategyPage() {
   const [strategyData, setStrategyData] = useState<Record<string, StrategyData>>({})
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'notes' | 'pbs' | 'stc' | 'cues' | 'racenotes'>('notes')
+  const [yearFilter, setYearFilter] = useState<number>(new Date().getFullYear())
+  const [archiveOpen, setArchiveOpen] = useState(false)
   const { isCoach, isAdmin } = useRole()
 
   // ── Load races ──
@@ -255,7 +257,22 @@ export default function RaceStrategyPage() {
 
       const activeRaces = ((raceRows || []) as unknown) as Race[]
       setRaces(activeRaces)
-      if (activeRaces.length > 0) setActiveRaceId(activeRaces[0].id)
+
+      // Default: pilih tahun dengan race aktif terbaru, atau tahun terbaru
+      const now = new Date()
+      const activeNow = activeRaces.filter(r => new Date(r.event_date) >= now)
+      const defaultYear = activeNow.length > 0
+        ? new Date(activeNow[0].event_date).getFullYear()
+        : activeRaces.length > 0
+          ? new Date(activeRaces[activeRaces.length - 1].event_date).getFullYear()
+          : now.getFullYear()
+      setYearFilter(defaultYear)
+
+      // Default activeRaceId: race aktif pertama di tahun default, atau arsip pertama
+      const firstActive = activeRaces.find(r => new Date(r.event_date) >= now && new Date(r.event_date).getFullYear() === defaultYear)
+      const firstInYear = activeRaces.find(r => new Date(r.event_date).getFullYear() === defaultYear)
+      if (firstActive) setActiveRaceId(firstActive.id)
+      else if (firstInYear) setActiveRaceId(firstInYear.id)
 
       // Load strategy data per race
       const { data: stRows } = await (supabase as any)
@@ -331,23 +348,92 @@ export default function RaceStrategyPage() {
         <p className="text-sm text-gray-400">Perencanaan strategi & simulasi pace per race</p>
       </div>
 
-      {/* Race selector tabs */}
-      <div className="flex gap-2 flex-wrap">
-        {races.map(r => {
-          const past = new Date(r.event_date) < new Date()
-          return (
-            <button key={r.id} onClick={() => setActiveRaceId(r.id)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                activeRaceId === r.id
-                  ? 'bg-indigo-600 text-white shadow'
-                  : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300'
-              }`}>
-              {past ? '🏅' : r.status === 'A' ? '⭐' : '🏆'} {r.name}
-              {past && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-500 font-normal">Selesai</span>}
-            </button>
-          )
-        })}
-      </div>
+      {/* Year filter tabs */}
+      {(() => {
+        const years = [...new Set(races.map(r => new Date(r.event_date).getFullYear()))].sort((a,b) => b - a)
+        return years.length > 1 ? (
+          <div className="flex gap-2 flex-wrap items-center">
+            <span className="text-xs font-bold text-gray-400 uppercase">Tahun:</span>
+            {years.map(y => (
+              <button key={y} onClick={() => {
+                setYearFilter(y)
+                // Auto-select first active race in new year, or first race
+                const now = new Date()
+                const inYear = races.filter(r => new Date(r.event_date).getFullYear() === y)
+                const firstActive = inYear.find(r => new Date(r.event_date) >= now)
+                setActiveRaceId((firstActive || inYear[0])?.id || '')
+                setArchiveOpen(false)
+              }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  yearFilter === y ? 'bg-indigo-600 text-white shadow' : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300'
+                }`}>
+                {y}
+              </button>
+            ))}
+          </div>
+        ) : null
+      })()}
+
+      {/* Race selector — aktif & arsip */}
+      {(() => {
+        const now = new Date()
+        const inYear = races.filter(r => new Date(r.event_date).getFullYear() === yearFilter)
+        const activeRaces = inYear.filter(r => new Date(r.event_date) >= now)
+        const archivedRaces = inYear.filter(r => new Date(r.event_date) < now)
+
+        return (
+          <div className="space-y-3">
+            {/* Race aktif */}
+            {activeRaces.length > 0 && (
+              <div className="flex gap-2 flex-wrap">
+                {activeRaces.map(r => (
+                  <button key={r.id} onClick={() => setActiveRaceId(r.id)}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                      activeRaceId === r.id
+                        ? 'bg-indigo-600 text-white shadow'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:border-indigo-300'
+                    }`}>
+                    {r.status === 'A' ? '⭐' : '🏆'} {r.name}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Arsip collapsible */}
+            {archivedRaces.length > 0 && (
+              <div>
+                <button onClick={() => setArchiveOpen(o => !o)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 hover:text-gray-600 transition-colors py-1">
+                  <span className={`transition-transform ${archiveOpen ? 'rotate-90' : ''}`}>▶</span>
+                  Arsip {yearFilter} ({archivedRaces.length})
+                </button>
+                {archiveOpen && (
+                  <div className="flex gap-2 flex-wrap mt-2 pl-4">
+                    {archivedRaces.map(r => (
+                      <button key={r.id} onClick={() => setActiveRaceId(r.id)}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all ${
+                          activeRaceId === r.id
+                            ? 'bg-gray-600 text-white shadow'
+                            : 'bg-gray-50 border border-gray-200 text-gray-500 hover:border-gray-400'
+                        }`}>
+                        🏅 {r.name}
+                        <span className="text-[10px] opacity-70 font-normal">
+                          {new Date(r.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Jika tidak ada race di tahun ini sama sekali */}
+            {inYear.length === 0 && (
+              <div className="text-sm text-gray-400">Tidak ada race di tahun {yearFilter}.</div>
+            )}
+          </div>
+        )
+      })()}
 
       {activeRace && (
         <>
@@ -369,8 +455,12 @@ export default function RaceStrategyPage() {
             </div>
             <div>
               <div className="text-[10px] font-bold text-indigo-400 uppercase">Status</div>
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${activeRace.status === 'A' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
-                {activeRace.status === 'A' ? 'Main Race (A)' : 'Race Sela (B)'}
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                isPast ? 'bg-gray-100 text-gray-500'
+                : activeRace.status === 'A' ? 'bg-indigo-100 text-indigo-700'
+                : 'bg-amber-100 text-amber-700'
+              }`}>
+                {isPast ? '🏅 Selesai' : activeRace.status === 'A' ? 'Main Race (A)' : 'Race Sela (B)'}
               </span>
             </div>
           </div>
