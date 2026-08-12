@@ -348,103 +348,39 @@ export default function RaceStrategyPage() {
         <p className="text-sm text-gray-400">Perencanaan strategi & simulasi pace per race</p>
       </div>
 
-      {/* Race Aktif */}
+      {/* Race Aktif selector */}
       {(() => {
         const now = new Date()
         const activeRaces = races.filter(r => new Date(r.event_date) >= now)
-        const archivedRaces = races.filter(r => new Date(r.event_date) < now)
-        const archiveYears = [...new Set(archivedRaces.map(r => new Date(r.event_date).getFullYear()))].sort((a,b) => b - a)
-        const archivedInYear = archivedRaces.filter(r => new Date(r.event_date).getFullYear() === yearFilter)
-
+        if (activeRaces.length === 0 && races.length === 0) return (
+          <div className="text-sm text-gray-400 text-center py-4">Belum ada race. Tambahkan di Race Management.</div>
+        )
+        if (activeRaces.length === 0) return null
         return (
-          <div className="space-y-3">
-            {/* Section: Race Aktif */}
-            {activeRaces.length > 0 && (
-              <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
-                <div className="text-xs font-bold text-indigo-400 uppercase tracking-wide mb-3">🏁 Race Aktif</div>
-                <div className="flex gap-2 flex-wrap">
-                  {activeRaces.map(r => (
-                    <button key={r.id} onClick={() => setActiveRaceId(r.id)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                        activeRaceId === r.id
-                          ? 'bg-indigo-600 text-white shadow-md'
-                          : 'bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100'
-                      }`}>
-                      {r.status === 'A' ? '⭐' : '🏆'} {r.name}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-normal ${
-                        activeRaceId === r.id ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-500'
-                      }`}>
-                        {new Date(r.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Section: Arsip */}
-            {archivedRaces.length > 0 && (
-              <div className="border border-gray-200 rounded-2xl overflow-hidden">
-                {/* Arsip header — toggle */}
-                <button onClick={() => setArchiveOpen(o => !o)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-gray-400 text-xs transition-transform ${archiveOpen ? 'rotate-90' : ''}`}>▶</span>
-                    <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">🗄️ Arsip Race</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-500 font-semibold">{archivedRaces.length} race</span>
-                  </div>
-                  <span className="text-[10px] text-gray-400">{archiveOpen ? 'Tutup' : 'Lihat arsip'}</span>
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+            <div className="text-xs font-bold text-indigo-400 uppercase tracking-wide mb-3">🏁 Race Aktif</div>
+            <div className="flex gap-2 flex-wrap">
+              {activeRaces.map(r => (
+                <button key={r.id} onClick={() => setActiveRaceId(r.id)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                    activeRaceId === r.id
+                      ? 'bg-indigo-600 text-white shadow-md'
+                      : 'bg-indigo-50 border border-indigo-100 text-indigo-700 hover:bg-indigo-100'
+                  }`}>
+                  {r.status === 'A' ? '⭐' : '🏆'} {r.name}
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-normal ${
+                    activeRaceId === r.id ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-500'
+                  }`}>
+                    {new Date(r.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                  </span>
                 </button>
-
-                {/* Arsip content */}
-                {archiveOpen && (
-                  <div className="p-4 space-y-3 bg-white">
-                    {/* Year tabs */}
-                    {archiveYears.length > 1 && (
-                      <div className="flex gap-1.5 flex-wrap">
-                        {archiveYears.map(y => (
-                          <button key={y} onClick={() => setYearFilter(y)}
-                            className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                              yearFilter === y
-                                ? 'bg-gray-700 text-white'
-                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                            }`}>
-                            {y}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Race list in selected year */}
-                    <div className="flex gap-2 flex-wrap">
-                      {archivedInYear.map(r => (
-                        <button key={r.id} onClick={() => setActiveRaceId(r.id)}
-                          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold transition-all ${
-                            activeRaceId === r.id
-                              ? 'bg-gray-700 text-white shadow'
-                              : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-gray-400'
-                          }`}>
-                          🏅 {r.name}
-                          <span className={`text-[10px] font-normal ${activeRaceId === r.id ? 'opacity-70' : 'text-gray-400'}`}>
-                            {new Date(r.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Jika tidak ada race sama sekali */}
-            {activeRaces.length === 0 && archivedRaces.length === 0 && (
-              <div className="text-sm text-gray-400 text-center py-4">Belum ada race. Tambahkan di Race Management.</div>
-            )}
+              ))}
+            </div>
           </div>
         )
       })()}
 
-      {activeRace && (
+      {activeRace && !isPast && (
         <>
           {/* Race info bar */}
           <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl px-5 py-3 flex flex-wrap gap-4 items-center">
@@ -465,23 +401,12 @@ export default function RaceStrategyPage() {
             <div>
               <div className="text-[10px] font-bold text-indigo-400 uppercase">Status</div>
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                isPast ? 'bg-gray-100 text-gray-500'
-                : activeRace.status === 'A' ? 'bg-indigo-100 text-indigo-700'
-                : 'bg-amber-100 text-amber-700'
+                activeRace.status === 'A' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
               }`}>
-                {isPast ? '🏅 Selesai' : activeRace.status === 'A' ? 'Main Race (A)' : 'Race Sela (B)'}
+                {activeRace.status === 'A' ? 'Main Race (A)' : 'Race Sela (B)'}
               </span>
             </div>
           </div>
-
-          {/* Archived banner */}
-          {isPast && (
-            <div className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${
-              canEdit ? 'bg-amber-50 border border-amber-200 text-amber-700' : 'bg-gray-50 border border-gray-200 text-gray-500'
-            }`}>
-              {canEdit ? '✏️ Mode Coach/Admin — data arsip bisa diedit.' : '🔒 Race sudah selesai — data tersimpan sebagai arsip, read-only.'}
-            </div>
-          )}
 
           {/* Section tabs */}
           <div className="bg-gray-100 rounded-xl p-1 flex gap-1 flex-wrap w-fit">
@@ -504,6 +429,114 @@ export default function RaceStrategyPage() {
           {activeTab === 'racenotes'&& <RaceDayNotesTab race={activeRace} data={data} canEdit={canEdit} onSave={v => saveField('race_day_notes', v)} />}
         </>
       )}
+
+      {/* ── Arsip Race — selalu di bawah, setelah konten aktif ── */}
+      {(() => {
+        const now = new Date()
+        const archivedRaces = races.filter(r => new Date(r.event_date) < now)
+        if (archivedRaces.length === 0) return null
+        const archiveYears = [...new Set(archivedRaces.map(r => new Date(r.event_date).getFullYear()))].sort((a,b) => b - a)
+        const archivedInYear = archivedRaces.filter(r => new Date(r.event_date).getFullYear() === yearFilter)
+
+        return (
+          <div className="mt-4">
+            {/* Divider */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 border-t border-gray-200" />
+              <button onClick={() => setArchiveOpen(o => !o)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors text-xs font-bold text-gray-500 uppercase tracking-wide">
+                <span className={`transition-transform duration-200 ${archiveOpen ? 'rotate-90' : ''}`}>▶</span>
+                🗄️ Arsip Race
+                <span className="px-1.5 py-0.5 rounded-full bg-gray-300 text-gray-600 font-semibold">{archivedRaces.length}</span>
+              </button>
+              <div className="flex-1 border-t border-gray-200" />
+            </div>
+
+            {archiveOpen && (
+              <div className="space-y-4">
+                {/* Year filter */}
+                {archiveYears.length > 1 && (
+                  <div className="flex gap-2 flex-wrap justify-center">
+                    {archiveYears.map(y => (
+                      <button key={y} onClick={() => setYearFilter(y)}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                          yearFilter === y ? 'bg-gray-700 text-white shadow' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}>
+                        {y}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Archived race buttons */}
+                <div className="flex gap-2 flex-wrap justify-center">
+                  {archivedInYear.map(r => (
+                    <button key={r.id} onClick={() => setActiveRaceId(r.id)}
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                        activeRaceId === r.id
+                          ? 'bg-gray-700 text-white shadow-md'
+                          : 'bg-gray-50 border border-gray-200 text-gray-600 hover:border-gray-400 hover:bg-gray-100'
+                      }`}>
+                      🏅 {r.name}
+                      <span className={`text-[10px] font-normal ${activeRaceId === r.id ? 'opacity-70' : 'text-gray-400'}`}>
+                        {new Date(r.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Arsip content jika race arsip dipilih */}
+                {activeRace && isPast && (
+                  <div className="space-y-4 mt-2">
+                    <div className="bg-gradient-to-r from-gray-50 to-slate-50 border border-gray-200 rounded-2xl px-5 py-3 flex flex-wrap gap-4 items-center">
+                      <div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase">Race</div>
+                        <div className="text-sm font-bold text-gray-700">{activeRace.name}</div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase">Tanggal</div>
+                        <div className="text-sm font-semibold text-gray-600">
+                          {new Date(activeRace.event_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold text-gray-400 uppercase">Target</div>
+                        <div className="text-sm font-semibold text-gray-600">{activeRace.target_finish || '—'}</div>
+                      </div>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">🏅 Selesai</span>
+                      {canEdit && <span className="text-xs text-amber-600 font-medium">✏️ Coach/Admin — bisa diedit</span>}
+                    </div>
+
+                    {!canEdit && (
+                      <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-50 border border-gray-200 text-gray-500">
+                        🔒 Data tersimpan sebagai arsip — read-only.
+                      </div>
+                    )}
+
+                    <div className="bg-gray-100 rounded-xl p-1 flex gap-1 flex-wrap w-fit">
+                      {([
+                        ['notes',    '📋 Strategy Notes'],
+                        ['pbs',      '📊 Pace Band'],
+                        ['stc',      '⏱️ Split Time'],
+                        ['cues',     '🧠 Mental Cues'],
+                        ['racenotes','📝 Race Day Notes'],
+                      ] as const).map(([t, label]) => (
+                        <button key={t} onClick={() => setActiveTab(t)} className={tabCls(t)}>{label}</button>
+                      ))}
+                    </div>
+
+                    {activeTab === 'notes'    && <StrategyNotesTab race={activeRace} slug={slug} data={data} canEdit={canEdit} onSave={v => saveField('strategy_notes', v)} />}
+                    {activeTab === 'pbs'      && <PaceBandTab race={activeRace} />}
+                    {activeTab === 'stc'      && <SplitTimeTab race={activeRace} />}
+                    {activeTab === 'cues'     && <MentalCuesTab race={activeRace} slug={slug} data={data} canEdit={canEdit} onSave={v => saveField('cue_cards', JSON.stringify(v))} />}
+                    {activeTab === 'racenotes'&& <RaceDayNotesTab race={activeRace} data={data} canEdit={canEdit} onSave={v => saveField('race_day_notes', v)} />}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }
